@@ -65,6 +65,38 @@ instance : LawfulBEq Term where
   eq_of_beq := fun h => (Term.equal_iff _ _).mp h
   rfl := (Term.equal_iff _ _).mpr rfl
 
+/-- Share the two arms of a checked conditional swap inside a two-field hash.
+The marker belongs to the symbolic checker and never appears in ZKIR. -/
+def conditionalSwapHash? : List Term → Option Term
+  | [.select condition left right, .select otherCondition otherLeft otherRight] =>
+    if condition == otherCondition && left == otherRight && right == otherLeft then
+      some (.unary "transient_hash_conditional_swap" (.select condition left right))
+    else none
+  | _ => none
+
+theorem conditionalSwapHash_shape (terms : List Term) (result : Term)
+    (recognized : conditionalSwapHash? terms = some result) :
+    ∃ condition left right,
+      terms = [.select condition left right, .select condition right left] ∧
+        result = .unary "transient_hash_conditional_swap" (.select condition left right) := by
+  unfold conditionalSwapHash? at recognized
+  split at recognized
+  next condition left right otherCondition otherLeft otherRight =>
+    split at recognized
+    next mirrored =>
+      have comparisons : ((condition == otherCondition) = true ∧ (left == otherRight) = true) ∧
+          (right == otherLeft) = true := by simpa only [Bool.and_eq_true] using mirrored
+      have conditionEq : condition = otherCondition := eq_of_beq comparisons.1.1
+      have leftEq : left = otherRight := eq_of_beq comparisons.1.2
+      have rightEq : right = otherLeft := eq_of_beq comparisons.2
+      cases conditionEq
+      cases leftEq
+      cases rightEq
+      cases recognized
+      exact ⟨condition, left, right, rfl, rfl⟩
+    next => contradiction
+  next => contradiction
+
 abbrev AliasEnvironment := List (String × Term)
 
 structure Normalized where
@@ -256,9 +288,15 @@ def bytesChunksTerm (length : Nat) : Term → Except String (List Term)
       pure ((List.range (bytesChunkCount length)).map (encodedBytesChunkTerm length term))
     else .error "byte normalization lost byte identity"
 
+def reassembledBytes32? : List Term → Option Term
+  | [.unary "encode_bytes32_low31" lowSource, .unary "encode_bytes32_highByte" highSource] =>
+    if lowSource == highSource then some lowSource else none
+  | _ => none
+
 def bytesFromChunksTerm (length : Nat) (chunks : List Term) : Term :=
   if length == 0 then .bytes []
-  else if length == 32 then .unary "bytes32_from_chunks" (.hash chunks)
+  else if length == 32 then
+    (reassembledBytes32? chunks).getD (.unary "bytes32_from_chunks" (.hash chunks))
   else .unary s!"bytes_from_chunks:{length}" (.hash chunks)
 
 def bytesFromChunksTerm32 (low31 highByte : Term) : Term :=
@@ -279,7 +317,7 @@ def bytesByteAtTerm (length : Nat) (bytes : Term) (index : Nat) : Term :=
 
 /-- A Native widened from a range-checked byte has 31 zero high bytes. -/
 def isWidenedByte : Expr ty → Bool
-  | .cast .native (.cast (source := .native) (.uint 255) _) => true
+  | .cast (source := .uint 255) .native _ => true
   | _ => false
 
 /-- Typed Bool constants and bridges stay distinct from Native field values. -/
@@ -451,11 +489,17 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .concatBytes (leftLength := leftLength) (rightLength := rightLength) left right => do
     let left ← normalize env left
     let right ← normalize env right
-    let leftChunks ← bytesChunksTerm leftLength left.term
-    let rightChunks ← bytesChunksTerm rightLength right.term
-    let term := if leftLength == 0 then right.term else if rightLength == 0 then left.term else
-      concatBytesTerm leftLength rightLength
-        (bytesFromChunksTerm leftLength leftChunks) (bytesFromChunksTerm rightLength rightChunks)
+    let term ← match left.term, right.term with
+      | .bytes leftBytes, .bytes rightBytes => do
+        unless leftBytes.length == leftLength && rightBytes.length == rightLength do
+          throw "byte source term has wrong length"
+        pure (.bytes (leftBytes ++ rightBytes))
+      | _, _ => do
+        let leftChunks ← bytesChunksTerm leftLength left.term
+        let rightChunks ← bytesChunksTerm rightLength right.term
+        pure (if leftLength == 0 then right.term else if rightLength == 0 then left.term else
+          concatBytesTerm leftLength rightLength
+            (bytesFromChunksTerm leftLength leftChunks) (bytesFromChunksTerm rightLength rightChunks))
     pure {term, bounds := left.bounds ++ right.bounds, assertions := left.assertions ++ right.assertions}
   | .sha256 (length := length) value => do
     let normalized ← normalize env value
@@ -562,8 +606,9 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     unless values.length ≤ Types.defaultLimits.maxVectorLength do
       throw "transientHash exceeds the source field-vector bound"
     let normalized ← values.mapM (normalize env)
+    let terms := normalized.map (·.term)
     pure {
-      term := .hash (normalized.map (·.term))
+      term := (conditionalSwapHash? terms).getD (.hash terms)
       bounds := (normalized.map (·.bounds)).flatten
       assertions := (normalized.map (·.assertions)).flatten
     }

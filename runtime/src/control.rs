@@ -648,6 +648,18 @@ fn bytes_operation(
             },
         ));
     }
+    if let Some(encoded_length) = operation.strip_prefix("sha256:") {
+        let length = canonical_byte_length(encoded_length)?;
+        ensure!(count == 1, "sha256 argument count");
+        return Ok((
+            vec![byte_scalar_type(length)],
+            Bytes32,
+            crate::Expr::Sha256 {
+                length,
+                value: argument(0),
+            },
+        ));
+    }
     if let Some(encoded_length) = operation.strip_prefix("sha512:") {
         let length = canonical_byte_length(encoded_length)?;
         ensure!(count == 1, "sha512 argument count");
@@ -748,6 +760,9 @@ fn bytes_operation(
                 },
             )
         }
+        "transientHashNativeVector" => {
+            return curve_operation(&format!("transientHashNativeVector:{count}"));
+        }
         "persistentHashPoint" => (
             vec![JubjubPoint],
             Bytes32,
@@ -786,7 +801,7 @@ fn bytes_operation(
                 index: 1,
             },
         ),
-        _ => bail!("unsupported control byte operation"),
+        _ => bail!("unsupported control byte operation '{operation}'"),
     })
 }
 
@@ -7644,7 +7659,7 @@ mod completed_invocation_tests {
     }
 
     #[test]
-    fn generic_bytes_hashes_match_sha512_and_keccak256_vectors() {
+    fn generic_bytes_hashes_match_sha256_sha512_and_keccak256_vectors() {
         fn run_hash(
             operation: &str,
             input_length: usize,
@@ -7663,6 +7678,16 @@ mod completed_invocation_tests {
         }
 
         let abc = b"abc".to_vec();
+        let sha256_abc = run_hash("sha256:3", 3, abc.clone(), "Bytes<32>");
+        assert_eq!(sha256_abc["status"], "completed");
+        assert_eq!(
+            sha256_abc["result"]["values"],
+            json!(
+                hex::decode("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+                    .unwrap()
+            )
+        );
+
         let sha512_abc = run_hash("sha512:3", 3, abc.clone(), "Bytes<64>");
         assert_eq!(sha512_abc["status"], "completed");
         assert_eq!(
@@ -7701,6 +7726,7 @@ mod completed_invocation_tests {
             )
         );
 
+        assert!(super::bytes_operation("sha256:03", 1).is_err());
         assert!(super::bytes_operation("sha512:3", 0).is_err());
         assert!(super::bytes_operation("sha512:1025", 1).is_err());
         assert!(super::bytes_operation("keccak256:03", 1).is_err());
@@ -7815,6 +7841,16 @@ mod completed_invocation_tests {
             assert_eq!(direct["result"], expected);
             assert_eq!(typed["status"], "completed");
             assert_eq!(typed["result"], expected);
+            let bytes_operation = run(
+                json!({
+                    "tag":"bytes",
+                    "operation":"transientHashNativeVector",
+                    "arguments":(0..count).map(native).collect::<Vec<_>>()
+                }),
+                4096,
+            );
+            assert_eq!(bytes_operation["status"], "completed");
+            assert_eq!(bytes_operation["result"], expected);
             if count == 0 {
                 assert_eq!(direct["result"], "0");
             }

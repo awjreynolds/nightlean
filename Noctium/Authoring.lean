@@ -21,6 +21,12 @@ structure PrivateStateSchema where
   fields : List PrivateStateField
   deriving Repr
 
+/-- The wire codec that fixes a typed witness callback's aggregate result ABI. -/
+structure WitnessResultCodec where
+  signatureName : String
+  codec : Name
+  deriving Repr, BEq
+
 structure ObservationInput where
   name : String
   type : String
@@ -76,6 +82,13 @@ initialize noctiumWitnessSignatureRegistry : SimplePersistentEnvExtension
     addEntryFn := Array.push
   }
 
+initialize noctiumWitnessResultCodecRegistry : SimplePersistentEnvExtension
+    Noctium.Authoring.WitnessResultCodec (Array Noctium.Authoring.WitnessResultCodec) ←
+  registerSimplePersistentEnvExtension {
+    addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
+    addEntryFn := Array.push
+  }
+
 end Noctium.Authoring
 
 namespace Noctium
@@ -98,6 +111,7 @@ scoped syntax (name := noctiumPrivateStateCommand) "noctium_private_state" ident
 declare_syntax_cat noctium_witness_parameter
 scoped syntax ident ":" nltype : noctium_witness_parameter
 declare_syntax_cat noctium_witness_result
+scoped syntax "Payload" ident : noctium_witness_result
 scoped syntax nltype : noctium_witness_result
 scoped syntax ident : noctium_witness_result
 scoped syntax (name := noctiumWitnessDeclarationCommand) "noctium_witness" ident
@@ -464,6 +478,7 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| poseidon2($domain:num, $left, $right)) =>
     s!"poseidon2({domain.getNat}, {renderExpr left}, {renderExpr right})"
   | `(nlexpr| persistentHash32($value)) => s!"persistentHash32({renderExpr value})"
+  | `(nlexpr| sha256($value)) => s!"sha256({renderExpr value})"
   | `(nlexpr| sha512($value)) => s!"sha512({renderExpr value})"
   | `(nlexpr| keccak256($value)) => s!"keccak256({renderExpr value})"
   | `(nlexpr| bytes32($literal:str)) => s!"bytes32({(toJson literal.getString).compress})"
@@ -476,6 +491,8 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| persistentHashNative($value)) => s!"persistentHashNative({renderExpr value})"
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     s!"persistentHashNativeVector([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
+  | `(nlexpr| transientHashNativeVector([$values,*])) =>
+    s!"transientHashNativeVector([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| persistentHashPoint($point)) => s!"persistentHashPoint({renderExpr point})"
   | `(nlexpr| reverseBytes32($value)) => s!"reverseBytes32({renderExpr value})"
   | `(nlexpr| reverseBytes($value)) => s!"reverseBytes({renderExpr value})"
@@ -551,7 +568,8 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| poseidon2($_:num, $left, $right)) => disclosedValues left ++ disclosedValues right
   | `(nlexpr| elementAt($value, $index)) => disclosedValues value ++ disclosedValues index
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
-  | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha512($value))
+  | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha256($value))
+  | `(nlexpr| sha512($value))
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
@@ -563,7 +581,9 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| concatBytes($left, $right)) => disclosedValues left ++ disclosedValues right
   | `(nlexpr| byteAt($value, $_:num)) => disclosedValues value
   | `(nlexpr| persistentHashVector32([$values,*]))
-  | `(nlexpr| persistentHashNativeVector([$values,*])) => values.getElems.toList.flatMap disclosedValues
+  | `(nlexpr| persistentHashNativeVector([$values,*]))
+  | `(nlexpr| transientHashNativeVector([$values,*])) =>
+    values.getElems.toList.flatMap disclosedValues
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
   | `(nlexpr| jubjubMulGenerator($value))
@@ -606,7 +626,8 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| poseidon2($_:num, $left, $right)) => inlineAssertions left ++ inlineAssertions right
   | `(nlexpr| elementAt($value, $index)) => inlineAssertions value ++ inlineAssertions index
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
-  | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha512($value))
+  | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha256($value))
+  | `(nlexpr| sha512($value))
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
@@ -618,7 +639,9 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| concatBytes($left, $right)) => inlineAssertions left ++ inlineAssertions right
   | `(nlexpr| byteAt($value, $_:num)) => inlineAssertions value
   | `(nlexpr| persistentHashVector32([$values,*]))
-  | `(nlexpr| persistentHashNativeVector([$values,*])) => values.getElems.toList.flatMap inlineAssertions
+  | `(nlexpr| persistentHashNativeVector([$values,*]))
+  | `(nlexpr| transientHashNativeVector([$values,*])) =>
+    values.getElems.toList.flatMap inlineAssertions
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
   | `(nlexpr| jubjubMulGenerator($value))
@@ -1045,8 +1068,19 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     lowerBytesOperation programName callPrefix env stx .persistentHashNative [value]
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     lowerBytesOperation programName callPrefix env stx .persistentHashNativeVector values.getElems.toList
+  | `(nlexpr| transientHashNativeVector([$values,*])) =>
+    lowerBytesOperation programName callPrefix env stx .transientHashNativeVector values.getElems.toList
   | `(nlexpr| persistentHashPoint($point)) =>
     lowerBytesOperation programName callPrefix env stx .persistentHashPoint [point]
+  | `(nlexpr| sha256($value)) => do
+    let value ← lowerExpr programName callPrefix env value
+    let .scalar (.bytes length) := value.type
+      | throwErrorAt stx "sha256 requires a fixed byte-string value"
+    let operation := Noctium.Helpers.BytesOp.sha256 length
+    let (_, result) ← match operation.signature 1 with
+      | .error message => throwErrorAt stx message
+      | .ok signature => pure signature
+    pure (mergeLowered (.scalar result) (.bytes operation [value.term]) [value])
   | `(nlexpr| sha512($value)) => do
     let value ← lowerExpr programName callPrefix env value
     let .scalar (.bytes length) := value.type
@@ -1238,12 +1272,6 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
       | .scalar _ => _root_.Bool.true
       | _ => _root_.Bool.false) do
       throwErrorAt function "witness callback parameters must use supported scalar types"
-    let supportedResult : _root_.Bool := match signature.result with
-      | .scalar _ => _root_.Bool.true
-      | .unit => _root_.Bool.true
-      | .composite _ => _root_.Bool.false
-    if !supportedResult then
-      throwErrorAt function "witness callback results require Unit or a supported scalar type"
     unless args.getElems.size == signature.parameters.length do
       throwErrorAt stx s!"witness '{function.getId}' argument count does not match its declaration"
     let mut loweredArgs := []
@@ -1543,7 +1571,9 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
       | .persistentHashVector32 => `(Noctium.Helpers.BytesOp.persistentHashVector32)
       | .persistentHashNative => `(Noctium.Helpers.BytesOp.persistentHashNative)
       | .persistentHashNativeVector => `(Noctium.Helpers.BytesOp.persistentHashNativeVector)
+      | .transientHashNativeVector => `(Noctium.Helpers.BytesOp.transientHashNativeVector)
       | .persistentHashPoint => `(Noctium.Helpers.BytesOp.persistentHashPoint)
+      | .sha256 length => `(Noctium.Helpers.BytesOp.sha256 $(natTerm length))
       | .sha512 length => `(Noctium.Helpers.BytesOp.sha512 $(natTerm length))
       | .keccak256 length => `(Noctium.Helpers.BytesOp.keccak256 $(natTerm length))
       | .reverseBytes32 => `(Noctium.Helpers.BytesOp.reverseBytes32)
@@ -1714,12 +1744,25 @@ private def observationTerm (metadata : ObservationMetadata) : CommandElabM (TSy
       | _ => throwErrorAt parameterStx "unsupported witness parameter"
     let parameterNames := parameters.map (·.name)
     unless uniqueStrings parameterNames do throwErrorAt name "duplicate witness parameter"
+    let mut resultCodec : Option Name := none
     let result ← match result with
       | `(noctium_witness_result| $unitType:ident) => do
         unless unitType.getId == `Unit do
           throwErrorAt unitType "only Unit or a supported scalar witness result is allowed"
         pure .unit
       | `(noctium_witness_result| $type:nltype) => .scalar <$> readScalarTy type
+      | `(noctium_witness_result| Payload $codecName:ident) => do
+        let source ← liftCoreM <| resolveGlobalConstNoOverload codecName
+        let codec ← evalConstCheck Helpers.Wire.Codec ``Helpers.Wire.Codec source
+        let compiled ← match Types.compileType codec.composites codec.payload with
+          | .ok value => pure value
+          | .error diagnostic => throwErrorAt codecName diagnostic.message
+        let _ ← match Helpers.Wire.declarations compiled
+            (fullName ++ ".result") codec.frameBytes ⟨0, 1⟩ ⟨0, 2⟩ with
+          | .ok declarations => pure declarations
+          | .error message => throwErrorAt codecName message
+        resultCodec := some source
+        pure (.composite codec.payload)
       | _ => throwErrorAt result "unsupported witness result"
     let signatureSpan ← spanValue name
     let signature : WitnessSignature :=
@@ -1735,6 +1778,9 @@ private def observationTerm (metadata : ObservationMetadata) : CommandElabM (TSy
     let signatureTerm ← quoteSignature signature
     elabCommand (← `(def $(mkIdent generatedSyntaxName) : Noctium.Helpers.WitnessSignature := $signatureTerm))
     modifyEnv fun env => noctiumWitnessSignatureRegistry.addEntry env signature
+    if let some codec := resultCodec then
+      modifyEnv fun env => noctiumWitnessResultCodecRegistry.addEntry env
+        {signatureName, codec}
   | _ => throwUnsupportedSyntax
 
 private def collectExpressionMetadata (metadata : ObservationMetadata) (stx : TSyntax `nlexpr) :
@@ -1999,6 +2045,7 @@ private partial def lowerReadableStatement (programName path : String)
     validIdentity name exportName
     let codecNames := (usingCodecs.map (·.getElems)).getD #[]
     let mut codecs : List (Name × Helpers.Wire.Codec) := []
+    let mut resolvedCodecs : List (Name × Helpers.Wire.Codec) := []
     let mut codecTerms : Array (TSyntax `term) := #[]
     for codecName in codecNames do
       if codecs.any (·.1 == codecName.getId) then
@@ -2006,6 +2053,7 @@ private partial def lowerReadableStatement (programName path : String)
       let source ← liftCoreM <| resolveGlobalConstNoOverload codecName
       let codec ← evalConstCheck Helpers.Wire.Codec ``Helpers.Wire.Codec source
       codecs := codecs ++ [(codecName.getId, codec)]
+      resolvedCodecs := resolvedCodecs ++ [(source, codec)]
       codecTerms := codecTerms.push ⟨mkIdent source⟩
     let composites := Helpers.Wire.compositeEnv {} (codecs.map (·.2))
     let exprState : AuthoringExprState := {codecs, composites}
@@ -2067,6 +2115,20 @@ private partial def lowerReadableStatement (programName path : String)
         sourceBody ← lowerReadableStatement programNameText (toString ordinal) exprState codecTerms
           sourceBody statement
     let witnesses := sourceBody.witnesses
+    let resultCodecs := (noctiumWitnessResultCodecRegistry.getState (← getEnv)).toList
+    for signature in witnesses do
+      if let some required := resultCodecs.find? (·.signatureName == signature.name) then
+        let some (_, requiredCodec) := resolvedCodecs.find? (·.1 == required.codec)
+          | throwErrorAt name
+              s!"witness result '{signature.name}' requires codec '{required.codec}' in this circuit's using clause"
+        if let .composite payload := signature.result then
+          for (candidateName, candidate) in resolvedCodecs do
+            let conflicts := candidate.payload == payload &&
+              (candidate.frameBytes != requiredCodec.frameBytes ||
+                candidate.composites != requiredCodec.composites)
+            if conflicts then
+              throwErrorAt name
+                s!"witness result '{signature.name}' has conflicting codecs '{required.codec}' and '{candidateName}' in this circuit's using clause"
     let mut body := sourceBody.statements
     let compositeId := programNameText ++ ".Output"
     let compositeType := Types.CompositeType.structure compositeId

@@ -104,7 +104,8 @@ structure State where
 def combine (term : Term) (maximum : Nat) (children : List Fact) : Except String Fact := do
   let nodes := 1 + (children.map (·.nodes)).sum
   let depth := 1 + (children.map (·.depth)).foldl max 0
-  ensure (nodes ≤ maxSymbolicNodes && depth ≤ maxSymbolicDepth) "native symbolic expression resource limit exceeded"
+  unless nodes ≤ maxSymbolicNodes && depth ≤ maxSymbolicDepth do
+    throw s!"native symbolic expression resource limit exceeded ({nodes} nodes, depth {depth})"
   pure {term, maximum, nodes, depth}
 
 def operand (state : State) (text : String) : Except String Fact := do
@@ -615,7 +616,11 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     for (value, index) in values.zipIdx do
       ensure (value.maximum ≤ 2 ^ (8 * bytesChunkWidth length index) - 1)
         "bytes_from_natives operand lacks its exact chunk range bound"
-    let fact ← combine (bytesFromChunksTerm length (values.map (·.term))) 0 values
+    let terms := values.map (·.term)
+    -- Exact complementary chunks represent the same original Bytes32 once.
+    let children := if length == 32 && (reassembledBytes32? terms).isSome then
+      values.take 1 else values
+    let fact ← combine (bytesFromChunksTerm length terms) 0 children
     defineResult state instruction {fact with valueType := byteValueType length}
   | "from_bytes" => do
     let bytes ← argument state instruction "bytes"
@@ -712,8 +717,11 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     let values ← nativeArguments state instruction "inputs"
     ensure (values.length ≤ Types.defaultLimits.maxVectorLength)
       "transient_hash exceeds the source field-vector bound"
-    defineResult state instruction (← combine (.hash (values.map (·.term)))
-      (Field.modulus - 1) values)
+    let terms := values.map (·.term)
+    let fact ← match conditionalSwapHash? terms with
+      | some term => combine term (Field.modulus - 1) (values.take 1)
+      | none => combine (.hash terms) (Field.modulus - 1) values
+    defineResult state instruction fact
   | "impact" =>
     ensure (descriptor.privacy == .publicBindingSink) "native Impact lacks a public binding policy"
     let guardText ← stringField instruction "guard"
