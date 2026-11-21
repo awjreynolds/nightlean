@@ -376,6 +376,7 @@ scoped syntax "when" nlexpr "readCaller" "as" "(" ident "," ident "," ident "," 
 scoped syntax "increment" nlpath "by" nlexpr : nleffect
 scoped syntax "decrement" nlpath "by" nlexpr : nleffect
 scoped syntax "reset" nlpath : nleffect
+scoped syntax "insertDefault" nlpath : nleffect
 scoped syntax "resetHistory" nlpath : nleffect
 scoped syntax "insertHash" nlpath ":=" nlexpr : nleffect
 scoped syntax "insertField" nlpath ":=" nlexpr : nleffect
@@ -412,6 +413,7 @@ scoped syntax "when" nlexpr ident nlpath "as" ident : nleffect
 scoped syntax "when" nlexpr "increment" nlpath "by" nlexpr : nleffect
 scoped syntax "when" nlexpr "decrement" nlpath "by" nlexpr : nleffect
 scoped syntax "when" nlexpr "reset" nlpath : nleffect
+scoped syntax "when" nlexpr "insertDefault" nlpath : nleffect
 scoped syntax "when" nlexpr "resetHistory" nlpath : nleffect
 scoped syntax "when" nlexpr "insertHash" nlpath ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insertField" nlpath ":=" nlexpr : nleffect
@@ -1623,6 +1625,7 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr increment $_path:nlpath by $_amount:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr decrement $_path:nlpath by $_amount:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr reset $_path:nlpath) => some condition
+  | `(nleffect| when $condition:nlexpr insertDefault $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr resetHistory $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr insertField $_path:nlpath := $_leaf:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr insertHash $_path:nlpath := $_hash:nlexpr) => some condition
@@ -1898,6 +1901,25 @@ private def elaborateListPopFront (schema : List (String × StateKind))
   let term ← `(Noctium.Effect.listPopFront $(stringTerm storage.getId.toString) $keys)
   pure {state with terms := state.terms.push term}
 
+private def collectionResetTerm (path : TSyntax `nlpath) (storage : TSyntax `ident)
+    (keys : TSyntax `term) (keyCount : Nat) (value : LedgerValueType) :
+    CommandElabM (TSyntax `term) := do
+  let name := stringTerm storage.getId.toString
+  match value with
+  | .counter => `(Noctium.Effect.counterReset $name $keys)
+  | .«list» .. =>
+    unless keyCount ≤ 13 do throwErrorAt path "List paths support at most 13 map keys"
+    `(Noctium.Effect.listReset $name $keys)
+  | .map .. | .set _ => `(Noctium.Effect.emptyMapPath $name $keys)
+  | .merkleTree depth historic =>
+    unless 1 ≤ keyCount && keyCount ≤ 12 do
+      throwErrorAt path "nested MerkleTree paths require one to twelve map keys"
+    unless 2 ≤ depth && depth ≤ 32 do
+      throwErrorAt path "MerkleTree depth must be between 2 and 32"
+    let historyTerm ← if historic then `(Bool.true) else `(Bool.false)
+    `(Noctium.Effect.merkleTreeResetAt $name $keys $(natTerm depth) $historyTerm)
+  | _ => throwErrorAt path "reset requires a Counter, List, Map, Set or MerkleTree value"
+
 private def elaborateReset (schema : List (String × StateKind)) (path : TSyntax `nlpath)
     (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, sourceKeys) ← sourcePathParts path
@@ -1917,27 +1939,39 @@ private def elaborateReset (schema : List (String × StateKind)) (path : TSyntax
   let treeSchema ← statePathSchema schema storage
   let (keys, value) ← lowerTreePath state.env treeSchema sourceKeys
   let keys ← pathKeysTerm keys
-  match value with
-  | .counter =>
-    let term ← `(Noctium.Effect.counterReset $(stringTerm storage.getId.toString) $keys)
-    pure {state with terms := state.terms.push term}
-  | .«list» .. => do
-    let _ ← lowerListPath schema state.env path
-    let term ← `(Noctium.Effect.listReset $(stringTerm storage.getId.toString) $keys)
-    pure {state with terms := state.terms.push term}
-  | .map .. | .set _ => do
-    let term ← `(Noctium.Effect.emptyMapPath $(stringTerm storage.getId.toString) $keys)
-    pure {state with terms := state.terms.push term}
-  | .merkleTree treeDepth historic => do
-    unless 1 ≤ sourceKeys.length && sourceKeys.length ≤ 12 do
-      throwErrorAt path "nested MerkleTree paths require one to twelve map keys"
-    unless 2 ≤ treeDepth && treeDepth ≤ 32 do
-      throwErrorAt path "MerkleTree depth must be between 2 and 32"
-    let historyTerm ← if historic then `(Bool.true) else `(Bool.false)
-    let term ← `(Noctium.Effect.merkleTreeResetAt
-      $(stringTerm storage.getId.toString) $keys $(natTerm treeDepth) $historyTerm)
-    pure {state with terms := state.terms.push term}
-  | _ => throwErrorAt path "reset requires a Counter, List, Map, Set or MerkleTree value"
+  let term ← collectionResetTerm path storage keys sourceKeys.length value
+  pure {state with terms := state.terms.push term}
+
+private def elaborateMapDefault (schema : List (String × StateKind)) (path : TSyntax `nlpath)
+    (state : EntryEffects) : CommandElabM EntryEffects := do
+  let (storage, sourceKeys) ← sourcePathParts path
+  let name := stringTerm storage.getId.toString
+  let term ← if let some (.map keyTy valueTy) := schema.lookup storage.getId.toString then do
+    let [key] := sourceKeys | throwErrorAt path "insertDefault on a direct Map requires one key"
+    let key ← checkedExpression state.env key keyTy
+    let type ← tyTerm valueTy
+    `(Noctium.Effect.writeMap $name $(← tyTerm keyTy) $type $key
+      (Noctium.GuardedExpression.zeroValue $type))
+  else do
+    let stateSchema ← statePathSchema schema storage
+    let (keys, parent) ← lowerCollectionEntryPath state.env stateSchema sourceKeys
+    let .map _ value := parent | throwErrorAt path "insertDefault requires a Map entry"
+    match value with
+    | .scalar ty => do
+      let type ← tyTerm ty
+      `(Noctium.Effect.writePath $name $keys $type (Noctium.GuardedExpression.zeroValue $type))
+    | .composite environment (.structure id) => do
+      let fields ← match LedgerValueType.recordFields environment (.structure id) with
+        | .ok fields => pure fields
+        | .error message => throwErrorAt path message
+      let values ← fields.toArray.mapM fun (_, ty) => do
+        let type ← tyTerm ty
+        `(Noctium.LedgerFieldExpr.mk $type (Noctium.GuardedExpression.zeroValue $type))
+      `(Noctium.Effect.writeCompositePath $name $keys
+        (Noctium.Types.CompositeType.structure $(stringTerm id)) [$values,*])
+    | .composite .. => throwErrorAt path "insertDefault requires a named ledger record"
+    | value => collectionResetTerm path storage keys sourceKeys.length value
+  pure {state with terms := state.terms.push term}
 
 private def elaborateCompositePathWrite (schema : List (String × StateKind))
     (storage : TSyntax `ident) (keys : List (TSyntax `nlexpr))
@@ -2402,6 +2436,9 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| insert $path:nlpath)
   | `(nleffect| when $_:nlexpr insert $path:nlpath) =>
     state := ← elaborateSetInsert schema path state
+  | `(nleffect| insertDefault $path:nlpath)
+  | `(nleffect| when $_:nlexpr insertDefault $path:nlpath) =>
+    state := ← elaborateMapDefault schema path state
   | `(nleffect| reset $path:nlpath)
   | `(nleffect| when $_:nlexpr reset $path:nlpath) =>
     state := ← elaborateReset schema path state

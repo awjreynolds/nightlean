@@ -2419,7 +2419,7 @@
       "layer": "language-ledger",
       "surface": "Map.insertDefault",
       "noctiumStatus": "subset",
-      "notes": "Explicit emptyMap assignment initializes or replaces a nested Map under an existing parent. Noctium also has typed reset forms for selected ADTs. Generic insertDefault for arbitrary Map value types remains open.",
+      "notes": "insertDefault writes the admitted typed default to a direct or nested Map entry. A pinned Field fixture compares insertion, replacement, membership and size. The native case exercises nested scalar, checked record and collection layouts. Full type, proof and ledger qualification remain open.",
       "source": [
         "adt"
       ],
@@ -2429,10 +2429,10 @@
         "LEDGER"
       ],
       "observedEvidence": [
-        "tests/Issue69NestedCounter.lean",
-        "runtime/tests/nested_counter.rs",
-        "tests/MixedLedgerRecord.lean",
-        "runtime/tests/mixed_ledger_record.rs"
+        "tests/NativeMapDefault.lean",
+        "tests/compact/NativeMapDefault.compact",
+        "tests/compact/native-map-default.mjs",
+        "runtime/tests/native_map_default.rs"
       ],
       "equivalence": "unverified"
     },
