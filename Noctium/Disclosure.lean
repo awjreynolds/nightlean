@@ -254,16 +254,34 @@ def describeEffect : Effect → LedgerEffectDescriptor
     .publicEffect "insertShieldedCoinSet" .stateWrite .publicActivity sink
       [.selector "nonce" sink nonce, .selector "color" sink color,
        .payload "amount" sink amount, .selector "contractAddress" sink selfAddress] []
+  | .insertShieldedCoinSetTo _ nonce color amount isContract recipient =>
+    let sink := "public qualified shielded coin Set insertion"
+    .publicEffect "insertShieldedCoinSetTo" .stateWrite .publicActivity sink
+      [.selector "nonce" sink nonce, .selector "color" sink color,
+       .payload "amount" sink amount, .selector "isContract" sink isContract,
+       .selector "recipient" sink recipient] []
   | .writeShieldedCoinCell _ nonce color amount selfAddress =>
     let sink := "public qualified shielded coin Cell write"
     .publicEffect "writeShieldedCoinCell" .stateWrite .publicActivity sink
       [.selector "nonce" sink nonce, .selector "color" sink color,
        .payload "amount" sink amount, .selector "contractAddress" sink selfAddress] []
+  | .writeShieldedCoinCellTo _ nonce color amount isContract recipient =>
+    let sink := "public qualified shielded coin Cell write"
+    .publicEffect "writeShieldedCoinCellTo" .stateWrite .publicActivity sink
+      [.selector "nonce" sink nonce, .selector "color" sink color,
+       .payload "amount" sink amount, .selector "isContract" sink isContract,
+       .selector "recipient" sink recipient] []
   | .pushFrontCoin _ nonce color amount selfAddress =>
     let sink := "public qualified shielded coin List write"
     .publicEffect "pushFrontCoin" .stateWrite .publicActivity sink
       [.selector "nonce" sink nonce, .selector "color" sink color,
        .payload "amount" sink amount, .selector "contractAddress" sink selfAddress] []
+  | .pushFrontCoinTo _ nonce color amount isContract recipient =>
+    let sink := "public qualified shielded coin List write"
+    .publicEffect "pushFrontCoinTo" .stateWrite .publicActivity sink
+      [.selector "nonce" sink nonce, .selector "color" sink color,
+       .payload "amount" sink amount, .selector "isContract" sink isContract,
+       .selector "recipient" sink recipient] []
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>
     let sink := "public shielded coin spend"
     .publicEffect "spendShieldedFromMap" .asset .publicActivity sink
