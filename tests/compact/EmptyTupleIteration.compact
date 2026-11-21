@@ -4,12 +4,12 @@ import CompactStandardLibrary;
 export ledger total: Field;
 witness seed(): Field;
 witness empty(slot: Field): [];
-witness callback(): Field;
+witness callback(flag: Boolean, byte: Uint<8>): Field;
 
 export circuit update(): Field {
-  const sum = fold((acc, mapped, right) => acc + callback(),
+  const sum = fold((acc, mapped, right) => acc + callback(right, right),
     seed(),
-    map((left, right) => callback(), empty(1 as Field), empty(2 as Field)),
+    map((left, right) => callback(left, left), empty(1 as Field), empty(2 as Field)),
     empty(3 as Field));
   total = disclose(sum);
   return disclose(sum);
