@@ -46,7 +46,9 @@ NOCTIUM_OPAQUE_STRING_MAP_DIR="$artifacts" \
   opaque_string_map_round_trips_canonical_utf8 -- --ignored --exact
 ```
 
-## Ledger 9 localnet run
+## Ledger 9 localnet runs
+
+### OpaqueBytes
 
 One source-derived run deployed `OpaqueByteMap`, stored `[0,1,255]` at a
 `Bytes32` key, and read the same key. The finalized public state contains the
@@ -102,3 +104,19 @@ cargo +1.100.0 run --manifest-path runtime/Cargo.toml --locked \
 This qualifies the selected payload and entrypoints on one local ledger run. It
 does not establish general opaque-byte equivalence, privacy guarantees or
 public-network deployment.
+
+### OpaqueString
+
+A separate source-derived run deployed `OpaqueStringMap`, stored `é\u0000λ`
+under one `Bytes32` key, then read the same key. The finalized Map cell matched
+the exact UTF-8 `Compress` bytes. The public read result and its one-field
+transcript matched the same string, and the finalized state stayed unchanged
+after the read. Deployment, store and read finalized at heights 17, 20 and 23.
+The store circuit measured K8 with 127 rows. The read circuit measured K7
+with 115 rows. [Receipt and artifact hashes](../../tests/opaque-string-map-localnet-evidence.json)
+· [Lean fixture](../../tests/OpaqueStringMap.lean).
+
+The localnet driver retains the `OpaqueBytes` branch and selects the value
+type from the verified entrypoint plans. This string run covers one value and
+one Map entry only. It does not establish
+general string equivalence, privacy guarantees or public-network deployment.

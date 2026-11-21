@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-11-21",
+  "scope": "One funded Ledger 9 localnet deployment, one OpaqueString Map store of é\u0000λ, and one read of the same key. Finite POC execution evidence only.",
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "network": {
+    "networkId": "undeployed",
+    "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+    "specVersion": 2001100,
+    "transactionVersion": 4
+  },
+  "compiler": {
+    "implementation": "Lean4",
+    "sourceRevision": "d3887435d67aa7b93fc7928dc7a22df103a4fd35",
+    "leanSource": "tests/OpaqueStringMap.lean",
+    "sourceSha256": "03e5d9effe894434a3609d5561898614fdb16623aeb36f455041118aba4740fb"
+  },
+  "nativeToolchain": {
+    "repository": "https://github.com/midnightntwrk/midnight-zkir",
+    "release": "zkir-3.2.1",
+    "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "rust": "1.100.0",
+    "reportedCliVersion": "midnight-zkir 3.2.0",
+    "binarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+    "provenanceSha256": "dccec8838ddd4739ef31f5a3268aef62ea7e8eff498fe8b875ab1ed763dc663b"
+  },
+  "artifacts": {
+    "store": {
+      "circuitSha256": "f927d635fe5a64511873fb62671680606b1e33fcaee60c35217ef0c7f0de8cfb",
+      "impactSha256": "3ada32d675d195ea9f5caf466eb3c8784f7dd2f9e59c980f98cb436194f59ec4",
+      "k": 8,
+      "rows": 127,
+      "proverKeySha256": "10e4e7ed48c09846476a20b7e261550f1d4edef1219cc4865eb502bde847a634",
+      "verifierKeySha256": "87a36f89efcf2c299320f96a2c1094e3bb77a16e4523c5c18ce3f752d0563cba",
+      "bundleManifestSha256": "8a32e7d95ff3ecf9a04385585c6ebec8bf0c4960f6a88ba9a7130b0d27919b1b"
+    },
+    "read": {
+      "circuitSha256": "59a8d026e5a2ba13f75d1e8ee5a9d84b0a90f7f1580cd3d6d2000a9726e29e8f",
+      "impactSha256": "3382f175803143ef71231046ce8248a668029cf24f5280d794be63fd423f0ad3",
+      "k": 7,
+      "rows": 115,
+      "proverKeySha256": "47002bab37bbf1a628c7499c51d6db2354a8209a860332cd6cf03a2e7ecac799",
+      "verifierKeySha256": "791a79c66cafbc1d9d04ad148b9dcdb601b10930cb9fa723918174d232faf032",
+      "bundleManifestSha256": "0cb343b84f3dd4b573a1a0158bd61f3feb9dcf38840eec879783c859e3782ba0"
+    },
+    "metadataSha256": "4f4e23a25e57f310120ba798ed79e46b74d13a7f57c4f1e1b6336a02298a5cc8",
+    "targetProfileSha256": "02b4242c2561232daea1d7d1d29bde68f3157eb9eed8cfb037254a0013f40093",
+    "runtimeAbiSha256": "9adb028a54398dd7bccc35fae814616829d940ff58c29690bb74e400c2c8787d",
+    "ledgerParametersSha256": "6b7cd98fb0b10d884db5b357877c7c26bf17f28a726918321a619913e90f7679",
+    "k7SrsSha256": "e82ae890c080188355f37feaffe91372584cd810615082d9143d4dec0453fd9d",
+    "k8SrsSha256": "909b707551eaaea79828e883cde6fc46ab15986c3b1d791bed462c9e2805c933",
+    "bundleManifestDigestsCheckedByConsumer": true
+  },
+  "host": {
+    "source": "runtime/examples/opaque_byte_map_localnet.rs",
+    "sourceSha256": "7b83d832b689509fb2a3d21ac9560d98a17da685b5b01669ce28daf1b1489b5c",
+    "binarySha256": "252a39c2b9c1a0759b41607c5387d2d4ddffe18fa57baabfc028e693b4e87cb3"
+  },
+  "contract": {
+    "address": "d877d8aa936a7abe601f9b6446f7a7fbaf03d7777d3239bc729b98710e15484a",
+    "operationSequence": [
+      "deploy",
+      "store",
+      "read"
+    ],
+    "payload": {
+      "kind": "opaqueString",
+      "value": "é\u0000λ"
+    },
+    "readReturnAbi": {
+      "sourceType": "OpaqueString",
+      "visibility": "public",
+      "transcriptFields": 1,
+      "alignment": "Compress"
+    },
+    "receipts": {
+      "deploy": {
+        "finalizedHeight": 17,
+        "finalizedHash": "fd5935b5841f4eaefb0f9ef6ae9dcb52a900925f8fa161dd9f4abedcec160014",
+        "transactionId": "da0358ef8e2aac97ea2e0fa7252273aa92a831e810135327d4a120eef2596554",
+        "extrinsicHash": "6d531ee1ec005c433a3d8855481a873abadaf8f7d23a5165255146917349351e"
+      },
+      "store": {
+        "finalizedHeight": 20,
+        "finalizedHash": "d2c54e13ad6b39e12bfc0327bd887baea4f3ec3ba71441a780124637e416a965",
+        "transactionId": "f2ee200000da70bb31303f9f529c397821cc8e8b493de454e11a509143fda5e7",
+        "extrinsicHash": "5c67efbdbb47c5bb06620e3a6e03c3d25979890f0cf25701e4a86deb007902c4"
+      },
+      "read": {
+        "finalizedHeight": 23,
+        "finalizedHash": "d8e53c60bec72266f55d31f85e90f3321fd8a77ff39faa76835edc8459ad05ff",
+        "transactionId": "b1dd8f193bfa13d0bc8d8e3e61c3fb369720694e97d668d7e74def309fb31c95",
+        "extrinsicHash": "29816a76f999d7bd6894daa92afa2810ce2d4a8a102be17d6ad04154a38ee8a2"
+      }
+    },
+    "stateAfterStore": {
+      "bytes": 3082,
+      "sha256": "abdb6d33788c06f728eb8ccd98fe71edcf4f0b6e00a0cda8598bc62b5e901d39"
+    },
+    "stateAfterRead": {
+      "bytes": 3082,
+      "sha256": "abdb6d33788c06f728eb8ccd98fe71edcf4f0b6e00a0cda8598bc62b5e901d39"
+    },
+    "checks": {
+      "deploymentFinalized": true,
+      "storeProofAccepted": true,
+      "rawCompressMapCellMatched": true,
+      "readProofReturnMatched": true,
+      "readTranscriptOutputMatched": true,
+      "readFinalizedStateUnchanged": true
+    }
+  },
+  "limits": [
+    "One fixed Bytes32 key, one UTF-8 string, one Map entry and one read were exercised.",
+    "The read entrypoint discloses the stored string as its public return.",
+    "This run does not establish general string equivalence, privacy guarantees or public-network deployment."
+  ]
+}
