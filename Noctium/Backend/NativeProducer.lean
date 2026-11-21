@@ -576,14 +576,14 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
         checkedSecp256k1PointKeccakTerm alignment values
       else if opcode == "sha512" then do
         let atoms ← alignment.getArr?
-        ensure (atoms.size ≥ 1 && atoms.size ≤ 32)
+        ensure (atoms.size ≤ 32)
           "FAB SHA-512 alignment must contain 1 to 32 payload atoms"
         let singleByteAtom := if atoms.size == 1 then
           match atoms[0]!.getObjVal? "value" with
           | .ok value => (stringField value "tag").toOption == some "bytes"
           | .error _ => false
           else false
-        if singleByteAtom then
+        if atoms.isEmpty || singleByteAtom then
           checkedFixedByteHashTerm opcode alignment values
         else do
           let (descriptors, operands) ← checkedFabHashOperands alignment values
