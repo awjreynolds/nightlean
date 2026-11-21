@@ -5588,8 +5588,8 @@
       "id": "C-STDLIB-RECEIVEUNSHIELDED",
       "layer": "standard-library",
       "surface": "receiveUnshielded",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean receiveUnshielded fixes the unshielded tag on the existing input accumulation effect. The helper and primitive emit the same checked operations and ZKIR. Pinned Compact and the native query context agree on active and inactive calls. The underlying primitive has separate finalized settlement evidence.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5602,7 +5602,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ReceiveUnshielded.lean",
+        "tests/compact/receive-unshielded.mjs",
+        "runtime/tests/receive_unshielded_helper.rs"
+      ],
       "equivalence": "unverified"
     },
     {
