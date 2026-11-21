@@ -2857,7 +2857,7 @@
       "layer": "language-ledger",
       "surface": "List.pushFrontCoin",
       "noctiumStatus": "subset",
-      "notes": "A root List prepends the fixed QualifiedInfo record using a coin index booked for the current contract. The native query-context fixture checks head-to-tail order and rejects missing or wrong-recipient bookings. Finalized ledger execution and broader recipient cases remain open.",
+      "notes": "A root List prepends the fixed QualifiedInfo record using a coin index booked for the current contract. The native query-context fixture checks head-to-tail order and rejects missing or wrong-recipient bookings. A funded development Ledger 9 run matches a single finalized List head to the self-minted output and the other three collection records. Broader recipient cases remain open.",
       "source": [
         "adt"
       ],
@@ -2868,7 +2868,8 @@
       ],
       "observedEvidence": [
         "tests/QualifiedCoinList.lean",
-        "runtime/tests/qualified_coin_list.rs"
+        "runtime/tests/qualified_coin_list.rs",
+        "docs/development/shielded-coin-collections-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
@@ -4298,8 +4299,8 @@
       "id": "C-STDLIB-DEGRADETOTRANSIENT",
       "layer": "standard-library",
       "surface": "degradeToTransient",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "degradeToNative interprets the low 31 digest bytes as a little-endian Native field. The pinned Compact runtime and native ZKIR 3.2.1 checks agree for distinct high bytes over the same low 31 bytes. Full host ABI qualification remains open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4312,15 +4313,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HashDomainConversions.lean",
+        "tests/compact/hash-domain-conversions.mjs",
+        "runtime/tests/hash_domain_conversions.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-UPGRADEFROMTRANSIENT",
       "layer": "standard-library",
       "surface": "upgradeFromTransient",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "upgradeFromNative serializes the low 31 bytes of a canonical Native field and appends a zero high byte. The pinned Compact runtime and native ZKIR 3.2.1 check zero and the highest canonical value, and reject the modulus as an input. Full host ABI qualification remains open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4333,7 +4338,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HashDomainConversions.lean",
+        "tests/compact/hash-domain-conversions.mjs",
+        "runtime/tests/hash_domain_conversions.rs"
+      ],
       "equivalence": "unverified"
     },
     {

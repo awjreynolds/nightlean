@@ -508,6 +508,7 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| concatBytes($left, $right)) =>
     s!"concatBytes({renderExpr left}, {renderExpr right})"
   | `(nlexpr| degradeToNative($value)) => s!"degradeToNative({renderExpr value})"
+  | `(nlexpr| upgradeFromNative($value)) => s!"upgradeFromNative({renderExpr value})"
   | `(nlexpr| toBytes32($value)) => s!"toBytes32({renderExpr value})"
   | `(nlexpr| jubjubScalarFromNative($value)) => s!"jubjubScalarFromNative({renderExpr value})"
   | `(nlexpr| jubjubScalarToNative($value)) => s!"jubjubScalarToNative({renderExpr value})"
@@ -578,6 +579,7 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha256($value))
   | `(nlexpr| sha512($value))
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
+  | `(nlexpr| upgradeFromNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
   | `(nlexpr| field($value, $_:ident))
@@ -636,6 +638,7 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha256($value))
   | `(nlexpr| sha512($value))
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
+  | `(nlexpr| upgradeFromNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
   | `(nlexpr| field($value, $_:ident))
@@ -1144,6 +1147,13 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     pure (mergeLowered (.scalar resultType) (.bytes operation [left.term, right.term]) [left, right])
   | `(nlexpr| degradeToNative($value)) =>
     lowerBytesOperation programName callPrefix env stx .degradeToNative [value]
+  | `(nlexpr| upgradeFromNative($value)) => do
+    let value ← lowerExpr programName callPrefix env value
+    unless value.type == .scalar .native do throwErrorAt stx "upgradeFromNative requires Native"
+    let bytes := Noctium.Helpers.Term.bytes (.toBytes32 .native) [value.term]
+    let low := Noctium.Helpers.Term.bytes (.sliceBytes 32 0 31) [bytes]
+    let high := Noctium.Helpers.Term.bytes (.bytesLiteral 1 [0]) []
+    pure (mergeLowered (.scalar (.bytes 32)) (.bytes (.concatBytes 31 1) [low, high]) [value])
   | `(nlexpr| toBytes32($value)) => do
     let value ← lowerExpr programName callPrefix env value
     let .scalar source := value.type | throwErrorAt stx "toBytes32 does not accept Unit"
