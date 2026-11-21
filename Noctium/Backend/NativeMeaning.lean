@@ -648,6 +648,14 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let {alignment, operands, bounds, assertions} := payload
     let term := persistentHashFabTerm alignment operands
     pure (Normalized.mk term bounds assertions)
+  | .hashToCurveFab compositeEnv compositeType values => do
+    let compiled ← validateFabHashLayout compositeEnv compositeType values
+    let fields ← fabHashLayoutFields compiled
+    let normalizedValues ← normalizeFabValues env values
+    let payload ← alignedFabPayload fields normalizedValues
+    unless payload.operands.length ≤ Types.defaultLimits.maxVectorLength do
+      throw "hashToCurveFab exceeds the source field-vector bound"
+    pure (Normalized.mk (hashToCurveTerm payload.operands) payload.bounds payload.assertions)
   | .persistentCommitFab compositeEnv compositeType opening values => do
     let compiled ← validateFabHashLayout compositeEnv compositeType values
     let fields ← fabHashLayoutFields compiled

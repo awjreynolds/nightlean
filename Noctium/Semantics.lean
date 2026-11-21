@@ -538,7 +538,7 @@ decreasing_by
     | exact Noctium.sizeOfMemberListLt (by simp)
     | omega
 
-private def fabCommitFieldValues (ctx : EvalContext) (env : EvalEnv)
+private def fabAlignedFieldValues (ctx : EvalContext) (env : EvalEnv)
     : Types.Layout → Sigma Expr → Except String (List Nat)
   | .bytes length .byteField, ⟨.bytes actualLength, expression⟩ => do
     unless length == actualLength && length > 0 do throw "mixed FAB Bytes field type mismatch"
@@ -558,7 +558,7 @@ private def fabCommitFieldValues (ctx : EvalContext) (env : EvalEnv)
     unless maximum == actualMaximum && !variants.isEmpty && variants.all (·.2.1.isEmpty) do
       throw "mixed FAB enum layout is unsupported"
     pure [← expression.eval ctx env]
-  | _, _ => throw "unsupported mixed FAB field during transient commitment evaluation"
+  | _, _ => throw "unsupported mixed FAB field during evaluation"
 termination_by _ value => sizeOf value
 decreasing_by
   all_goals simp_wf
@@ -566,12 +566,12 @@ decreasing_by
     | exact Noctium.sizeOfSigmaExprValueLt _
     | omega
 
-private def fabCommitFieldSequence (ctx : EvalContext) (env : EvalEnv)
+private def fabAlignedFieldSequence (ctx : EvalContext) (env : EvalEnv)
     : List Types.Layout → List (Sigma Expr) → Except String (List Nat)
   | [], [] => pure []
   | layout :: layouts, value :: rest => do
-    pure ((← fabCommitFieldValues ctx env layout value) ++
-      (← fabCommitFieldSequence ctx env layouts rest))
+    pure ((← fabAlignedFieldValues ctx env layout value) ++
+      (← fabAlignedFieldSequence ctx env layouts rest))
   | _, _ => throw "mixed FAB field count changed after validation"
 termination_by _ values => sizeOf values
 decreasing_by
@@ -709,6 +709,13 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
       reversedInputs := field :: reversedInputs
     let inputs := reversedInputs.reverse
     checkedJubjubPoint ctx (← ctx.jubjub.hashToCurve inputs)
+  | .hashToCurveFab compositeEnv type values => do
+    let layout ← validateFabHashLayout compositeEnv type values
+    let fields ← fabHashLayoutFields layout
+    let inputs ← fabAlignedFieldSequence ctx env (fields.map Prod.snd) values
+    if inputs.length > Types.defaultLimits.maxVectorLength then
+      throw s!"hash_to_curve input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+    checkedJubjubPoint ctx (← ctx.jubjub.hashToCurve inputs)
   | .foreignBase curve value =>
     if value < curve.baseModulus then pure value else .error "foreign base-field constant is not canonical"
   | .foreignScalar curve value =>
@@ -777,7 +784,7 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     let fields ← fabHashLayoutFields layout
     let opening ← opening.eval ctx env
     if opening >= ctx.modulus then throw "noncanonical transient commitment opening"
-    let payload ← fabCommitFieldSequence ctx env (fields.map Prod.snd) values
+    let payload ← fabAlignedFieldSequence ctx env (fields.map Prod.snd) values
     let input := opening :: payload
     let result ← ctx.transientHash input
     if result >= ctx.modulus then throw "transient commitment oracle returned noncanonical value"

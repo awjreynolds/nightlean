@@ -1,0 +1,49 @@
+pragma language_version >= 0.28;
+import CompactStandardLibrary;
+
+export struct JubjubGroupParityResult {
+  checkedX: Field;
+  checkedY: Field;
+  generatorX: Field;
+  generatorY: Field;
+  multipliedX: Field;
+  multipliedY: Field;
+  sumX: Field;
+  sumY: Field;
+  negatedX: Field;
+  negatedY: Field;
+  cancelledX: Field;
+  cancelledY: Field;
+  identityNegatedX: Field;
+  identityNegatedY: Field;
+  scalarResult: Field;
+}
+
+export pure circuit groupParity(pointX: Field, pointY: Field, rawScalar: Field): JubjubGroupParityResult {
+  const point = constructJubjubPoint(pointX, pointY);
+  const identity = constructJubjubPoint(0 as Field, 1 as Field);
+  const scalar = rawScalar as JubjubScalar;
+  const generated = ecMulGenerator(scalar);
+  const multiplied = ecMul(point, scalar);
+  const sum = ecAdd(point, identity);
+  const negated = ecNeg(point);
+  const cancelled = ecAdd(point, negated);
+  const identityNegated = ecNeg(identity);
+  return JubjubGroupParityResult{
+    checkedX: jubjubPointX(point),
+    checkedY: jubjubPointY(point),
+    generatorX: jubjubPointX(generated),
+    generatorY: jubjubPointY(generated),
+    multipliedX: jubjubPointX(multiplied),
+    multipliedY: jubjubPointY(multiplied),
+    sumX: jubjubPointX(sum),
+    sumY: jubjubPointY(sum),
+    negatedX: jubjubPointX(negated),
+    negatedY: jubjubPointY(negated),
+    cancelledX: jubjubPointX(cancelled),
+    cancelledY: jubjubPointY(cancelled),
+    identityNegatedX: jubjubPointX(identityNegated),
+    identityNegatedY: jubjubPointY(identityNegated),
+    scalarResult: scalar as Field,
+  };
+}
