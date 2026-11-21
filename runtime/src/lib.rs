@@ -2,15 +2,17 @@
 use crate::aggregates::Schema;
 use crate::zkir::IrSource;
 use anyhow::{Context, Result, anyhow, bail, ensure};
-use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom};
+use base_crypto::fab::{
+    AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom, ValueSlice,
+};
 use base_crypto::hash::HashOutput;
 use base_crypto::repr::BinaryHashRepr;
 use coin_structure::coin::{
-    Info as ShieldedCoinInfo, Nonce, PublicAddress, ShieldedTokenType, TokenType,
-    UnshieldedTokenType, UserAddress,
+    Info as ShieldedCoinInfo, Nonce, PublicAddress, PublicKey, QualifiedInfo, ShieldedTokenType,
+    TokenType, UnshieldedTokenType, UserAddress,
 };
 use coin_structure::contract::ContractAddress;
-use coin_structure::transfer::Recipient;
+use coin_structure::transfer::{Recipient, SenderEvidence};
 use ledger::{
     construct::{PreTranscript, partition_transcripts},
     structure::LedgerParameters,
@@ -1253,6 +1255,16 @@ pub enum Instruction {
         amount: Expr,
         commitment: Expr,
     },
+    #[serde(rename = "spendShieldedFromMap", rename_all = "camelCase")]
+    SpendShieldedFromMap {
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        recipient: Expr,
+        nullifier: Expr,
+        #[serde(rename = "outputCommitment")]
+        output_commitment: Expr,
+    },
     #[serde(rename = "requireContractCaller")]
     RequireContractCaller {
         address: Expr,
@@ -1492,6 +1504,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             vec![1, path_field_count(plan, *slot, keys)?, 1, 5, 1, 4]
         }
         Instruction::ReceiveShieldedToMap { .. } => RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS.to_vec(),
+        Instruction::SpendShieldedFromMap { .. } => SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
 
         Instruction::MerkleTreeIsFull {
             slot, keys, depth, ..
@@ -1677,6 +1690,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::ReceiveShieldedToMap { .. } => {
             bail!("shielded receive must be unguarded")
         }
+        Instruction::SpendShieldedFromMap { .. } => {
+            bail!("shielded spend must be unguarded")
+        }
         Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
             impact_field_counts(instruction, plan)?.into_iter().sum()
         }
@@ -1781,6 +1797,7 @@ fn map_key_type(plan: &Plan, slot: u32) -> Result<ScalarType> {
 const MINT_FIELD_COUNTS: [usize; 16] = [1, 4, 6, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1];
 const RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS: [usize; 16] =
     [1, 4, 6, 2, 1, 1, 4, 6, 1, 6, 5, 11, 1, 2, 1, 1];
+const SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 12] = [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
 
 fn token_accumulation_fields(key_push: usize) -> [usize; 16] {
     [1, 4, key_push, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1]
@@ -2027,6 +2044,7 @@ struct RecordField {
 struct CheckedRecordSchema {
     fields: Vec<RecordField>,
     aggregate: Option<aggregates::Schema>,
+    shielded_coin: bool,
 }
 
 impl CheckedRecordSchema {
@@ -2149,12 +2167,43 @@ fn record_type_name(ty: &ScalarType) -> Result<&'static str> {
     Ok(match ty {
         ScalarType::Native => "Native",
         ScalarType::Bytes32 => "Bytes<32>",
+        ScalarType::UInt(maximum) if maximum == &BigUint::from(u128::MAX) => {
+            "UIntRange<340282366920938463463374607431768211456>"
+        }
+        ScalarType::UInt(maximum) if maximum == &BigUint::from(u64::MAX) => {
+            "UIntRange<18446744073709551616>"
+        }
         ScalarType::JubjubPoint => "JubjubPoint",
         _ => bail!("unsupported mixed record field type"),
     })
 }
 
 fn checked_record_schema(json: &Json) -> Result<CheckedRecordSchema> {
+    if is_shielded_coin_record_schema(json) {
+        let fields = [
+            ("nonce", "Bytes<32>"),
+            ("color", "Bytes<32>"),
+            (
+                "value",
+                "UIntRange<340282366920938463463374607431768211456>",
+            ),
+            ("mtIndex", "UIntRange<18446744073709551616>"),
+        ]
+        .into_iter()
+        .map(|(name, ty)| {
+            Ok(RecordField {
+                name: Some(name.to_owned()),
+                ty: ScalarType::parse(ty)?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+        return Ok(CheckedRecordSchema {
+            fields,
+            aggregate: None,
+            shielded_coin: true,
+        });
+    }
+
     if json.get("schemaVersion").is_some() {
         let schema = aggregates::Schema::from_json(&serde_json::to_vec(json)?)?;
         ensure!(
@@ -2169,6 +2218,7 @@ fn checked_record_schema(json: &Json) -> Result<CheckedRecordSchema> {
                 })
                 .collect(),
             aggregate: Some(schema),
+            shielded_coin: false,
         });
     }
 
@@ -2230,6 +2280,7 @@ fn checked_record_schema(json: &Json) -> Result<CheckedRecordSchema> {
     Ok(CheckedRecordSchema {
         fields: checked,
         aggregate: None,
+        shielded_coin: false,
     })
 }
 
@@ -2260,6 +2311,129 @@ fn unguarded_operation(operation: &Instruction) -> (&Instruction, Option<&Expr>)
         Instruction::Guarded { guard, operation } => (operation, Some(guard)),
         operation => (operation, None),
     }
+}
+
+fn mutates_contract_state(operation: &Instruction) -> bool {
+    let (operation, _) = unguarded_operation(operation);
+    matches!(
+        operation,
+        Instruction::Push { storage: true, .. }
+            | Instruction::PushFields { storage: true, .. }
+            | Instruction::Insert { .. }
+            | Instruction::MapRemove { .. }
+            | Instruction::ListPushFront { .. }
+            | Instruction::ListPopFront { .. }
+            | Instruction::ListReset { .. }
+            | Instruction::MerkleTreeInsertHash { .. }
+            | Instruction::MerkleTreeInsertHashIndex { .. }
+            | Instruction::MerkleTreeReset { .. }
+            | Instruction::MerkleTreeResetHistory { .. }
+            | Instruction::ReceiveShieldedToMap { .. }
+    )
+}
+
+fn validate_shielded_spend_layout(
+    plan: &Plan,
+    operation_index: usize,
+    nonce: &Expr,
+    color: &Expr,
+    amount: &Expr,
+) -> Result<(u32, PathPart)> {
+    let removal = plan
+        .operations
+        .get(operation_index + 1)
+        .ok_or_else(|| anyhow!("shielded spend must be followed by Map removal"))?;
+    let (removal, removal_guard) = unguarded_operation(removal);
+    ensure!(
+        removal_guard.is_none(),
+        "shielded spend removal must be unguarded"
+    );
+    let Instruction::MapRemove { slot, keys } = removal else {
+        bail!("shielded spend must be followed by Map removal")
+    };
+    ensure!(keys.len() == 1, "shielded spend requires one Map key");
+    ensure!(
+        keys[0].alignment == "bytes32",
+        "shielded spend Map key must be Bytes32"
+    );
+    validate_shielded_coin_map(plan, *slot)?;
+
+    let (record_index, record_read) = (0..operation_index)
+        .rev()
+        .find_map(|index| {
+            let (candidate, guard) = unguarded_operation(&plan.operations[index]);
+            match candidate {
+                Instruction::PopeqFields { schema, .. }
+                    if is_shielded_coin_record_schema(schema) =>
+                {
+                    Some((index, (candidate, guard)))
+                }
+                _ => None,
+            }
+        })
+        .ok_or_else(|| anyhow!("shielded spend has no exact coin record read"))?;
+    let (record_read, record_guard) = record_read;
+    ensure!(
+        record_guard.is_none(),
+        "shielded coin read must be unguarded"
+    );
+    let Instruction::PopeqFields {
+        expressions,
+        schema,
+    } = record_read
+    else {
+        unreachable!("the selected operation is a record read")
+    };
+    ensure!(
+        expressions.len() == 4
+            && expressions[0] == *nonce
+            && expressions[1] == *color
+            && expressions[2] == *amount,
+        "shielded spend operands differ from the coin record read"
+    );
+
+    let path_operation = record_index
+        .checked_sub(1)
+        .and_then(|index| plan.operations.get(index))
+        .ok_or_else(|| anyhow!("shielded coin read has no indexed Map path"))?;
+    let (path_operation, path_guard) = unguarded_operation(path_operation);
+    ensure!(path_guard.is_none(), "shielded coin path must be unguarded");
+    let Instruction::IndexPath {
+        slot: read_slot,
+        push_path: false,
+        keys: read_keys,
+    } = path_operation
+    else {
+        bail!("shielded coin read has no indexed Map path")
+    };
+    ensure!(
+        *read_slot == *slot
+            && read_keys.len() == 1
+            && read_keys[0].alignment == "bytes32"
+            && read_keys[0].expression == keys[0].expression,
+        "shielded spend removal differs from the coin read path"
+    );
+    ensure!(
+        tree_schema_at_path(plan, *read_slot, read_keys.len())?.get("composite") == Some(schema),
+        "shielded spend read differs from the coin Map schema"
+    );
+    ensure!(
+        plan.operations[record_index + 1..operation_index]
+            .iter()
+            .any(|operation| {
+                let (operation, guard) = unguarded_operation(operation);
+                guard.is_none()
+                    && matches!(operation, Instruction::ReadContractAddress { .. })
+            }),
+        "shielded spend requires a current contract address read"
+    );
+    ensure!(
+        !plan.operations[record_index + 1..operation_index]
+            .iter()
+            .any(mutates_contract_state),
+        "shielded coin row changes between read and spend"
+    );
+    Ok((*slot, read_keys[0].clone()))
 }
 
 fn is_record_schema(schema: &Json) -> bool {
@@ -2339,6 +2513,15 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
                     "record read differs from state schema"
                 );
             }
+            Instruction::SpendShieldedFromMap {
+                nonce,
+                color,
+                amount,
+                ..
+            } => {
+                ensure!(guard.is_none(), "shielded spend must be unguarded");
+                validate_shielded_spend_layout(plan, index, nonce, color, amount)?;
+            }
             Instruction::ListHead {
                 slot,
                 keys,
@@ -2417,8 +2600,42 @@ fn record_values_from_expressions(
     Ok(values)
 }
 
+fn shielded_qualified_coin(values: &[Value]) -> Result<QualifiedInfo> {
+    ensure!(values.len() == 4, "qualified coin record field count mismatch");
+    let Value::UInt {
+        number: amount,
+        maximum: amount_maximum,
+    } = &values[2]
+    else {
+        bail!("qualified coin amount must be UInt128")
+    };
+    let Value::UInt {
+        number: mt_index,
+        maximum: mt_index_maximum,
+    } = &values[3]
+    else {
+        bail!("qualified coin index must be UInt64")
+    };
+    ensure!(
+        *amount_maximum == u128::MAX.into() && *mt_index_maximum == u64::MAX.into(),
+        "qualified coin integer widths differ from the ledger"
+    );
+    Ok(QualifiedInfo {
+        nonce: Nonce(claim_hash_output(values[0].clone(), "qualified coin nonce")?),
+        type_: ShieldedTokenType(claim_hash_output(
+            values[1].clone(),
+            "qualified coin color",
+        )?),
+        value: u128::try_from(amount.clone())?,
+        mt_index: u64::try_from(mt_index.clone())?,
+    })
+}
+
 fn aligned_record_value(schema: &CheckedRecordSchema, values: &[Value]) -> Result<AlignedValue> {
     validate_record_values(schema, values)?;
+    if schema.shielded_coin {
+        return Ok(AlignedValue::from(shielded_qualified_coin(values)?));
+    }
     let parts = values
         .iter()
         .map(aligned_storage_cell)
@@ -2427,6 +2644,35 @@ fn aligned_record_value(schema: &CheckedRecordSchema, values: &[Value]) -> Resul
 }
 
 fn decode_record_value(schema: &CheckedRecordSchema, value: &AlignedValue) -> Result<Vec<Value>> {
+    if schema.shielded_coin {
+        let empty = AlignedValue::from(QualifiedInfo::default());
+        ensure!(
+            value.alignment == empty.alignment && value.alignment.fits(&value.value),
+            "qualified coin record alignment mismatch"
+        );
+        let value_slice: &ValueSlice = &value.value;
+        let qualified = QualifiedInfo::try_from(value_slice)
+            .map_err(|_| anyhow!("qualified coin record encoding mismatch"))?;
+        ensure!(
+            AlignedValue::from(qualified) == *value,
+            "qualified coin record is not canonically encoded"
+        );
+        let values = vec![
+            Value::Bytes(qualified.nonce.0.0.to_vec()),
+            Value::Bytes(qualified.type_.0.0.to_vec()),
+            Value::UInt {
+                number: qualified.value.into(),
+                maximum: u128::MAX.into(),
+            },
+            Value::UInt {
+                number: qualified.mt_index.into(),
+                maximum: u64::MAX.into(),
+            },
+        ];
+        validate_record_values(schema, &values)?;
+        return Ok(values);
+    }
+
     let defaults = schema
         .fields
         .iter()
@@ -4449,6 +4695,26 @@ fn probe_instruction(
             ..
         } => probe_expressions(
             [nonce, color, amount, commitment],
+            plan,
+            env,
+            deferred_outputs,
+        ),
+        Instruction::SpendShieldedFromMap {
+            nonce,
+            color,
+            amount,
+            recipient,
+            nullifier,
+            output_commitment,
+        } => probe_expressions(
+            [
+                nonce,
+                color,
+                amount,
+                recipient,
+                nullifier,
+                output_commitment,
+            ],
             plan,
             env,
             deferred_outputs,
@@ -6550,6 +6816,73 @@ impl PreparationCursor {
                 has_written = true;
                 insert_final
             }
+            Instruction::SpendShieldedFromMap {
+                nonce,
+                color,
+                amount,
+                recipient,
+                nullifier,
+                output_commitment,
+            } => {
+                let (_, read_key) =
+                    validate_shielded_spend_layout(plan, index, nonce, color, amount)?;
+                let coin = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce, &env)?,
+                        "shielded spend coin nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color, &env)?,
+                        "shielded spend coin color",
+                    )?),
+                    value: unshielded_amount(amount, &env)?,
+                };
+                let key = claim_hash_output(
+                    evaluate(&read_key.expression, &env)?,
+                    "shielded spend Map key",
+                )?;
+                ensure!(
+                    coin.nonce.0 == key,
+                    "shielded spend coin nonce differs from its Map key"
+                );
+
+                let coin_nullifier = coin.nullifier(&SenderEvidence::Contract(context.address));
+                let source_nullifier =
+                    claim_hash_output(evaluate(nullifier, &env)?, "shielded spend nullifier")?;
+                ensure!(
+                    coin_nullifier.0 == source_nullifier,
+                    "shielded spend nullifier mismatch"
+                );
+
+                let recipient =
+                    claim_hash_output(evaluate(recipient, &env)?, "shielded spend recipient")?;
+                let output_coin =
+                    coin.evolve_from(b"midnight:kernel:nonce_evolve", coin.value, coin.type_);
+                let coin_commitment =
+                    output_coin.commitment(&Recipient::User(PublicKey(recipient)));
+                let source_commitment = claim_hash_output(
+                    evaluate(output_commitment, &env)?,
+                    "shielded spend output commitment",
+                )?;
+                ensure!(
+                    coin_commitment.0 == source_commitment,
+                    "shielded spend output commitment mismatch"
+                );
+
+                let nullifier_ops = onchain_runtime::program_fragments::kernel_claim_zswap_nullifier!(
+                    (),
+                    (),
+                    coin_nullifier
+                );
+                let spend_ops = onchain_runtime::program_fragments::kernel_claim_zswap_coin_spend!(
+                    (),
+                    (),
+                    coin_commitment
+                );
+                program.extend(nullifier_ops);
+                program.extend(spend_ops[..5].iter().cloned());
+                spend_ops[5].clone()
+            }
             Instruction::ReadTokenBalance {
                 destination,
                 color,
@@ -7180,5 +7513,276 @@ mod shared_binding_tests {
             "outputs": []
         }));
         assert!(environment(&collision, &BTreeMap::from([("x".into(), json!("2"))])).is_err());
+    }
+}
+
+#[cfg(test)]
+mod shielded_spend_tests {
+    use super::*;
+    use coin_structure::coin::{Commitment, Nullifier};
+    use serde_json::json;
+
+    const NONCE: [u8; 32] = [2; 32];
+    const COLOR: [u8; 32] = [1; 32];
+    const RECIPIENT: [u8; 32] = [3; 32];
+    const ADDRESS: [u8; 32] = [0; 32];
+
+    fn hash_from_hex(value: &str) -> [u8; 32] {
+        assert_eq!(value.len(), 64);
+        let mut bytes = [0; 32];
+        for (index, byte) in bytes.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).unwrap();
+        }
+        bytes
+    }
+
+    fn bytes_json(value: &[u8; 32]) -> Json {
+        json!({"kind":"bytes", "values":value.iter().copied().map(u64::from).collect::<Vec<_>>()})
+    }
+
+    fn reference(name: &str) -> Json {
+        json!({"tag":"reference", "name":name})
+    }
+
+    fn coin_schema() -> Json {
+        json!({
+            "id":"ShieldedSpend.Coin",
+            "fields":[
+                {"name":"nonce", "type":"Bytes<32>"},
+                {"name":"color", "type":"Bytes<32>"},
+                {"name":"value", "type":"UIntRange<340282366920938463463374607431768211456>"},
+                {"name":"mtIndex", "type":"UIntRange<18446744073709551616>"}
+            ]
+        })
+    }
+
+    fn spend_plan() -> Plan {
+        let schema = coin_schema();
+        let address_projections = byte_projection_bindings("selfAddress", 32)
+            .unwrap()
+            .into_iter()
+            .map(|(name, ty)| json!({"name":name, "type":ty}))
+            .collect::<Vec<_>>();
+        let mut plan: Plan = serde_json::from_value(json!({
+            "schemaVersion":1,
+            "entrypoint":"spend",
+            "circuit":{
+                "inputs":[
+                    {"name":"nonce", "type":"Bytes<32>", "visibility":"private"},
+                    {"name":"recipient", "type":"Bytes<32>", "visibility":"private"},
+                    {"name":"sourceNullifier", "type":"Bytes<32>", "visibility":"private"},
+                    {"name":"sourceCommitment", "type":"Bytes<32>", "visibility":"private"}
+                ],
+                "outputs":[]
+            },
+            "state":[{
+                "name":"pot",
+                "kind":{"tree":{"map":["Bytes<32>", {"composite":schema}]}}
+            }],
+            "operations":[
+                {"op":"dup"},
+                {"op":"indexPath", "slot":0, "pushPath":false,
+                    "keys":[{"alignment":"bytes32", "expression":reference("nonce")}]},
+                {"op":"popeqFields", "schema":schema, "expressions":[
+                    reference("coin_nonce"), reference("coin_color"),
+                    reference("coin_value"), reference("coin_mtIndex")
+                ]},
+                {"op":"readContractAddress", "destination":"selfAddress"},
+                {"op":"spendShieldedFromMap",
+                    "nonce":reference("coin_nonce"),
+                    "color":reference("coin_color"),
+                    "amount":reference("coin_value"),
+                    "recipient":reference("recipient"),
+                    "nullifier":reference("sourceNullifier"),
+                    "outputCommitment":reference("sourceCommitment")
+                },
+                {"op":"mapRemove", "slot":0,
+                    "keys":[{"alignment":"bytes32", "expression":reference("nonce")}]}
+            ],
+            "reads":[
+                {"name":"coin", "type":"Composite", "schema":schema,
+                    "components":[
+                        {"name":"coin_nonce", "type":"Bytes<32>"},
+                        {"name":"coin_color", "type":"Bytes<32>"},
+                        {"name":"coin_value", "type":"UIntRange<340282366920938463463374607431768211456>"},
+                        {"name":"coin_mtIndex", "type":"UIntRange<18446744073709551616>"}
+                    ]},
+                {"name":"selfAddress", "type":"Bytes<32>", "projections":address_projections}
+            ]
+        }))
+        .unwrap();
+        plan.target = Some(profile::NAME.into());
+        plan.target_profile = Some(profile::target_json());
+        plan
+    }
+
+    fn spend_inputs(nullifier: [u8; 32], commitment: [u8; 32]) -> BTreeMap<String, Json> {
+        BTreeMap::from([
+            ("nonce".into(), bytes_json(&NONCE)),
+            ("recipient".into(), bytes_json(&RECIPIENT)),
+            ("sourceNullifier".into(), bytes_json(&nullifier)),
+            ("sourceCommitment".into(), bytes_json(&commitment)),
+        ])
+    }
+
+    fn context(key_nonce: [u8; 32], record_nonce: [u8; 32]) -> QueryContext<Db> {
+        let coin_schema = checked_record_schema(&coin_schema()).unwrap();
+        let record = aligned_record_value(
+            &coin_schema,
+            &[
+                Value::Bytes(record_nonce.to_vec()),
+                Value::Bytes(COLOR.to_vec()),
+                Value::UInt {
+                    number: 5u8.into(),
+                    maximum: u128::MAX.into(),
+                },
+                Value::UInt {
+                    number: 7u8.into(),
+                    maximum: u64::MAX.into(),
+                },
+            ],
+        )
+        .unwrap();
+        let mut coins: HashMap<AlignedValue, StateValue<Db>, Db> = HashMap::default();
+        coins = coins.insert(
+            AlignedValue::from(Nonce(HashOutput(key_nonce))),
+            StateValue::Cell(Sp::new(record)),
+        );
+        let state = ChargedState::new(StateValue::Array(
+            vec![StateValue::Map(coins)].into(),
+        ));
+        QueryContext::new(state, ContractAddress(HashOutput(ADDRESS)))
+    }
+
+    fn expected_coin_effects() -> (Nullifier, Commitment) {
+        let coin = ShieldedCoinInfo {
+            nonce: Nonce(HashOutput(NONCE)),
+            type_: ShieldedTokenType(HashOutput(COLOR)),
+            value: 5,
+        };
+        let nullifier = coin.nullifier(&SenderEvidence::Contract(ContractAddress(HashOutput(ADDRESS))));
+        let evolved = coin.evolve_from(
+            b"midnight:kernel:nonce_evolve",
+            coin.value,
+            coin.type_,
+        );
+        let output = evolved.commitment(&Recipient::User(PublicKey(HashOutput(RECIPIENT))));
+        assert_eq!(
+            nullifier.0,
+            HashOutput(hash_from_hex(
+                "d119520f9cd70fb3b835e7421773629b1991e38d642ff9b6b69eb9ed1bf86c24"
+            ))
+        );
+        assert_eq!(
+            output.0,
+            HashOutput(hash_from_hex(
+                "800f1c60e2b9e9da8e987cc2d31713904daa9920005e1490aeab9366f24eb149"
+            ))
+        );
+        (nullifier, output)
+    }
+
+    #[test]
+    fn shielded_spend_claims_the_compact_coin_and_removes_its_exact_row() {
+        let (nullifier, commitment) = expected_coin_effects();
+        let plan = spend_plan();
+        let inputs = spend_inputs(nullifier.0.0, commitment.0.0);
+        let execution = prepare_with_context(
+            &plan,
+            &inputs,
+            context(NONCE, NONCE),
+            &ledger::structure::INITIAL_PARAMETERS,
+        )
+        .unwrap();
+
+        assert!(execution.after.effects.claimed_nullifiers.member(&nullifier));
+        assert!(execution
+            .after
+            .effects
+            .claimed_shielded_spends
+            .member(&commitment));
+        let key = aligned_bytes(&Value::Bytes(NONCE.to_vec())).unwrap();
+        assert!(read_state_value(&execution.after, 0, &[key]).is_err());
+
+        // A repeated spend sees no row after the first call's atomic removal.
+        assert!(prepare_with_context(
+            &plan,
+            &inputs,
+            execution.after.clone(),
+            &ledger::structure::INITIAL_PARAMETERS,
+        )
+        .is_err());
+
+        if std::env::var_os("NOCTIUM_CHECK_SHIELDED_SPEND_ARTIFACT").is_some() {
+            let artifact_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../build/experiments/210/lean-spend");
+            let compiled_plan: Plan = serde_json::from_slice(
+                &std::fs::read(artifact_dir.join("ShieldedSpend.spend.impact.json")).unwrap(),
+            )
+            .unwrap();
+            let circuit_bytes =
+                std::fs::read(artifact_dir.join("ShieldedSpend.spend.zkir")).unwrap();
+            let circuit = IrSource::load(circuit_bytes.as_slice()).unwrap();
+            let compiled_inputs = BTreeMap::from([
+                ("nonce".into(), bytes_json(&NONCE)),
+                ("recipient".into(), bytes_json(&RECIPIENT)),
+            ]);
+            let compiled_execution = prepare_with_context(
+                &compiled_plan,
+                &compiled_inputs,
+                context(NONCE, NONCE),
+                &ledger::structure::INITIAL_PARAMETERS,
+            )
+            .unwrap();
+            let checked_schedule = compiled_execution
+                .preimage
+                .check(&circuit)
+                .unwrap_or_else(|error| panic!("compiled preimage check failed: {error:#}"));
+            assert_eq!(checked_schedule, compiled_execution.activity_schedule);
+            super::check(&compiled_execution, &circuit).unwrap();
+        }
+    }
+
+    #[test]
+    fn shielded_spend_rejects_missing_mismatched_and_unclaimed_coins() {
+        let (nullifier, commitment) = expected_coin_effects();
+        let plan = spend_plan();
+        let inputs = spend_inputs(nullifier.0.0, commitment.0.0);
+        let parameters = &ledger::structure::INITIAL_PARAMETERS;
+
+        assert!(prepare_with_context(
+            &plan,
+            &inputs,
+            context([8; 32], [8; 32]),
+            parameters,
+        )
+        .is_err());
+        assert!(prepare_with_context(
+            &plan,
+            &inputs,
+            context(NONCE, [9; 32]),
+            parameters,
+        )
+        .is_err());
+
+        let mut wrong_nullifier = inputs.clone();
+        wrong_nullifier.insert("sourceNullifier".into(), bytes_json(&[0; 32]));
+        assert!(prepare_with_context(
+            &plan,
+            &wrong_nullifier,
+            context(NONCE, NONCE),
+            parameters,
+        )
+        .is_err());
+
+        let mut wrong_commitment = inputs;
+        wrong_commitment.insert("sourceCommitment".into(), bytes_json(&[0; 32]));
+        assert!(prepare_with_context(
+            &plan,
+            &wrong_commitment,
+            context(NONCE, NONCE),
+            parameters,
+        )
+        .is_err());
     }
 }

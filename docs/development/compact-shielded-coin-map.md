@@ -45,4 +45,24 @@ NOCTIUM_RECEIVE_MANIFEST_SHA256=YOUR_MANIFEST_SHA256 \
   funded_shielded_receive_localnet -- --ignored --nocapture
 ```
 
+## Whole-coin spend from a Map
+
+`tests/ShieldedSpend.lean` defines two entries. `tip` mints and receives five units into the Map. `spend` consumes the recorded coin, derives its nullifier and a commitment to one user-owned output, then removes the old key. The native host builds the spend proof from the coin's assigned index and the finalized Zswap tree. The Compact runner also checks the exact effects, output nonce, Map removal and replay rejection for a deterministic full-value send.
+
+Ledger 9.1.0.1 finalized this native spend at block 372. The recipient decrypted the five-unit output at Ledger index 29, and the finalized Map no longer contained the input coin. The harness rejected a mismatched nonce and a replay before submission. The spend circuit used k=14 and 12,770 rows. [Receipt](shielded-spend-localnet-receipt.json)
+
+Compile the fixture with the 3.2.1 target and create separate authenticated `ShieldedSpend.tip` and `ShieldedSpend.spend` bundles. Use the same source, profile and ledger parameters for both. [Bundle setup](portable-artifacts.md)
+
+```sh
+NOCTIUM_TRANSFER_NODE=http://127.0.0.1:19944 \
+NOCTIUM_TRANSFER_PARAMETER_CACHE=/path/to/verified/parameter-cache \
+NOCTIUM_TRANSFER_TIP_BUNDLE=/path/to/tip-bundle \
+NOCTIUM_TRANSFER_TIP_MANIFEST_SHA256=YOUR_TIP_MANIFEST_SHA256 \
+NOCTIUM_TRANSFER_SPEND_BUNDLE=/path/to/spend-bundle \
+NOCTIUM_TRANSFER_SPEND_MANIFEST_SHA256=YOUR_SPEND_MANIFEST_SHA256 \
+  cargo test --locked --manifest-path runtime/Cargo.toml --lib \
+  --no-default-features --features zkir-321,localnet \
+  funded_shielded_map_spend_localnet -- --ignored --nocapture
+```
+
 Pins and source behavior: [Compact 0.36.1 release](https://github.com/LFDT-Minokawa/compact/releases/tag/compactc-v0.36.1), [Compact private tip jar](https://docs.midnight.network/tutorials/private-tip-jar/smart-contract), [Compact ledger ADTs](https://docs.midnight.network/compact/reference/ledger-adt), [Ledger 9.1.0.1](https://github.com/midnightntwrk/midnight-ledger/releases/tag/ledger-9.1.0.1).

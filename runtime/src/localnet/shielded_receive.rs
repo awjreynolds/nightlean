@@ -3,7 +3,8 @@ use crate::{
     Db,
     client::{BoundTransaction, HostFailure, SigningAdapter, Snapshot},
     proof::{
-        ContractOperationTarget, CurrentStateContext, LocalProver, PreparedProof, TrustedParameters,
+        ContractOperationTarget, ContractStateBinding, CurrentStateContext, LocalProver,
+        PreparedProof, TrustedParameters,
     },
 };
 use base_crypto::{hash::HashOutput, rng::SplittableRng};
@@ -57,6 +58,24 @@ impl DevelopmentFunding<'_> {
     /// Bind one mint-funded contract-owned output from the development chain's
     /// current Zswap state. The caller approves the complete transaction before sealing.
     pub async fn bind_minted_shielded_receive(
+        self,
+        target: &ContractOperationTarget,
+        current: &CurrentStateContext,
+        inputs: BTreeMap<String, Value>,
+        coin: &Info,
+        parameters: &TrustedParameters,
+        cache: &ProofCache,
+        signer: &impl SigningAdapter,
+        rng: StdRng,
+    ) -> Result<BoundTransaction> {
+        self.bind_minted_shielded_receive_with_binding(
+            target, current, inputs, coin, parameters, cache, signer, rng,
+        )
+        .await
+        .map(|(bound, _)| bound)
+    }
+
+    pub(crate) async fn bind_minted_shielded_receive_with_binding(
         mut self,
         target: &ContractOperationTarget,
         current: &CurrentStateContext,
@@ -66,7 +85,7 @@ impl DevelopmentFunding<'_> {
         cache: &ProofCache,
         signer: &impl SigningAdapter,
         mut rng: StdRng,
-    ) -> Result<BoundTransaction> {
+    ) -> Result<(BoundTransaction, ContractStateBinding)> {
         let policy = self.node.policy.clone();
         check(policy.genesis == DEVELOPMENT_GENESIS, Error::Policy)?;
         check(
@@ -142,7 +161,7 @@ impl DevelopmentFunding<'_> {
             bound.expected_state() == binding.expected_state(),
             Error::State,
         )?;
-        Ok(bound)
+        Ok((bound, binding.clone()))
     }
 }
 

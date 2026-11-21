@@ -36,8 +36,8 @@ try {
   const contract = new Contract({});
   const walletKey = '00'.repeat(32);
   const { currentContractState } = await contract.initialState(createConstructorContext(null, walletKey));
-  const contextFor = (contractState) => createCircuitContext({
-    circuitId: 'tip',
+  const contextFor = (contractState, circuitId = 'tip') => createCircuitContext({
+    circuitId,
     contractAddress: dummyContractAddress(),
     coinPublicKeyOrZswapState: walletKey,
     contractState,
@@ -84,6 +84,35 @@ try {
   await assert.rejects(contract.circuits.tip(replayContext, coin), /coin nonce already received/);
   assert.deepEqual(replayContext.callContext.currentQueryContext.effects.claimedShieldedReceives, []);
   console.log('Shielded coin map: missing-output rejection, receive effect, self-directed output, mt_index qualification, and duplicate rejection matched');
+
+  const recipient = { bytes: new Uint8Array(32).fill(3) };
+  const { context: spent } = await contract.circuits.withdraw(
+    contextFor(query.state, 'withdraw'), coin.nonce, recipient,
+  );
+  const afterSpend = spent.callContext.currentQueryContext;
+  const transfer = spent.callContext.currentZswapLocalState;
+  assert.deepEqual([...ledger(afterSpend.state).pot], []);
+  assert.equal(transfer.inputs.length, 1);
+  assert.equal(transfer.outputs.length, 1);
+  assert.deepEqual(afterSpend.effects.claimedNullifiers, [
+    'd119520f9cd70fb3b835e7421773629b1991e38d642ff9b6b69eb9ed1bf86c24',
+  ]);
+  assert.deepEqual(afterSpend.effects.claimedShieldedSpends, [
+    '800f1c60e2b9e9da8e987cc2d31713904daa9920005e1490aeab9366f24eb149',
+  ]);
+  assert.deepEqual(afterSpend.effects.claimedShieldedReceives, []);
+  const [output] = transfer.outputs;
+  assert.deepEqual(output.coinInfo.color, coin.color);
+  assert.equal(output.coinInfo.value, coin.value);
+  assert.equal(Buffer.from(output.coinInfo.nonce).toString('hex'),
+    '92411b27a7fe195f0f94f46bab957487031cb2702b4e6015adebe924fe246500');
+  assert.equal(output.recipient.is_left, true);
+  assert.deepEqual(output.recipient.left, recipient);
+  await assert.rejects(
+    contract.circuits.withdraw(contextFor(afterSpend.state, 'withdraw'), coin.nonce, recipient),
+    /coin nonce missing/,
+  );
+  console.log('Shielded whole-coin spend: exact claims, recipient output, Map removal, and replay rejection matched');
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }
