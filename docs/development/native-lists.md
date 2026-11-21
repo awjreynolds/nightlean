@@ -12,13 +12,11 @@ The source operations are:
 - `reset path` initializes or clears a List. Parent maps need explicit creation.
 - `length path as count` binds a UInt64 value.
 - `head path as memo` binds the checked record fields, such as `memo_x`.
+- `headOrDefault path as (present, memo)` binds a Bool and the same record fields. Empty Lists return `false` with zero fields. A present all-zero record returns `true`.
 - `pushFront path := fields(...)` prepends one record.
 - `popFront path` removes the first record.
 
-Head and pop reject empty Lists. Read length and guard the operation when an
-empty List is valid application input. Pop includes a native length decrement
-check before selecting the tail, so the ledger also rejects an empty pop.
-The optional presence-plus-default head API remains separate work.
+Strict `head` and `popFront` reject empty Lists. Pop includes a native length decrement check before selecting the tail. `headOrDefault` reads the native length and guards the head read with the nonempty result. Noctium binds both reads to the ordered ledger state. An inactive statement returns `false` and zero fields without looking up its path. A missing active path still rejects.
 
 Each List effect emits one guarded native sequence. Each VM opcode retains its
 own activity entry, with the same source guard across the sequence. An inactive operation skips
@@ -45,6 +43,4 @@ and [StateValue field encoding](https://github.com/midnightntwrk/midnight-ledger
 The compiler uses uncached native operations and an explicit nonempty guard for
 pop. It does not depend on the Compact compiler or runtime.
 
-This slice covers Native-field record elements. Mixed element types, the full
-optional head API, token policy integration and broader preservation proofs
-remain open. No new keys, proofs or deployments were generated.
+[OptionalListHead.lean](../../tests/OptionalListHead.lean) checks the optional form on standalone and nested paths. This slice covers Native-field record elements. Mixed element types, token policy integration, and broader preservation proofs remain separate work.

@@ -5392,6 +5392,12 @@
       "implementationCommit": "b9657a415b68928066f6f72bfee72d59eb60e800",
       "scope": "Standalone and two-key nested memo Lists use native three-slot linked Arrays with checked Native-field record heads and Bytes8 u64 lengths. Each guarded List macro emits direct native opcodes. Build and one selected-3.2.1 native sequence pass prepend order, length/head reads after writes, pop, reset, independent owner/spender paths and inactive missing-path reads/writes. Empty head/pop and malformed record payloads reject. The emitted pop program rejects empty state without host preparation through a native Subi nonempty check. Head is partial, not the full optional presence-plus-default API. No new ZKIR opcode names, keys, proofs, deployments or broad regressions. Mixed element types and token policy integration remain open."
     },
+    "optionalListHead": {
+      "issue": 170,
+      "source": "../../tests/OptionalListHead.lean",
+      "native": "../../runtime/tests/optional_list_head.rs",
+      "scope": "headOrDefault binds presence and Native-field record leaves. Frontend lowering reuses an ordered native length read followed by a head read guarded by nonemptiness. Empty and inactive reads bind false and zero fields. This covers the pinned ledger's optional head result semantics. Mixed record element types and broader proof and deployment evidence remain separate."
+    },
     "namespaceMigration": {
       "status": "canonical-noctium-only",
       "moduleRoot": "Noctium",
