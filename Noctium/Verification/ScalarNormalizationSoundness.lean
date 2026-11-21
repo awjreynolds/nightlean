@@ -2,6 +2,10 @@ import Noctium.Verification.ScalarNormalization
 namespace Noctium.Verification.ScalarNormalization
 open Backend.Native NativeRelation
 
+private theorem scalarType_notOpaque {ty : Ty} (supported : ScalarType ty) :
+    ty.isOpaqueBytes = false := by
+  cases supported <;> rfl
+
 /-- Every name admitted by source type checking has an actual value and alias.
 No source execution or compiler-preservation conclusion is assumed. -/
 structure TypedEnvironment (hash : Hash) (inputs : Assignment)
@@ -15,7 +19,7 @@ theorem TypedEnvironment.cons (hash : Hash) (inputs : Assignment)
     (environment : TypedEnvironment hash inputs aliases values types)
     (name : String) (ty : Ty) (value : ty.Denote) (term : Term)
     (canonical : Canonical ty value)
-    (meaning : interpret hash inputs term = scalar (number ty value)) :
+    (meaning : interpret hash inputs term = sourceScalar? ty value) :
     TypedEnvironment hash inputs ((name, term) :: aliases) ((name, Value.pack ty value) :: values)
       ((name, ty) :: types) := by
   constructor
@@ -25,7 +29,7 @@ theorem TypedEnvironment.cons (hash : Hash) (inputs : Assignment)
     · subst found
       simp only [List.lookup_cons, beq_self_eq_true, Option.some.injEq] at lookup
       subst foundTy
-      exact ⟨Value.pack ty value, value, by simp [List.lookup_cons], number_pack_as _ _⟩
+      exact ⟨Value.pack ty value, value, by simp, number_pack_as ty value canonical⟩
     · have unequal : (found == name) = false := by simp [same]
       simp only [List.lookup_cons, unequal] at lookup
       obtain ⟨raw, result, lookup, typed⟩ := environment.complete found foundTy lookup
@@ -35,11 +39,11 @@ private theorem normalized_success (ctx : EvalContext) (hash : Hash)
     (implementation : HashAgreement ctx hash) (inputs : Assignment)
     (aliases : AliasEnvironment) (values : EvalEnv)
     (agreement : AliasAgreement hash inputs aliases values)
-    (expression : Expr ty) (normalized : Normalized)
+    (expression : Expr ty) (admission : ScalarExpression expression) (normalized : Normalized)
     (normal : normalize aliases expression = .ok normalized)
     (value : ty.Denote) (success : expression.eval ctx values = .ok value) :
     ∃ result, expression.eval ctx values = .ok result ∧ Represents hash inputs ty normalized result := by
-  obtain ⟨actual, found, represented⟩ := normalize_success ctx hash implementation inputs aliases values agreement expression value success
+  obtain ⟨actual, found, represented⟩ := normalize_success ctx hash implementation inputs aliases values agreement expression admission value success
   rw [normal] at found
   cases found
   exact ⟨value, success, represented⟩
@@ -83,8 +87,9 @@ private theorem uint_valid_bound (maximum : Nat)
   · exact bound
   · simp [Ty.validate, Ty.scalarKind, ScalarPolicy.validate, bound, bind, Except.bind] at valid
 
-private theorem type_beq_sound (left right : Ty) (equal : (left == right) = true) : left = right := by
-  cases left <;> cases right <;> simp_all [BEq.beq, instBEqTy.beq]
+private theorem scalar_type_beq_sound {ty : Ty} (scalarType : ScalarType ty)
+    (left : Ty) (equal : (left == ty) = true) : left = ty := by
+  cases scalarType <;> cases left <;> simp_all [BEq.beq, instBEqTy.beq]
 
 /-- All accepted normalized range and assertion requirements force successful
 source evaluation. Native instruction satisfaction is connected separately. -/
@@ -92,13 +97,14 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     (implementation : HashAgreement ctx hash) (inputs : Assignment)
     (types : TypeEnv) (aliases : AliasEnvironment) (values : EvalEnv)
     (environment : TypedEnvironment hash inputs aliases values types)
-    (expression : Expr ty) (normalized : Normalized)
+    (expression : Expr ty) (admission : ScalarExpression expression) (normalized : Normalized)
     (valid : expression.validate {poseidon2 := true} types = .ok ())
     (normal : normalize aliases expression = .ok normalized)
     (requirements : Requirements hash inputs normalized) :
     ∃ value, expression.eval ctx values = .ok value ∧ Represents hash inputs ty normalized value := by
-  induction expression generalizing types aliases values normalized with
+  induction admission generalizing types aliases values normalized with
   | native n =>
+    simp only [Expr.validate, Capabilities.nativeModulus, Field.modulus] at valid
     have bound : n < Field.modulus := by
       simpa only [Expr.validate, Capabilities.nativeModulus, Field.modulus] using
         (show n < Field.modulus from by
@@ -106,11 +112,15 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
           split at valid
           next h => exact h
           next h => cases valid)
-    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _ _ normal n
+    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.native n) _ normal n
     simp [Expr.eval, implementation.modulus, bound] <;> rfl
   | bool b =>
-    exact normalized_success ctx hash implementation inputs aliases values environment.aliases _ _ normal b rfl
+    simp only [Expr.validate] at valid
+    exact normalized_success ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.bool b) _ normal b (by simp [Expr.eval])
   | uint maximum n =>
+    simp only [Expr.validate] at valid
     change Except.bind ((Ty.uint maximum).validate {poseidon2 := true})
       (fun _ => if n ≤ maximum then Except.ok () else Except.error "unsigned constant exceeds its type") = Except.ok () at valid
     rw [except_unit_bind] at valid
@@ -119,14 +129,18 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
       next h => exact h
       next h => cases valid.2
     have typeBound : maximum ≤ ScalarPolicy.maxUint := uint_valid_bound maximum valid.1
-    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _ _ normal n
-    change (if maximum ≤ ScalarPolicy.maxUint && n ≤ maximum && n < ctx.modulus then Except.ok n
+    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.uint maximum n) _ normal n
+    simp only [Expr.eval]
+    change (if (decide (maximum ≤ ScalarPolicy.maxUint) && decide (n ≤ maximum) &&
+        decide (n < ctx.modulus)) = true then Except.ok n
       else Except.error "noncanonical unsigned constant") = Except.ok n
-    have canonical : n < ctx.modulus := by
+    have fieldBound : n < ctx.modulus := by
       rw [implementation.modulus]
       exact Nat.lt_of_le_of_lt (Nat.le_trans valueBound typeBound) ScalarPolicy.maxUint_lt_native
-    simp [typeBound, valueBound, canonical]
-  | @ref ty name =>
+    simp [typeBound, valueBound, fieldBound]
+  | @ref ty name scalarType =>
+    simp only [Expr.validate] at valid
     have lookup : types.lookup name = some ty := by
       simp only [Expr.validate, bind, except_bind_ok] at valid
       rcases valid with ⟨_, validType, lookup⟩
@@ -136,14 +150,15 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
         simp only [found] at lookup
         split at lookup
         next h =>
-          have equal := type_beq_sound foundTy ty h
+          have equal := scalar_type_beq_sound scalarType foundTy h
           simpa [equal] using found
         next h => cases lookup
     obtain ⟨raw, value, rawLookup, typed⟩ := environment.complete name ty lookup
     obtain ⟨canonical, term, alias, meaning⟩ := environment.aliases name ty raw value rawLookup typed
-    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _ _ normal value
+    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.ref name scalarType) _ normal value
     simp only [Expr.eval, rawLookup, typed]
-    cases ty with
+    cases scalarType with
     | native =>
       change (if !(value < ctx.modulus) then _ else _) = _
       have bound : value < ctx.modulus := by simpa [implementation.modulus, number] using canonical.1
@@ -153,7 +168,8 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
       change (if !(maximum ≤ ScalarPolicy.maxUint && value ≤ maximum && value < ctx.modulus) then _ else _) = _
       have bound : value < ctx.modulus := by simpa [implementation.modulus, number] using canonical.1
       simp [canonical.2.1, canonical.2.2, bound] <;> rfl
-  | add a b ia ib =>
+  | add a b leftSupported rightSupported ia ib =>
+    simp only [Expr.validate] at valid
     change Except.bind (a.validate {poseidon2 := true} types)
       (fun _ => b.validate {poseidon2 := true} types) = .ok () at valid
     rw [except_unit_bind] at valid
@@ -164,9 +180,12 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     obtain ⟨ar, br⟩ := requirements_children hash inputs an bn _ [] (by simpa using requirements)
     obtain ⟨av, ea, ac, aq, am⟩ := ia types aliases values environment an valid.1 na ar
     obtain ⟨bv, eb, bc, bq, bm⟩ := ib types aliases values environment bn valid.2 nb br
-    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _ _ (by simp only [normalize, na, nb]; rfl) ((av + bv) % ctx.modulus)
+    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.add a b leftSupported rightSupported) _
+      (by simp only [normalize, na, nb]; rfl) ((av + bv) % ctx.modulus)
     exact (by simp [Expr.eval, ea, eb, implementation.modulus, Field.modulus, bind, Except.bind, Except.map, Except.pure] <;> rfl)
-  | mul a b ia ib =>
+  | mul a b leftSupported rightSupported ia ib =>
+    simp only [Expr.validate] at valid
     change Except.bind (a.validate {poseidon2 := true} types)
       (fun _ => b.validate {poseidon2 := true} types) = .ok () at valid
     rw [except_unit_bind] at valid
@@ -177,9 +196,12 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     obtain ⟨ar, br⟩ := requirements_children hash inputs an bn _ [] (by simpa using requirements)
     obtain ⟨av, ea, ac, aq, am⟩ := ia types aliases values environment an valid.1 na ar
     obtain ⟨bv, eb, bc, bq, bm⟩ := ib types aliases values environment bn valid.2 nb br
-    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _ _ (by simp only [normalize, na, nb]; rfl) ((av * bv) % ctx.modulus)
+    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.mul a b leftSupported rightSupported) _
+      (by simp only [normalize, na, nb]; rfl) ((av * bv) % ctx.modulus)
     exact (by simp [Expr.eval, ea, eb, implementation.modulus, Field.modulus, bind, Except.bind, Except.map, Except.pure] <;> rfl)
-  | sub a b ia ib =>
+  | sub a b leftSupported rightSupported ia ib =>
+    simp only [Expr.validate] at valid
     change Except.bind (a.validate {poseidon2 := true} types)
       (fun _ => b.validate {poseidon2 := true} types) = .ok () at valid
     rw [except_unit_bind] at valid
@@ -190,9 +212,12 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     obtain ⟨ar, br⟩ := requirements_children hash inputs an bn _ [] (by simpa using requirements)
     obtain ⟨av, ea, ac, aq, am⟩ := ia types aliases values environment an valid.1 na ar
     obtain ⟨bv, eb, bc, bq, bm⟩ := ib types aliases values environment bn valid.2 nb br
-    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _ _ (by simp only [normalize, na, nb]; rfl) ((ctx.modulus + av - bv) % ctx.modulus)
+    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.sub a b leftSupported rightSupported) _
+      (by simp only [normalize, na, nb]; rfl) ((ctx.modulus + av - bv) % ctx.modulus)
     exact (by simp [Expr.eval, ea, eb, implementation.modulus, Field.modulus, bind, Except.bind, Except.map, Except.pure] <;> rfl)
-  | @uadd m n a b ia ib =>
+  | @uadd m n a b leftSupported rightSupported ia ib =>
+    simp only [Expr.validate] at valid
     change Except.bind ((Ty.uint (m + n)).validate {poseidon2 := true})
       (fun _ => Except.bind (a.validate {poseidon2 := true} types)
         (fun _ => b.validate {poseidon2 := true} types)) = .ok () at valid
@@ -209,13 +234,15 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     have canonical : av + bv < ctx.modulus := by
       rw [implementation.modulus]
       exact Nat.lt_of_le_of_lt (Nat.le_trans range typeBound) ScalarPolicy.maxUint_lt_native
-    apply normalized_success (ty := .uint (m + n)) ctx hash implementation inputs aliases values environment.aliases _ _
+    apply normalized_success (ty := .uint (m + n)) ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.uadd a b leftSupported rightSupported) _
       (by simp only [normalize, na, nb]; rfl) (av + bv)
     simp only [Expr.eval, ea, eb, bind, Except.bind]
     change (if m + n ≤ ScalarPolicy.maxUint && av + bv ≤ m + n && av + bv < ctx.modulus
       then Except.ok (av + bv) else Except.error "scalar conversion exceeds unsigned bound") = Except.ok (av + bv)
     simp [typeBound, range, canonical]
-  | @usub m n a b ia ib =>
+  | @usub m n a b leftSupported rightSupported ia ib =>
+    simp only [Expr.validate] at valid
     change Except.bind ((Ty.uint m).validate {poseidon2 := true})
       (fun _ => Except.bind (a.validate {poseidon2 := true} types)
         (fun _ => b.validate {poseidon2 := true} types)) = .ok () at valid
@@ -230,12 +257,16 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     obtain ⟨bv, eb, bc, bq, bm⟩ := ib types aliases values environment bn valid.2.2 nb br
     have resultBound := requirements.1 (.binary "add" an.term (.unary "neg" bn.term), m)
       (List.mem_append_right _ (List.mem_singleton.mpr rfl))
-    simp only [interpret_add, interpret_neg, am, bm, number] at resultBound
-    change (scalar (av % Field.modulus + (scalar (Field.modulus - bv % Field.modulus)).val)).val ≤ m at resultBound
+    simp [sourceScalar?, sourceNumber?, number] at am bm
+    simp only [Prod.fst, Prod.snd] at resultBound
+    rcases resultBound with ⟨found, meaning, bound⟩
+    simp [interpret, ScalarTermMeaning.interpret?, am, bm] at meaning
+    cases meaning
+    change (scalar (av % Field.modulus + (scalar (Field.modulus - bv % Field.modulus)).val)).val ≤ m at bound
     rw [Nat.mod_eq_of_lt (show av < Field.modulus from ac.1),
-      Nat.mod_eq_of_lt (show bv < Field.modulus from bc.1), subtraction_mod av bv bc.1] at resultBound
-    change ((Field.modulus + av - bv) % Field.modulus) % Field.modulus ≤ m at resultBound
-    rw [Nat.mod_mod] at resultBound
+      Nat.mod_eq_of_lt (show bv < Field.modulus from bc.1), subtraction_mod av bv bc.1] at bound
+    change ((Field.modulus + av - bv) % Field.modulus) % Field.modulus ≤ m at bound
+    rw [Nat.mod_mod] at bound
     have noUnderflow : ¬ av < bv := by
       intro underflow
       have rejected := unsigned_underflow_modulo_rejected av bv underflow (Nat.le_trans bc.2.2 bc.2.1)
@@ -244,13 +275,15 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     have canonical : av - bv < ctx.modulus := by
       rw [implementation.modulus]
       exact Nat.lt_of_le_of_lt (Nat.le_trans range typeBound) ScalarPolicy.maxUint_lt_native
-    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _ _
+    apply normalized_success ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.usub a b leftSupported rightSupported) _
       (by simp only [normalize, na, nb]; rfl) (av - bv)
     simp only [Expr.eval, ea, eb, bind, Except.bind, noUnderflow, ↓reduceIte]
     change (if m ≤ ScalarPolicy.maxUint && av - bv ≤ m && av - bv < ctx.modulus
       then Except.ok (av - bv) else Except.error "scalar conversion exceeds unsigned bound") = Except.ok (av - bv)
     simp [typeBound, range, canonical]
-  | @umul m n a b ia ib =>
+  | @umul m n a b leftSupported rightSupported ia ib =>
+    simp only [Expr.validate] at valid
     change Except.bind ((Ty.uint (m * n)).validate {poseidon2 := true})
       (fun _ => Except.bind (a.validate {poseidon2 := true} types)
         (fun _ => b.validate {poseidon2 := true} types)) = .ok () at valid
@@ -267,55 +300,78 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     have canonical : av * bv < ctx.modulus := by
       rw [implementation.modulus]
       exact Nat.lt_of_le_of_lt (Nat.le_trans range typeBound) ScalarPolicy.maxUint_lt_native
-    apply normalized_success (ty := .uint (m * n)) ctx hash implementation inputs aliases values environment.aliases _ _
+    apply normalized_success (ty := .uint (m * n)) ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.umul a b leftSupported rightSupported) _
       (by simp only [normalize, na, nb]; rfl) (av * bv)
     simp only [Expr.eval, ea, eb, bind, Except.bind]
     change (if m * n ≤ ScalarPolicy.maxUint && av * bv ≤ m * n && av * bv < ctx.modulus
       then Except.ok (av * bv) else Except.error "scalar conversion exceeds unsigned bound") = Except.ok (av * bv)
     simp [typeBound, range, canonical]
-  | @cast source target expression ih =>
+  | @cast source target expression sourceType targetType valueSupported ih =>
+    simp only [Expr.validate] at valid
+    have scalarGuards : (target.isBytes || source.isBytes) = false ∧
+        (target.isJubjub || source.isJubjub || target.isForeign || source.isForeign) = false := by
+      cases sourceType <;> cases targetType <;> simp [Ty.isBytes, Ty.isJubjub, Ty.isForeign]
+    rw [scalarGuards.1, scalarGuards.2] at valid
+    simp only [scalarType_notOpaque sourceType, scalarType_notOpaque targetType,
+      Bool.or_false, Bool.false_eq_true, if_false] at valid
     change Except.bind (target.validate {poseidon2 := true})
       (fun _ => expression.validate {poseidon2 := true} types) = .ok () at valid
     rw [except_unit_bind] at valid
-    simp only [normalize, bind, except_bind_ok, Except.pure] at normal
+    simp only [normalize, bind, except_bind_ok, pure, Except.pure] at normal
     rcases normal with ⟨vn, nv, equal⟩
     cases equal
-    cases target with
+    cases targetType with
     | native =>
       simp only [requireSourceType_eq] at requirements
       obtain ⟨result, ev, vc, vr, vm⟩ := ih types aliases values environment vn valid.2 nv requirements
-      apply normalized_success (ty := .native) ctx hash implementation inputs aliases values environment.aliases _ _
-        (by simp only [normalize, nv]; rfl) (number source result)
-      simp only [Expr.eval, ev, bind, Except.bind]
-      change (if number source result < ctx.modulus then Except.ok (number source result)
-        else Except.error "noncanonical scalar conversion") = Except.ok (number source result)
-      have bound : number source result < ctx.modulus := by simpa [implementation.modulus] using vc.1
-      simp [bound]
+      have sourceBound := scalar_number_canonical sourceType result vc
+      apply normalized_success (ty := .native) ctx hash implementation inputs aliases values environment.aliases _
+        (ScalarExpression.cast expression sourceType .native valueSupported) _
+        (by simp only [normalize, nv]; rfl) (number sourceType result)
+      have bound : number sourceType result < ctx.modulus := by
+        simpa [implementation.modulus] using sourceBound
+      have castEval := eval_cast_scalar ctx values expression sourceType .native result ev
+      rw [castEval]
+      simp [scalarCast, bound]
     | bool =>
       simp only [requireSourceType_eq] at requirements
       have child := requirements_child hash inputs vn _ _ requirements
       obtain ⟨result, ev, vc, vr, vm⟩ := ih types aliases values environment vn valid.2 nv child
-      apply normalized_success (ty := .bool) ctx hash implementation inputs aliases values environment.aliases _ _
-        (by simp only [normalize, nv]; rfl) (number source result != 0)
-      simp only [Expr.eval, ev, bind, Except.bind]
-      rfl
+      apply normalized_success (ty := .bool) ctx hash implementation inputs aliases values environment.aliases _
+        (ScalarExpression.cast expression sourceType .bool valueSupported) _
+        (by simp only [normalize, nv]; rfl) (number sourceType result != 0)
+      have castEval := eval_cast_scalar ctx values expression sourceType .bool result ev
+      rw [castEval]
+      simp [scalarCast]
     | uint maximum =>
       simp only [requireSourceType_eq] at requirements
       have child := requirements_child hash inputs vn _ _ requirements
       obtain ⟨result, ev, vc, vr, vm⟩ := ih types aliases values environment vn valid.2 nv child
       have resultBound := requirements.1 (vn.term, maximum) (List.mem_append_right _ (List.mem_singleton.mpr rfl))
-      rw [vm] at resultBound
-      change number source result % Field.modulus ≤ maximum at resultBound
-      rw [Nat.mod_eq_of_lt vc.1] at resultBound
+      simp only [Prod.fst, Prod.snd] at resultBound
+      have vm' : interpret hash inputs vn.term = some (scalar (number sourceType result)) := by
+        rw [sourceScalar_number sourceType result] at vm
+        exact vm
+      change ∃ value, interpret hash inputs vn.term = some value ∧ value.val ≤ maximum at resultBound
+      rcases resultBound with ⟨bounded, boundedMeaning, bound⟩
+      rw [vm'] at boundedMeaning
+      cases boundedMeaning
+      change (scalar (number sourceType result)).val ≤ maximum at bound
+      have sourceBound := scalar_number_canonical sourceType result vc
+      change number sourceType result % Field.modulus ≤ maximum at bound
+      rw [Nat.mod_eq_of_lt sourceBound] at bound
       have typeBound := uint_valid_bound maximum valid.1
-      have canonical : number source result < ctx.modulus := by simpa [implementation.modulus] using vc.1
-      apply normalized_success (ty := .uint maximum) ctx hash implementation inputs aliases values environment.aliases _ _
-        (by simp only [normalize, nv]; rfl) (number source result)
-      simp only [Expr.eval, ev, bind, Except.bind]
-      change (if maximum ≤ ScalarPolicy.maxUint && number source result ≤ maximum && number source result < ctx.modulus
-        then Except.ok (number source result) else Except.error "scalar conversion exceeds unsigned bound") = Except.ok (number source result)
-      simp [typeBound, resultBound, canonical]
-  | @letE source ty name expression body iv ib =>
+      have canonical : number sourceType result < ctx.modulus := by
+        simpa [implementation.modulus] using sourceBound
+      apply normalized_success (ty := .uint maximum) ctx hash implementation inputs aliases values environment.aliases _
+        (ScalarExpression.cast expression sourceType (.uint maximum) valueSupported) _
+        (by simp only [normalize, nv]; rfl) (number sourceType result)
+      have castEval := eval_cast_scalar ctx values expression sourceType (.uint maximum) result ev
+      rw [castEval]
+      simp [scalarCast, typeBound, bound, canonical, scalar, Nat.mod_eq_of_lt sourceBound]
+  | @letE source ty name expression body sourceScalar valueSupported bodySupported iv ib =>
+    simp only [Expr.validate] at valid
     change Except.bind (expression.validate {poseidon2 := true} types)
       (fun _ => body.validate {poseidon2 := true} ((name, source) :: types)) = .ok () at valid
     rw [except_unit_bind] at valid
@@ -326,11 +382,14 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     obtain ⟨result, ev, vc, vq, vm⟩ := iv types aliases values environment vn valid.1 nv vr
     obtain ⟨resultBody, eb, bc, bq, bm⟩ := ib ((name, source) :: types) ((name, vn.term) :: aliases)
       ((name, Value.pack source result) :: values)
-      (environment.cons _ _ _ _ _ _ _ _ _ vc vm) bn valid.2 nb br
-    apply normalized_success (ty := ty) ctx hash implementation inputs aliases values environment.aliases _ _
+      (environment.cons hash inputs aliases values types name source result vn.term
+        vc vm) bn valid.2 nb br
+    apply normalized_success (ty := ty) ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.letE name expression body sourceScalar valueSupported bodySupported) _
       (by simp only [normalize, nv, bind, Except.bind, nb]; rfl) resultBody
     simpa only [Expr.eval, ev, bind, Except.bind] using eb
-  | @assertE ty condition body ic ib =>
+  | @assertE ty condition body conditionSupported bodySupported ic ib =>
+    simp only [Expr.validate] at valid
     change Except.bind (condition.validate {poseidon2 := true} types)
       (fun _ => body.validate {poseidon2 := true} types) = .ok () at valid
     rw [except_unit_bind] at valid
@@ -351,20 +410,31 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
         exact requirements.2 assertion (List.mem_append_right _ member)
     obtain ⟨cv, ec, cc, cq, cm⟩ := ic types aliases values environment cn valid.1 nc cr
     obtain ⟨bv, eb, bc, bq, bm⟩ := ib types aliases values environment bn valid.2 nb br
-    have asserted : interpret hash inputs cn.term = one := requirements.2 cn.term
+    have asserted : interpret hash inputs cn.term = some one := requirements.2 cn.term
       (List.mem_append_left _ (List.mem_append_right _ (List.mem_singleton.mpr rfl)))
     have conditionTrue : cv = true := by
       rw [cm] at asserted
+      simp [sourceScalar?, sourceNumber?, scalar_one, scalar_zero] at asserted
       cases cv
-      · exact False.elim (zero_ne_one (by simpa using asserted))
+      · exact False.elim (zero_ne_one asserted)
       · rfl
     subst cv
-    apply normalized_success (ty := ty) ctx hash implementation inputs aliases values environment.aliases _ _
+    apply normalized_success (ty := ty) ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.assertE condition body conditionSupported bodySupported) _
       (by simp only [normalize, nc, nb]; rfl) bv
     simpa only [Expr.eval, ec, bind, Except.bind, Bool.not_true, Bool.false_eq_true, ↓reduceIte, Except.pure] using eb
-  | disclose span expression ih =>
+  | copyValue expression supported ih =>
+    simp only [Expr.validate, Expr.eval, normalize] at valid normal ⊢
     exact ih types aliases values environment normalized valid normal requirements
-  | @eq ty a b ia ib =>
+  | disclose span expression supported ih =>
+    simp only [Expr.validate, Expr.eval, normalize] at valid normal ⊢
+    exact ih types aliases values environment normalized valid normal requirements
+  | @eq ty a b scalarType leftSupported rightSupported ia ib =>
+    simp only [Expr.validate] at valid
+    have scalarKinds : ty.isBytes = false ∧ ty.isJubjub = false ∧ ty.isForeign = false := by
+      cases scalarType <;> simp [Ty.isBytes, Ty.isJubjub, Ty.isForeign]
+    simp only [scalarKinds.1, scalarKinds.2.1, scalarKinds.2.2, scalarType_notOpaque scalarType,
+      Bool.or_false, Bool.false_eq_true, if_false] at valid
     change Except.bind (a.validate {poseidon2 := true} types)
       (fun _ => b.validate {poseidon2 := true} types) = .ok () at valid
     rw [except_unit_bind] at valid
@@ -375,11 +445,18 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     obtain ⟨ar, br⟩ := requirements_children hash inputs an bn _ _ requirements
     obtain ⟨av, ea, ac, aq, am⟩ := ia types aliases values environment an valid.1 na ar
     obtain ⟨bv, eb, bc, bq, bm⟩ := ib types aliases values environment bn valid.2 nb br
-    cases ty <;>
-      apply normalized_success (ty := .bool) ctx hash implementation inputs aliases values environment.aliases _ _
+    have equalityAdmission := ScalarExpression.eq a b scalarType leftSupported rightSupported
+    cases scalarType <;>
+      apply normalized_success (ty := .bool) ctx hash implementation inputs aliases values environment.aliases _
+        equalityAdmission _
         (by simp only [normalize, na, nb]; rfl) (av == bv) <;>
       simp only [Expr.eval, ea, eb, bind, Except.bind] <;> rfl
-  | @select ty c a b ic ia ib =>
+  | @select ty c a b scalarType conditionSupported yesSupported noSupported ic ia ib =>
+    simp only [Expr.validate] at valid
+    have scalarKinds : ty.isBytes = false ∧ ty.isJubjub = false ∧ ty.isForeign = false := by
+      cases scalarType <;> simp [Ty.isBytes, Ty.isJubjub, Ty.isForeign]
+    simp only [scalarKinds.1, scalarKinds.2.1, scalarKinds.2.2, scalarType_notOpaque scalarType,
+      Bool.or_false, Bool.false_eq_true, if_false] at valid
     change Except.bind (c.validate {poseidon2 := true} types)
       (fun _ => Except.bind (a.validate {poseidon2 := true} types)
         (fun _ => b.validate {poseidon2 := true} types)) = .ok () at valid
@@ -394,7 +471,7 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
       constructor
       · intro requirement member
         apply requirements.1 requirement
-        cases ty with
+        cases scalarType with
         | native => exact member
         | bool => exact List.mem_append_left _ member
         | uint maximum => exact List.mem_append_left _ member
@@ -406,11 +483,12 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     obtain ⟨cv, ec, cc, cq, cm⟩ := ic types aliases values environment cn valid.1 nc cr
     obtain ⟨av, ea, ac, aq, am⟩ := ia types aliases values environment an valid.2.1 na ar
     obtain ⟨bv, eb, bc, bq, bm⟩ := ib types aliases values environment bn valid.2.2 nb br
-    apply normalized_success (ty := ty) ctx hash implementation inputs aliases values environment.aliases _ _
+    apply normalized_success (ty := ty) ctx hash implementation inputs aliases values environment.aliases _
+      (ScalarExpression.select c a b scalarType conditionSupported yesSupported noSupported) _
       (by simp only [normalize, nc, na, nb]; rfl) (if cv then av else bv)
     simp only [Expr.eval, ec, ea, eb, bind, Except.bind]
     rfl
-  | poseidon2 domain a b ia ib =>
+  | poseidon2 domain a b leftSupported rightSupported ia ib =>
     simp only [Expr.validate] at valid
     split at valid
     next invalid => cases valid
@@ -436,7 +514,8 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
       have domainCanonical : ¬domain ≥ ctx.modulus := by
         rw [implementation.modulus]
         exact Nat.not_le_of_gt domainBound
-      apply normalized_success ctx hash implementation inputs aliases values environment.aliases _ _
+      apply normalized_success ctx hash implementation inputs aliases values environment.aliases _
+        (ScalarExpression.poseidon2 domain a b leftSupported rightSupported) _
         (by simp only [normalize, na, nb]; rfl) (hash [scalar domain, scalar av, scalar bv]).val
       simp [Expr.eval, domainCanonical, ea, eb, oracle, bind, Except.bind, pure,
         Except.pure, Nat.not_le_of_gt resultBound] <;> rfl
@@ -446,18 +525,18 @@ theorem normalize_exact (ctx : EvalContext) (hash : Hash)
     (implementation : HashAgreement ctx hash) (inputs : Assignment)
     (types : TypeEnv) (aliases : AliasEnvironment) (values : EvalEnv)
     (environment : TypedEnvironment hash inputs aliases values types)
-    (expression : Expr ty) (normalized : Normalized)
+    (expression : Expr ty) (admission : ScalarExpression expression) (normalized : Normalized)
     (valid : expression.validate {poseidon2 := true} types = .ok ())
     (normal : normalize aliases expression = .ok normalized) :
     Requirements hash inputs normalized ↔ ∃ value, expression.eval ctx values = .ok value := by
   constructor
   · intro requirements
     obtain ⟨value, success, _⟩ := normalize_sound ctx hash implementation inputs types aliases values
-      environment expression normalized valid normal requirements
+      environment expression admission normalized valid normal requirements
     exact ⟨value, success⟩
   · rintro ⟨value, success⟩
     obtain ⟨_, _, represented⟩ := normalized_success ctx hash implementation inputs aliases values
-      environment.aliases expression normalized normal value success
+      environment.aliases expression admission normalized normal value success
     exact represented.2.1
 
 end Noctium.Verification.ScalarNormalization
