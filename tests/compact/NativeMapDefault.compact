@@ -14,3 +14,9 @@ export circuit insertDefault(key: Field): [Boolean, Uint<64>, Field] {
   values.insertDefault(exposedKey);
   return [values.member(exposedKey), values.size(), values.lookup(exposedKey)];
 }
+
+export circuit clear(key: Field): [Boolean, Uint<64>] {
+  const exposedKey = disclose(key);
+  values.resetToDefault();
+  return [values.member(exposedKey), values.size()];
+}

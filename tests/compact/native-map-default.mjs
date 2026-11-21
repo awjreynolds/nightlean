@@ -8,7 +8,7 @@ assert.ok(generatedDirectory && runtimeDirectory, 'pass compiler output and set 
 const { createCircuitContext, createConstructorContext, dummyContractAddress } = await import(
   pathToFileURL(resolve(runtimeDirectory, 'dist/index.js')).href,
 );
-const { Contract } = await import(
+const { Contract, ledger } = await import(
   pathToFileURL(resolve(generatedDirectory, 'contract/index.js')).href,
 );
 
@@ -33,4 +33,10 @@ assert.deepEqual(result, [true, 1n, 0n]);
 assert.deepEqual(result, [true, 2n, 19n]);
 [result, state] = await invoke('insertDefault', state, 2n);
 assert.deepEqual(result, [true, 2n, 0n]);
-console.log('Compact 0.36.1 matched default insertion, existing-key replacement, membership and size');
+const [afterClear, clearedState] = await invoke('clear', state, 1n);
+assert.deepEqual(afterClear, [false, 0n]);
+const clearedValues = ledger(clearedState).values;
+assert.equal(clearedValues.size(), 0n);
+assert.equal(clearedValues.member(1n), false);
+assert.equal(clearedValues.member(2n), false);
+console.log('Compact 0.36.1 matched populated Map reset, default insertion, membership and size');

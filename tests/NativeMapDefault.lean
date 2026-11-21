@@ -22,6 +22,10 @@ noctium_circuit nativeMapDefaultInputs where
   public enabled : Bool
 end
 
+noctium_circuit nativeMapClearInputs where
+  private key : Native
+end
+
 noctium_contract NativeMapDefault where
   map values : Native => Native
   tree nestedValues : Bytes32 => Native => Native
@@ -55,6 +59,14 @@ noctium_contract NativeMapDefault where
     return hasEntry : Bool := present
     return entries : UInt 64 := count
     return stored : Native := value
+  end
+
+  entry clear uses nativeMapClearInputs where
+    reset values
+    member values[disclose(key)] as present
+    size values as count
+    return hasEntry : Bool := present
+    return entries : UInt 64 := count
   end
 
   entry defaults uses nativeMapDefaultInputs where
@@ -106,6 +118,17 @@ private def nativeMapDefaultEntry (name : String) : Entrypoint :=
   | .ok plan => plan.operations.any (fun op => match op with
       | .insert 2 => Bool.true
       | _ => Bool.false)
+  | .error _ => Bool.false
+
+#guard match Backend.Impact.lower NativeMapDefault.state (nativeMapDefaultEntry "clear") with
+  | .ok plan => plan.operations.any (fun op => match op with
+      | .newMap => Bool.true
+      | _ => Bool.false)
+  | .error _ => Bool.false
+
+#guard match Backend.Zkir.lowerEntrypoint NativeMapDefault.state
+    (nativeMapDefaultEntry "clear") with
+  | .ok _ => Bool.true
   | .error _ => Bool.false
 
 #guard match Backend.Zkir.lowerEntrypoint NativeMapDefault.state
