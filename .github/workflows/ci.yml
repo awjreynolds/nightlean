@@ -109,6 +109,7 @@ jobs:
           lake env lean tests/HashToCurve.lean
           lake env lean tests/ForeignTransport.lean
           lake env lean tests/ForeignPointLiterals.lean
+          lake env lean tests/SecpProjections.lean
           lake env lean tests/ForeignOperations.lean
           lake env lean tests/ForeignStorage.lean
           lake env lean tests/ForeignTree.lean
