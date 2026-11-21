@@ -1,6 +1,6 @@
 //! Bounded native ABI for collection pages and paths in a pinned state snapshot.
 use crate::{
-    Db, StateDecl,
+    Db, ScalarType, StateDecl, Value,
     aggregates::Schema,
     artifacts,
     merkle::{MerkleTreeSnapshot, merkle_curve_leaf_hash, merkle_fab_leaf_hash, merkle_tree_at},
@@ -261,6 +261,176 @@ fn merkle_page(tree: &MerkleTreeSnapshot, offset: usize, limit: usize) -> Result
     }))
 }
 
+enum CollectionSchema {
+    Map {
+        slot: usize,
+        key_type: ScalarType,
+        key_name: String,
+        value_type: ScalarType,
+        value_name: String,
+    },
+    Set {
+        slot: usize,
+        key_type: ScalarType,
+        key_name: String,
+    },
+}
+
+fn collection_schema(plan: &ReadPlan, name: &str) -> Result<Option<CollectionSchema>, i32> {
+    let mut declarations = plan
+        .state
+        .iter()
+        .enumerate()
+        .filter(|(_, declaration)| declaration.name == name);
+    let Some((slot, declaration)) = declarations.next() else {
+        return Ok(None);
+    };
+    if declarations.next().is_some() {
+        return Err(INVALID_ARGUMENT);
+    }
+
+    let schema = declaration.kind.get("tree").unwrap_or(&declaration.kind);
+    if let Some(set) = schema.get("set") {
+        let key_name = set.as_str().ok_or(INVALID_ARGUMENT)?.to_owned();
+        let key_type = crate::ledger_key_type(&Json::String(key_name.clone()))
+            .map_err(|_| INVALID_ARGUMENT)?;
+        return Ok(Some(CollectionSchema::Set {
+            slot,
+            key_type,
+            key_name,
+        }));
+    }
+    if let Some(map) = schema.get("map") {
+        let fields = map
+            .as_array()
+            .filter(|fields| fields.len() == 2)
+            .ok_or(INVALID_ARGUMENT)?;
+        let key_name = fields[0].as_str().ok_or(INVALID_ARGUMENT)?.to_owned();
+        let value_name = fields[1].as_str().ok_or(INVALID_ARGUMENT)?.to_owned();
+        let key_type = crate::ledger_key_type(&Json::String(key_name.clone()))
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let value_type = ScalarType::parse(&value_name).map_err(|_| INVALID_ARGUMENT)?;
+        return Ok(Some(CollectionSchema::Map {
+            slot,
+            key_type,
+            key_name,
+            value_type,
+            value_name,
+        }));
+    }
+    Ok(None)
+}
+
+fn key_order(value: &Value) -> Result<Vec<u8>, i32> {
+    match value {
+        Value::Native(field) => {
+            let mut bytes = field.as_le_bytes().to_vec();
+            bytes.reverse();
+            Ok(bytes)
+        }
+        Value::Bool(value) => Ok(vec![u8::from(*value)]),
+        Value::UInt { number, .. } => {
+            let bytes = number.to_bytes_be();
+            if bytes.len() > 32 {
+                return Err(INVALID_ARGUMENT);
+            }
+            let mut padded = vec![0; 32 - bytes.len()];
+            padded.extend(bytes);
+            Ok(padded)
+        }
+        Value::Bytes(bytes) => Ok(bytes.clone()),
+        #[cfg(feature = "zkir-321")]
+        Value::Foreign(value) => value.to_bytes().map_err(|_| INVALID_ARGUMENT),
+        Value::JubjubScalar(_) | Value::JubjubPoint(_) => Err(INVALID_ARGUMENT),
+    }
+}
+
+struct OrderedEntry {
+    order: Vec<u8>,
+    key: Json,
+    value: Option<Json>,
+}
+
+fn collection_page(
+    state: &StateValue<Db>,
+    schema: &CollectionSchema,
+    offset: usize,
+    limit: usize,
+) -> Result<Json, i32> {
+    let StateValue::Map(map) = state else {
+        return Err(INVALID_ARGUMENT);
+    };
+    let (key_type, key_name) = match schema {
+        CollectionSchema::Map {
+            key_type, key_name, ..
+        }
+        | CollectionSchema::Set {
+            key_type, key_name, ..
+        } => (key_type, key_name),
+    };
+    let map_size = usize::try_from(map.size()).map_err(|_| INVALID_ARGUMENT)?;
+    let mut entries = Vec::with_capacity(map_size);
+    for entry in map.iter() {
+        let (key, value) = &*entry;
+        let key = crate::decode_state_cell(key, key_name, crate::key_alignment(key_type))
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let order = key_order(&key)?;
+        let value = match schema {
+            CollectionSchema::Map {
+                value_type,
+                value_name,
+                ..
+            } => {
+                let StateValue::Cell(value) = &**value else {
+                    return Err(INVALID_ARGUMENT);
+                };
+                Some(
+                    crate::decode_state_cell(
+                        value,
+                        value_name,
+                        &crate::list_scalar_storage_alignment(value_type),
+                    )
+                    .map_err(|_| INVALID_ARGUMENT)?
+                    .public_json(),
+                )
+            }
+            CollectionSchema::Set { .. } => {
+                if !matches!(&**value, StateValue::Null) {
+                    return Err(INVALID_ARGUMENT);
+                }
+                None
+            }
+        };
+        entries.push(OrderedEntry {
+            order,
+            key: key.public_json(),
+            value,
+        });
+    }
+    entries.sort_by(|left, right| left.order.cmp(&right.order));
+
+    let end = offset.saturating_add(limit).min(entries.len());
+    let page = entries
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .map(|entry| match entry.value {
+            Some(value) => json!({"key": entry.key, "value": value}),
+            None => entry.key,
+        })
+        .collect::<Vec<_>>();
+    let kind = match schema {
+        CollectionSchema::Map { .. } => "map",
+        CollectionSchema::Set { .. } => "set",
+    };
+    Ok(json!({
+        "abiVersion": 1,
+        "kind": kind,
+        "entries": page,
+        "nextOffset": (end < map_size).then_some(end)
+    }))
+}
+
 /// # Safety
 /// Each input pointer must reference readable bytes for its declared length.
 /// `out_result` must point to writable storage for one `u64`.
@@ -339,16 +509,47 @@ pub unsafe extern "C" fn noctium_ledger_collection_page(
             return Err(INVALID_ARGUMENT);
         }
 
-        let tree = merkle_tree_at(&plan.state, &state.data, &request.name, &keys)
-            .map_err(|_| INVALID_ARGUMENT)?;
-        let page = if let Some(query) = &request.merkle_path {
-            merkle_path_result(&tree, query)?
+        let page = if keys.is_empty() && request.merkle_path.is_none() {
+            match collection_schema(&plan, &request.name)? {
+                Some(schema) => {
+                    let StateValue::Array(root) = state.data.get_ref() else {
+                        return Err(INVALID_ARGUMENT);
+                    };
+                    let slot = match &schema {
+                        CollectionSchema::Map { slot, .. } | CollectionSchema::Set { slot, .. } => {
+                            *slot
+                        }
+                    };
+                    let selected = root.get(slot).ok_or(INVALID_ARGUMENT)?;
+                    collection_page(
+                        selected,
+                        &schema,
+                        request.offset.ok_or(INVALID_ARGUMENT)?,
+                        request.limit.ok_or(INVALID_ARGUMENT)?,
+                    )?
+                }
+                None => {
+                    let tree = merkle_tree_at(&plan.state, &state.data, &request.name, &keys)
+                        .map_err(|_| INVALID_ARGUMENT)?;
+                    merkle_page(
+                        &tree,
+                        request.offset.ok_or(INVALID_ARGUMENT)?,
+                        request.limit.ok_or(INVALID_ARGUMENT)?,
+                    )?
+                }
+            }
         } else {
-            merkle_page(
-                &tree,
-                request.offset.ok_or(INVALID_ARGUMENT)?,
-                request.limit.ok_or(INVALID_ARGUMENT)?,
-            )?
+            let tree = merkle_tree_at(&plan.state, &state.data, &request.name, &keys)
+                .map_err(|_| INVALID_ARGUMENT)?;
+            if let Some(query) = &request.merkle_path {
+                merkle_path_result(&tree, query)?
+            } else {
+                merkle_page(
+                    &tree,
+                    request.offset.ok_or(INVALID_ARGUMENT)?,
+                    request.limit.ok_or(INVALID_ARGUMENT)?,
+                )?
+            }
         };
         let result =
             native_ffi::service_public_bytes(serde_json::to_vec(&page).map_err(|_| INTERNAL)?)?;
