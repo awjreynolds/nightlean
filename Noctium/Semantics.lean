@@ -538,6 +538,48 @@ decreasing_by
     | exact Noctium.sizeOfMemberListLt (by simp)
     | omega
 
+private def fabCommitFieldValues (ctx : EvalContext) (env : EvalEnv)
+    : Types.Layout → Sigma Expr → Except String (List Nat)
+  | .bytes length .byteField, ⟨.bytes actualLength, expression⟩ => do
+    unless length == actualLength && length > 0 do throw "mixed FAB Bytes field type mismatch"
+    let bytes ← expression.eval ctx env
+    unless bytes.length == length && bytes.all (· ≤ 255) do
+      throw "mixed FAB Bytes field is not canonical"
+    pure ((List.range ((length + 30) / 31)).map fun index => bytesFieldChunk length index bytes)
+  | .scalar .nativeField, ⟨.native, expression⟩ => do
+    pure [← expression.eval ctx env]
+  | .scalar .booleanField, ⟨.bool, expression⟩ => do
+    pure [if (← expression.eval ctx env) then 1 else 0]
+  | .scalar (.boundedUnsignedField maximum), ⟨.uint actualMaximum, expression⟩ => do
+    unless maximum == actualMaximum do throw "mixed FAB UInt field type mismatch"
+    pure [← expression.eval ctx env]
+  | .enumeration _ (.enumTagField maximum) _ 0 _ variants,
+      ⟨.uint actualMaximum, expression⟩ => do
+    unless maximum == actualMaximum && !variants.isEmpty && variants.all (·.2.1.isEmpty) do
+      throw "mixed FAB enum layout is unsupported"
+    pure [← expression.eval ctx env]
+  | _, _ => throw "unsupported mixed FAB field during transient commitment evaluation"
+termination_by _ value => sizeOf value
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | exact Noctium.sizeOfSigmaExprValueLt _
+    | omega
+
+private def fabCommitFieldSequence (ctx : EvalContext) (env : EvalEnv)
+    : List Types.Layout → List (Sigma Expr) → Except String (List Nat)
+  | [], [] => pure []
+  | layout :: layouts, value :: rest => do
+    pure ((← fabCommitFieldValues ctx env layout value) ++
+      (← fabCommitFieldSequence ctx env layouts rest))
+  | _, _ => throw "mixed FAB field count changed after validation"
+termination_by _ values => sizeOf values
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | exact Noctium.sizeOfSigmaExprMemberLt (by simp)
+    | omega
+
 /-- Evaluation is total and returns errors for absent/mistyped witnesses or
 noncanonical field data, rather than silently inventing witness values. -/
 def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty.Denote
@@ -712,9 +754,26 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     evaluatePersistentHash ctx preimage
   | .persistentHashFab compositeEnv type values => do
     let layout ← validateFabHashLayout compositeEnv type values
-    let .structure _ fields := layout
-      | throw "mixed FAB persistent hash requires a named flat structure"
+    let fields ← fabHashLayoutFields layout
     evaluatePersistentHash ctx (← fabHashFieldsPreimage ctx env (fields.map Prod.snd) values)
+  | .persistentCommitFab compositeEnv type opening values => do
+    let layout ← validateFabHashLayout compositeEnv type values
+    let fields ← fabHashLayoutFields layout
+    let opening ← opening.eval ctx env
+    unless opening.length == 32 && opening.all (· ≤ 255) do
+      throw "mixed FAB persistent commitment opening is not canonical Bytes32"
+    let payload ← fabHashFieldsPreimage ctx env (fields.map Prod.snd) values
+    evaluatePersistentHash ctx (opening ++ payload)
+  | .transientCommitFab compositeEnv type opening values => do
+    let layout ← validateFabHashLayout compositeEnv type values
+    let fields ← fabHashLayoutFields layout
+    let opening ← opening.eval ctx env
+    if opening >= ctx.modulus then throw "noncanonical transient commitment opening"
+    let payload ← fabCommitFieldSequence ctx env (fields.map Prod.snd) values
+    let input := opening :: payload
+    let result ← ctx.transientHash input
+    if result >= ctx.modulus then throw "transient commitment oracle returned noncanonical value"
+    pure result
   | .toBytes32 (source := .native) value => do
     pure (nativeFieldBytesLE (← value.eval ctx env))
   | .toBytes32 (source := .jubjubScalar) value => do

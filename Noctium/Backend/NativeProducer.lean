@@ -322,7 +322,9 @@ private def fabAlignmentDescriptor (atom : Json) : Except String String := do
 private def checkedFabHashOperands (alignment : Json) (values : List Fact) :
     Except String (List String × List Term) := do
   let atoms ← alignment.getArr?
-  ensure (atoms.size > 0 && atoms.size ≤ 32) "mixed FAB alignment must contain 1 to 32 atoms"
+  ensure (atoms.size > 0 && (atoms.size ≤ 32 ||
+    (atoms.size == 33 && atoms[0]? == some bytes32Atom)))
+    "mixed FAB alignment must contain 1 to 32 payload atoms, with an optional opening"
   let descriptors ← atoms.toList.mapM fabAlignmentDescriptor
   let mut remaining := values
   let mut terms := []
@@ -593,6 +595,8 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
           ensure (values.length == atoms.size)
             "Native vector persistent_hash field count differs from its alignment"
           pure (persistentHashNativeVectorTerm (values.map (·.term)))
+        else if atoms.size ≤ 1 then
+          checkedFixedByteHashTerm opcode alignment values
         else if atoms.any (fun atom =>
             match atom.getObjVal? "value" with
             | .ok value =>
@@ -601,13 +605,20 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
                 | .ok "field" => true
                 | _ => false
               | .error _ => false
-            | .error _ => false) then do
+            | .error _ => false) || atoms.any (fun atom =>
+              match atom.getObjVal? "value" with
+              | .ok value =>
+                match value.getObjVal? "tag", value.getObjVal? "length" with
+                | .ok tag, .ok length =>
+                  match tag.getStr?, length.getNat? with
+                  | .ok "bytes", .ok width => width > 0 && width < 32
+                  | _, _ => false
+                | _, _ => false
+              | .error _ => false) then do
           let (descriptors, operands) ← checkedFabHashOperands alignment values
           pure (persistentHashFabTerm descriptors operands)
-        else if atoms.size ≤ 1 then
-          checkedFixedByteHashTerm opcode alignment values
         else do
-          ensure (atoms.size ≥ 1 && atoms.size ≤ 32 && atoms.all (· == bytes32Atom))
+          ensure (atoms.size ≥ 1 && atoms.size ≤ 33 && atoms.all (· == bytes32Atom))
             "persistent_hash supports only bounded Bytes32 or Native field vectors"
           ensure (values.length == atoms.size * 2)
             "Bytes32 vector persistent_hash requires two fields per aligned value"

@@ -132,6 +132,14 @@ inductive Expr : Ty → Type where
   checked layout rather than accepting a caller-provided alignment vector. -/
   | persistentHashFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
       (values : List (Sigma Expr)) : Expr (.bytes 32)
+  /-- Commit to a checked flat FAB payload using a Bytes32 opening prepended
+  to its canonical binary encoding. -/
+  | persistentCommitFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
+      (opening : Expr (.bytes 32)) (values : List (Sigma Expr)) : Expr (.bytes 32)
+  /-- Commit to a checked flat FAB payload using a Native opening prepended
+  to its canonical FAB field sequence. -/
+  | transientCommitFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
+      (opening : Expr .native) (values : List (Sigma Expr)) : Expr .native
   deriving Repr
 
 def Expr.foreignIdentity (curve : Foreign.Curve) : Expr (.foreign (.point curve)) :=
@@ -146,6 +154,15 @@ private def fabHashFieldMatches (layout : Types.Layout) (value : Sigma Expr) : B
   | .enumeration _id (.enumTagField maximum) _ 0 _ variants, ⟨.uint actualMaximum, _⟩ =>
       maximum == actualMaximum && !variants.isEmpty && variants.all (·.2.1.isEmpty)
   | _, _ => false
+
+/-- Preserve the checked root's logical order for mixed-FAB hashing. Named
+structures use declaration order. Anonymous root tuples use tuple item order.
+Only the validator below admits direct leaf layouts. -/
+def fabHashLayoutFields (layout : Types.Layout) : Except String (List (String × Types.Layout)) :=
+  match layout with
+  | .structure _ fields => pure fields
+  | .tuple items => pure (items.zipIdx.map fun (item, index) => (toString index, item))
+  | _ => throw "mixed FAB hashing requires a flat structure or root tuple"
 
 theorem sizeOfSigmaExprHeadLt {ty : Ty} (value : Expr ty) (rest : List (Sigma Expr)) :
     sizeOf value < sizeOf (Sigma.mk ty value :: rest) := by
@@ -186,8 +203,7 @@ theorem sizeOfSigmaExprMemberLt {ty : Ty} {value : Expr ty}
 def validateFabHashLayout (environment : Types.CompositeEnv) (type : Types.CompositeType)
     (values : List (Sigma Expr)) : Except String Types.Layout := do
   let checked ← (Types.checkedLayout Types.defaultLimits environment type).mapError (·.message)
-  let .structure _ fields := checked.value
-    | throw "mixed FAB persistent hash requires a named flat structure"
+  let fields ← fabHashLayoutFields checked.value
   unless fields.length > 0 && fields.length ≤ 32 && values.length == fields.length do
     throw "mixed FAB persistent hash field count is outside the source limit or differs from its layout"
   for (field, value) in fields.zip values do
@@ -970,6 +986,16 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .persistentHashFab compositeEnv type values => do
     unless caps.persistentHash32 do throw "target lacks qualified FAB persistent-hash support"
     discard (validateFabHashLayout compositeEnv type values)
+    validateFabHashValues caps env values
+  | .persistentCommitFab compositeEnv type opening values => do
+    unless caps.persistentHash32 do throw "target lacks qualified FAB persistent-commit support"
+    discard (validateFabHashLayout compositeEnv type values)
+    opening.validate caps env
+    validateFabHashValues caps env values
+  | .transientCommitFab compositeEnv type opening values => do
+    unless caps.poseidon2 do throw "target lacks qualified FAB transient-commit support"
+    discard (validateFabHashLayout compositeEnv type values)
+    opening.validate caps env
     validateFabHashValues caps env values
   | .toBytes32 (source := source) value => do
     unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"

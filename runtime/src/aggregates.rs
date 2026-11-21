@@ -922,21 +922,23 @@ impl Schema {
         self.measures[self.root]
     }
 
-    /// Return fields for the bounded named-flat-structure FAB hash subset.
+    /// Return fields for the bounded flat-structure or flat-tuple FAB subset.
     /// Enum payloads need branch-dependent field expressions, so this helper
     /// accepts only one-byte fieldless enums and exposes their tag as a field.
     pub(crate) fn fab_hash_fields(&self) -> Result<Vec<FabHashField>> {
-        let LayoutNode::Struct { fields, .. } = &self.nodes[self.root] else {
-            bail!("FAB hash requires a named flat structure")
+        let layouts: Vec<_> = match &self.nodes[self.root] {
+            LayoutNode::Struct { fields, .. } => fields.iter().map(|field| field.layout).collect(),
+            LayoutNode::Tuple(items) => items.clone(),
+            _ => bail!("FAB hash requires a flat structure or tuple"),
         };
         ensure!(
-            (1..=32).contains(&fields.len()),
+            (1..=32).contains(&layouts.len()),
             "FAB hash field count is outside the supported range"
         );
 
-        fields
+        layouts
             .iter()
-            .map(|field| match &self.nodes[field.layout] {
+            .map(|layout| match &self.nodes[*layout] {
                 LayoutNode::Scalar(Leaf::Native) => Ok(FabHashField::Native),
                 LayoutNode::Scalar(Leaf::Bool) => Ok(FabHashField::Bool),
                 LayoutNode::Scalar(Leaf::UInt(maximum)) => {

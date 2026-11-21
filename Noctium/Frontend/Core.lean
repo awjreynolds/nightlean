@@ -16,6 +16,21 @@ import Lean
 namespace Noctium
 open Lean Elab Command
 
+/-- Source-only nominal tags for the two Midnight recipient values represented
+by the same 32-byte expression at the circuit and native boundaries. -/
+inductive NominalBytes32 where
+  | contractAddress
+  | zswapCoinPublicKey
+  deriving Repr, BEq, DecidableEq, Inhabited
+
+def NominalBytes32.displayName : NominalBytes32 → String
+  | .contractAddress => "ContractAddress"
+  | .zswapCoinPublicKey => "ZswapCoinPublicKey"
+
+def NominalBytes32.declarationId : NominalBytes32 → String
+  | .contractAddress => "Noctium.Midnight.ContractAddress"
+  | .zswapCoinPublicKey => "Noctium.Midnight.ZswapCoinPublicKey"
+
 /-- Declarations registered through the supported Noctium circuit surface. -/
 structure CircuitInfo where
   declName : Name
@@ -25,6 +40,9 @@ structure CircuitInfo where
   /-- Logical witness-circuit results retained when a grouped helper result is
   expanded into native leaves. The names point to typed Expr constants. -/
   logicalOutputs : List (String × Ty × Name) := []
+  /-- Compile-time nominal tags retained alongside byte-string output aliases.
+  These tags never enter Expr or the native plan. -/
+  nominalBytes32Outputs : List (String × NominalBytes32) := []
   /-- The declared aggregate label and its checked return schema. -/
   aggregateOutputs : List (String × Name × List String) := []
   /-- Hosted call arguments are selected from source parameters, never callback slots. -/
@@ -243,10 +261,14 @@ scoped syntax "reverseBytes(" nlexpr ")" : nlexpr
 scoped syntax "sliceBytes(" nlexpr "," num "," num ")" : nlexpr
 scoped syntax "concatBytes(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "bytes32(" str ")" : nlexpr
+scoped syntax "nativeToken()" : nlexpr
+scoped syntax "tokenType(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashFab(" ident "," ident "," "[" nlexpr,* "]" ")" : nlexpr
+scoped syntax "persistentCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,* "]" ")" : nlexpr
+scoped syntax "transientCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "shieldedOutputNonce(" nlexpr ")" : nlexpr
 declare_syntax_cat nlcallvalue
@@ -299,6 +321,16 @@ scoped syntax "curveY(" nlexpr ")" : nlexpr
 scoped syntax "curveFromCoordinates(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "foreignToBytes(" nlexpr ")" : nlexpr
 scoped syntax "foreignFromBytes(" nltype "," nlexpr ")" : nlexpr
+
+/-- Expand token-color helpers through the ordinary Bytes32 literal and hash
+surface so every frontend path shares the same padding and hashing rules. -/
+def expandTokenHelperSyntax (stx : TSyntax `nlexpr) : CommandElabM (Option (TSyntax `nlexpr)) := do
+  match stx with
+  | `(nlexpr| nativeToken()) =>
+    return some (← `(nlexpr| bytes32("")))
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    return some (← `(nlexpr| persistentHashVector32([bytes32("midnight:derive_token"), $domain, $contractAddress])))
+  | _ => return none
 
 declare_syntax_cat nlcstmt
 scoped syntax "public" ident ":" nltype : nlcstmt
@@ -374,6 +406,7 @@ scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupd
 scoped syntax "sendShieldedFromMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "relayShieldedImmediate" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "receiveUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedInputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedOutputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "claimUnshieldedCoinSpend" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
@@ -793,9 +826,15 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| reverseBytes32($value)) => hasPartialScalar value
   | `(nlexpr| persistentHashVector32([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    hasPartialScalar domain || hasPartialScalar contractAddress
   | `(nlexpr| persistentHashNative($value)) => hasPartialScalar value
   | `(nlexpr| persistentHashFab($_:ident, $_:ident, [$values,*])) =>
     values.getElems.toList.any hasPartialScalar
+  | `(nlexpr| persistentCommitFab($_:ident, $_:ident, $opening, [$values,*])) =>
+    hasPartialScalar opening || values.getElems.toList.any hasPartialScalar
+  | `(nlexpr| transientCommitFab($_:ident, $_:ident, $opening, [$values,*])) =>
+    hasPartialScalar opening || values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| callCommitment($_:ident, $_:str, $opening, [$inputs,*], [$outputs,*]))
@@ -1166,6 +1205,10 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let padded := bytes ++ List.replicate (32 - bytes.length) 0
     let values ← natListTerm padded
     pure (.bytes 32, ← `(Noctium.Expr.bytes32Literal $values))
+  | `(nlexpr| nativeToken()) | `(nlexpr| tokenType($_:nlexpr, $_:nlexpr)) => do
+    let some expanded ← expandTokenHelperSyntax stx
+      | throwErrorAt stx "token helper expansion failed"
+    expression env expanded
   | `(nlexpr| persistentHashVector32([$values,*])) => do
     let expressions ← values.getElems.toList.mapM fun value => do
       let (valueTy, value) ← expression env value
@@ -1195,6 +1238,36 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
       `(Sigma.mk $actualType $value)
     let valueList ← sigmaExprListTerm encodedValues
     pure (.bytes 32, ← `(Noctium.Expr.persistentHashFab $environmentTerm $typeTerm $valueList))
+  | `(nlexpr| persistentCommitFab($environment:ident, $type:ident, $opening, [$values,*])) => do
+    let environmentName ← liftCoreM <| resolveGlobalConstNoOverload environment
+    let typeName ← liftCoreM <| resolveGlobalConstNoOverload type
+    let environmentTerm : TSyntax `term := ⟨mkIdent environmentName⟩
+    let typeTerm : TSyntax `term := ⟨mkIdent typeName⟩
+    let opening ← expected env opening (.bytes 32)
+    let sourceValues := values.getElems.toList
+    unless !sourceValues.isEmpty && sourceValues.length ≤ 32 do
+      throwErrorAt stx "persistentCommitFab requires 1 to 32 values"
+    let encodedValues ← sourceValues.mapM fun sourceValue => do
+      let (actualType, value) ← expression env sourceValue
+      let actualType ← tyTerm actualType
+      `(Sigma.mk $actualType $value)
+    let valueList ← sigmaExprListTerm encodedValues
+    pure (.bytes 32, ← `(Noctium.Expr.persistentCommitFab $environmentTerm $typeTerm $opening $valueList))
+  | `(nlexpr| transientCommitFab($environment:ident, $type:ident, $opening, [$values,*])) => do
+    let environmentName ← liftCoreM <| resolveGlobalConstNoOverload environment
+    let typeName ← liftCoreM <| resolveGlobalConstNoOverload type
+    let environmentTerm : TSyntax `term := ⟨mkIdent environmentName⟩
+    let typeTerm : TSyntax `term := ⟨mkIdent typeName⟩
+    let opening ← expected env opening .native
+    let sourceValues := values.getElems.toList
+    unless !sourceValues.isEmpty && sourceValues.length ≤ 32 do
+      throwErrorAt stx "transientCommitFab requires 1 to 32 values"
+    let encodedValues ← sourceValues.mapM fun sourceValue => do
+      let (actualType, value) ← expression env sourceValue
+      let actualType ← tyTerm actualType
+      `(Sigma.mk $actualType $value)
+    let valueList ← sigmaExprListTerm encodedValues
+    pure (.native, ← `(Noctium.Expr.transientCommitFab $environmentTerm $typeTerm $opening $valueList))
   | `(nlexpr| persistentHashNativeVector([$values,*])) => do
     let expressions ← values.getElems.toList.mapM fun value => do
       let (valueTy, value) ← expression env value
@@ -1743,6 +1816,7 @@ private inductive MerkleLeafType where
 
 private structure EntryEffects where
   env : Bindings
+  nominalBytes32Bindings : List (String × NominalBytes32) := []
   merkleLeafTypes : List (String × MerkleLeafType) := []
   terms : Array (TSyntax `term) := #[]
   spans : Array (TSyntax `term) := #[]
@@ -1751,6 +1825,26 @@ private structure EntryEffects where
   returnViews : Array (TSyntax `term) := #[]
   nextLocal : Nat := 0
   usedLocalNames : List String := []
+
+private partial def nominalBytes32OfExpression (state : EntryEffects)
+    (expression : TSyntax `nlexpr) : Option NominalBytes32 :=
+  match expression with
+  | `(nlexpr| disclose($value)) => nominalBytes32OfExpression state value
+  | `(nlexpr| $name:ident) => state.nominalBytes32Bindings.lookup name.getId.toString
+  | _ => none
+
+private def checkNominalBytes32Argument (state : EntryEffects)
+    (expression : TSyntax `nlexpr) (expected : NominalBytes32) (operation : String) :
+    CommandElabM Unit := do
+  if let some actual := nominalBytes32OfExpression state expression then
+    unless actual == expected do
+      throwErrorAt expression
+        s!"{operation} expects {expected.displayName}, got {actual.displayName}"
+
+private def addNominalBytes32Binding (state : EntryEffects) (name : String)
+    (type : NominalBytes32) : EntryEffects :=
+  {state with nominalBytes32Bindings :=
+    (name, type) :: state.nominalBytes32Bindings.filter (·.1 != name)}
 
 private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `nlexpr) :=
   match effect with
@@ -2470,6 +2564,7 @@ private def elaborateEffect (schema : List (String × StateKind))
       let nonce ← checkedExpression state.env nonce (.bytes 32)
       let color ← checkedExpression state.env color (.bytes 32)
       let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      checkNominalBytes32Argument state recipient .contractAddress "relayShieldedImmediate"
       let recipient ← checkedExpression state.env recipient (.bytes 32)
       let addressName := s!"noctium_relay_address_{state.terms.size}"
       unless state.env.all (fun binding => binding.1 != addressName) do
@@ -2751,6 +2846,7 @@ private def elaborateEffect (schema : List (String × StateKind))
       unless fields.map Prod.fst == ["nonce", "color", "value", "mtIndex"] do
         throwErrorAt storage "sendShieldedFromMap requires the exact shielded coin field order"
       let sendAmountValue ← checkedExpression state.env sendAmount (.uint (2 ^ 128 - 1))
+      checkNominalBytes32Argument state recipient .zswapCoinPublicKey "sendShieldedFromMap"
       let recipientValue ← checkedExpression state.env recipient (.bytes 32)
       let coinName := s!"noctium_send_coin_{state.terms.size}"
       let coin := mkIdent (Name.mkSimple coinName)
@@ -2815,6 +2911,12 @@ private def elaborateEffect (schema : List (String × StateKind))
       let domain ← checkedExpression state.env domain (.bytes 32)
       let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
       let term ← `(Noctium.Effect.mintUnshielded $domain $amount)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| receiveUnshielded($color:nlexpr, $amount:nlexpr)) => do
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint balanceMaximum)
+      let term ← `(Noctium.Effect.incUnshieldedInputs $color $amount
+        (Noctium.Expr.bool Bool.true))
       state := {state with terms := state.terms.push term}
     | `(nlupdate| incUnshieldedInputs($color:nlexpr, $amount:nlexpr, $isUnshielded:nlexpr)) => do
       let color ← checkedExpression state.env color (.bytes 32)
@@ -2890,8 +2992,9 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| when $_:nlexpr readSelf as $destination:ident) => do
     let (readName, updated) ← freshReadName depth state destination
     let term ← `(Noctium.Effect.readContractAddress $(stringTerm readName))
-    state := ← bindReadName {updated with terms := updated.terms.push term}
+    let updated ← bindReadName {updated with terms := updated.terms.push term}
       destination.getId.toString readName (.bytes 32)
+    state := addNominalBytes32Binding updated destination.getId.toString .contractAddress
   | `(nleffect| member $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr member $path:nlpath as $destination:ident) =>
     state := ← elaborateNamedPathRead schema "member" path destination depth guard state
@@ -3069,10 +3172,15 @@ private partial def elaborateStatements (schema : List (String × StateKind))
         `(Noctium.Backend.Impact.activityGuardWithin
           $parentExpression $negated))
       let branchEnv := state.env
+      let branchNominalBytes32Bindings := state.nominalBytes32Bindings
       let afterThen ← elaborateStatements schema thenPath (depth + 1) thenStatements state
       let afterElse ← elaborateStatements schema elsePath (depth + 1) elseStatements
-        {afterThen with env := branchEnv}
-      state := {afterElse with env := branchEnv}
+        {afterThen with
+          env := branchEnv
+          nominalBytes32Bindings := branchNominalBytes32Bindings}
+      state := {afterElse with
+        env := branchEnv
+        nominalBytes32Bindings := branchNominalBytes32Bindings}
     | _ => throwErrorAt statement "unsupported Noctium state statement"
   pure state
 
@@ -3665,7 +3773,12 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
         let env ← addLogicalReferences env info.logicalOutputs
         let reserved := statements.toList.flatMap (fun statement => syntaxIdentifiers statement.raw) ++
           returns.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
-        let initial : EntryEffects := {env, merkleLeafTypes, usedLocalNames := reserved}
+        let initial : EntryEffects := {
+          env := env
+          merkleLeafTypes := merkleLeafTypes
+          usedLocalNames := reserved
+          nominalBytes32Bindings := info.nominalBytes32Outputs
+        }
         let lowered ← elaborateStatements schema none 0 statements initial
         let lowered ← elaborateReturns ((← getCurrNamespace) ++ name.getId).toString returns info lowered
         let circuitTerm := mkIdent info.declName
@@ -3685,7 +3798,12 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
         let env ← addLogicalReferences env info.logicalOutputs
         let reserved := statements.toList.flatMap (fun statement => syntaxIdentifiers statement.raw) ++
           returns.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
-        let initial : EntryEffects := {env, merkleLeafTypes, usedLocalNames := reserved}
+        let initial : EntryEffects := {
+          env := env
+          merkleLeafTypes := merkleLeafTypes
+          usedLocalNames := reserved
+          nominalBytes32Bindings := info.nominalBytes32Outputs
+        }
         let lowered ← elaborateStatements schema none 0 statements initial
         let lowered ← elaborateReturns ((← getCurrNamespace) ++ name.getId).toString returns info lowered
         let circuitTerm := mkIdent info.declName
@@ -3917,14 +4035,15 @@ scoped syntax (name := witnessCircuitCommand) "noctium_witness_circuit" ident
 unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportName : String)
     (outputName : String := "") (observationArtifact? : Option String := none)
     (describeOutputs : Helpers.Program → Witness.Compiled →
-      CommandElabM (List (String × Ty × Name) × List (String × Name × List String)) :=
-      fun _ _ => pure ([], [])) : CommandElabM Unit := do
+      CommandElabM (List (String × Ty × Name) × List (String × Name × List String) ×
+        List (String × NominalBytes32)) :=
+      fun _ _ => pure ([], [], [])) : CommandElabM Unit := do
     let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
     let fullName := (← getCurrNamespace) ++ name.getId
     let compiled ← match Witness.compile program exportName fullName.toString outputName with
       | .ok value => pure value
       | .error diagnostic => failDisclosure diagnostic *> throwError "typed witness compilation failed"
-    let (logicalOutputs, aggregateOutputs) ← describeOutputs program compiled
+    let (logicalOutputs, aggregateOutputs, nominalBytes32Outputs) ← describeOutputs program compiled
     let sourceTerm := mkIdent sourceName
     let fullNameTerm := stringTerm fullName.toString
     let exportNameTerm := stringTerm exportName
@@ -3951,6 +4070,7 @@ unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportNam
       publicInputs := (compiled.circuit.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty),
       outputs := compiled.circuit.outputs.map fun value => (value.name, value.ty),
       logicalOutputs,
+      nominalBytes32Outputs,
       aggregateOutputs,
       witnessCallArguments? := some (exported.inputs.map (·.name)),
       aggregateInputs,

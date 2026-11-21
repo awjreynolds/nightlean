@@ -1389,6 +1389,8 @@ private def expressionNames : Expr ty → List String
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value
   | .persistentHashFab _ _ values => expressionNamesFabValues values
+  | .persistentCommitFab _ _ opening values | .transientCommitFab _ _ opening values =>
+    expressionNames opening ++ expressionNamesFabValues values
   | .hashToCurve values | .persistentHashNativeVector values | .transientHash values => values.flatMap expressionNames
   | .toBytes32 value | .fromBytes32 value | .fromBytes value => expressionNames value
   | .reverseBytes32 value | .reverseBytes value | .sliceBytes value _ _ => expressionNames value
