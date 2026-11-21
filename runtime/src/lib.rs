@@ -1719,6 +1719,8 @@ pub enum Instruction {
         nullifier_b: Expr,
         #[serde(rename = "outputCommitment")]
         output_commitment: Expr,
+        #[serde(default, rename = "stagedCommitment")]
+        staged_commitment: Option<Expr>,
     },
     #[serde(rename = "relayShieldedImmediate", rename_all = "camelCase")]
     RelayShieldedImmediate {
@@ -1992,8 +1994,12 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::SpendShieldedFromMap { .. } => SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
         Instruction::SendShieldedFromMap { .. } => SEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
-        Instruction::MergeShieldedFromMap { .. } => {
-            MERGE_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec()
+        Instruction::MergeShieldedFromMap { staged_commitment, .. } => {
+            let mut counts = MERGE_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec();
+            if staged_commitment.is_some() {
+                counts.extend_from_slice(&[1, 4, 6, 2, 1, 1]);
+            }
+            counts
         }
         Instruction::RelayShieldedImmediate { .. } => {
             RELAY_SHIELDED_IMMEDIATE_FIELD_COUNTS.to_vec()
@@ -3253,31 +3259,41 @@ fn validate_shielded_merge_layout(
     output_color: &Expr,
     output_amount: &Expr,
     output_commitment: &Expr,
-) -> Result<(u32, PathPart, PathPart, usize)> {
+    staged: bool,
+) -> Result<(u32, PathPart, Option<PathPart>, usize)> {
     let removal_a = plan
         .operations
         .get(operation_index + 1)
         .ok_or_else(|| anyhow!("shielded merge must remove its first input"))?;
-    let removal_b = plan
-        .operations
-        .get(operation_index + 2)
-        .ok_or_else(|| anyhow!("shielded merge must remove its second input"))?;
     let (removal_a, guard_a) = unguarded_operation(removal_a);
-    let (removal_b, guard_b) = unguarded_operation(removal_b);
-    ensure!(guard_a.is_none() && guard_b.is_none(), "shielded merge removals must be unguarded");
-    let (Instruction::MapRemove { slot: slot_a, keys: keys_a },
-        Instruction::MapRemove { slot: slot_b, keys: keys_b }) = (removal_a, removal_b)
-    else {
-        bail!("shielded merge must be followed by two Map removals")
+    let Instruction::MapRemove { slot: slot_a, keys: keys_a } = removal_a else {
+        bail!("shielded merge must be followed by a Map removal")
     };
-    ensure!(slot_a == slot_b, "shielded merge inputs must use the same Map");
-    ensure!(keys_a.len() == 1 && keys_b.len() == 1, "shielded merge requires root Map keys");
+    ensure!(guard_a.is_none(), "shielded merge removals must be unguarded");
     ensure!(
-        keys_a[0].alignment == "bytes32" && keys_b[0].alignment == "bytes32",
-        "shielded merge Map keys must be Bytes32"
+        keys_a.len() == 1 && keys_a[0].alignment == "bytes32",
+        "shielded merge requires root Bytes32 Map keys"
     );
-    ensure!(keys_a[0].expression != keys_b[0].expression, "shielded merge inputs must be distinct");
     validate_shielded_coin_map(plan, *slot_a)?;
+
+    let second_key = if staged {
+        None
+    } else {
+        let removal = plan
+            .operations
+            .get(operation_index + 2)
+            .ok_or_else(|| anyhow!("shielded merge must remove its second input"))?;
+        let (removal, guard) = unguarded_operation(removal);
+        let Instruction::MapRemove {slot, keys} = removal else {
+            bail!("shielded merge must be followed by two Map removals")
+        };
+        ensure!(
+            guard.is_none() && slot == slot_a && keys.len() == 1
+                && keys[0].alignment == "bytes32" && keys[0].expression != keys_a[0].expression,
+            "shielded merge requires two distinct unguarded removals from the same Map"
+        );
+        Some(&keys[0])
+    };
 
     let mut record_indices = (0..operation_index)
         .rev()
@@ -3287,12 +3303,7 @@ fn validate_shielded_merge_layout(
                 && matches!(candidate,
                     Instruction::PopeqFields { schema, .. }
                         if is_shielded_coin_record_schema(schema))
-        })
-        .take(2)
-        .collect::<Vec<_>>();
-    ensure!(record_indices.len() == 2, "shielded merge requires two exact coin reads");
-    let record_b_index = record_indices.remove(0);
-    let record_a_index = record_indices.remove(0);
+        });
 
     let validate_read = |record_index: usize,
                          nonce: &Expr,
@@ -3351,9 +3362,17 @@ fn validate_shielded_merge_layout(
         Ok(keys[0].clone())
     };
 
+    let key_b = second_key
+        .map(|key| {
+            let index = record_indices.next()
+                .ok_or_else(|| anyhow!("shielded merge requires its second exact coin read"))?;
+            validate_read(index, nonce_b, color_b, amount_b, key)
+        })
+        .transpose()?;
+    let record_a_index = record_indices.next()
+        .ok_or_else(|| anyhow!("shielded merge requires its first exact coin read"))?;
     let key_a = validate_read(record_a_index, nonce_a, color_a, amount_a, &keys_a[0])?;
-    let key_b = validate_read(record_b_index, nonce_b, color_b, amount_b, &keys_b[0])?;
-    let receive_index = operation_index + 3;
+    let receive_index = operation_index + if staged { 2 } else { 3 };
     let receive = plan
         .operations
         .get(receive_index)
@@ -3587,6 +3606,7 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
                 output_color,
                 output_amount,
                 output_commitment,
+                staged_commitment,
                 ..
             } => {
                 ensure!(guard.is_none(), "shielded merge must be unguarded");
@@ -3603,6 +3623,7 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
                     output_color,
                     output_amount,
                     output_commitment,
+                    staged_commitment.is_some(),
                 )?;
             }
             Instruction::RelayShieldedImmediate { recipient, .. } => {
@@ -6012,6 +6033,7 @@ fn probe_instruction(
             nullifier_a,
             nullifier_b,
             output_commitment,
+            staged_commitment,
         } => probe_expressions(
             [
                 nonce_a,
@@ -6023,10 +6045,10 @@ fn probe_instruction(
                 output_nonce,
                 output_color,
                 output_amount,
-            nullifier_a,
-            nullifier_b,
-            output_commitment,
-            ],
+                nullifier_a,
+                nullifier_b,
+                output_commitment,
+            ].into_iter().chain(staged_commitment),
             plan,
             env,
             deferred_outputs,
@@ -8573,6 +8595,7 @@ impl PreparationCursor {
                 nullifier_a: source_nullifier_a_expr,
                 nullifier_b: source_nullifier_b_expr,
                 output_commitment: source_output_commitment_expr,
+                staged_commitment,
             } => {
                 let (_, read_key_a, read_key_b, receive_index) =
                     validate_shielded_merge_layout(
@@ -8588,6 +8611,7 @@ impl PreparationCursor {
                         output_color,
                         output_amount,
                         source_output_commitment_expr,
+                        staged_commitment.is_some(),
                     )?;
                 let coin_a = ShieldedCoinInfo {
                     nonce: Nonce(claim_hash_output(
@@ -8615,14 +8639,14 @@ impl PreparationCursor {
                     evaluate(&read_key_a.expression, &env)?,
                     "first shielded merge Map key",
                 )?;
-                let key_b = claim_hash_output(
-                    evaluate(&read_key_b.expression, &env)?,
-                    "second shielded merge Map key",
-                )?;
-                ensure!(
-                    coin_a.nonce.0 == key_a && coin_b.nonce.0 == key_b,
-                    "shielded merge coin nonce differs from its Map key"
-                );
+                ensure!(coin_a.nonce.0 == key_a, "first merge coin nonce differs from its Map key");
+                if let Some(read_key_b) = read_key_b {
+                    let key_b = claim_hash_output(
+                        evaluate(&read_key_b.expression, &env)?,
+                        "second shielded merge Map key",
+                    )?;
+                    ensure!(coin_b.nonce.0 == key_b, "second merge coin nonce differs from its Map key");
+                }
                 ensure!(
                     coin_a.nonce != coin_b.nonce,
                     "shielded merge inputs must be distinct"
@@ -8727,6 +8751,22 @@ impl PreparationCursor {
                         (),
                         output_commitment
                     );
+                if let Some(staged) = staged_commitment {
+                    let commitment = coin_b.commitment(&Recipient::Contract(context.address));
+                    ensure!(
+                        commitment.0 == claim_hash_output(evaluate(staged, &env)?, "staged merge commitment")?,
+                        "staged merge commitment mismatch"
+                    );
+                    let indices = &context.call_context.com_indices;
+                    let staged_index = indices.get(&commitment)
+                        .ok_or_else(|| anyhow!("staged merge coin is absent from context"))?;
+                    let output_index = indices.get(&output_commitment)
+                        .ok_or_else(|| anyhow!("staged merge output is absent from context"))?;
+                    ensure!(staged_index != output_index, "staged merge and output bookings overlap");
+                    program.extend(onchain_runtime::program_fragments::kernel_claim_zswap_coin_receive!(
+                        (), (), commitment
+                    ));
+                }
                 program.extend(nullifier_a_ops);
                 program.extend(nullifier_b_ops);
                 program.extend(output_ops[..5].iter().cloned());
@@ -10853,7 +10893,7 @@ mod shielded_merge_tests {
     fn merge_context(
         schema: &Json,
         coin_a: &ShieldedCoinInfo,
-        coin_b: &ShieldedCoinInfo,
+        coin_b: Option<&ShieldedCoinInfo>,
         commitment: Commitment,
         output_index: u64,
     ) -> QueryContext<Db> {
@@ -10876,16 +10916,16 @@ mod shielded_merge_tests {
             )
             .unwrap()
         };
-        let mut coins: HashMap<AlignedValue, StateValue<Db>, Db> = HashMap::default();
-        coins = coins
-            .insert(
-                AlignedValue::from(coin_a.nonce),
-                StateValue::Cell(Sp::new(record(coin_a, 7))),
-            )
-            .insert(
+        let mut coins = HashMap::default().insert(
+            AlignedValue::from(coin_a.nonce),
+            StateValue::Cell(Sp::new(record(coin_a, 7))),
+        );
+        if let Some(coin_b) = coin_b {
+            coins = coins.insert(
                 AlignedValue::from(coin_b.nonce),
                 StateValue::Cell(Sp::new(record(coin_b, 8))),
             );
+        }
         let state = ChargedState::new(StateValue::Array(vec![StateValue::Map(coins)].into()));
         let mut context = QueryContext::new(state, ContractAddress(HashOutput(ADDRESS)));
         context.call_context.com_indices = context
@@ -10910,7 +10950,7 @@ mod shielded_merge_tests {
         let execution = prepare_with_context(
             &plan,
             &inputs,
-            merge_context(&coin_schema(), &coin_a, &coin_b, commitment.clone(), 11),
+            merge_context(&coin_schema(), &coin_a, Some(&coin_b), commitment.clone(), 11),
             &ledger::structure::INITIAL_PARAMETERS,
         )
         .unwrap();
@@ -10963,7 +11003,7 @@ mod shielded_merge_tests {
             assert!(prepare_with_context(
                 &plan,
                 &changed,
-                merge_context(&coin_schema(), &coin_a, &coin_b, commitment.clone(), 11),
+                merge_context(&coin_schema(), &coin_a, Some(&coin_b), commitment.clone(), 11),
                 &ledger::structure::INITIAL_PARAMETERS,
             )
             .is_err());
@@ -10974,7 +11014,7 @@ mod shielded_merge_tests {
         assert!(prepare_with_context(
             &plan,
             &duplicate_input,
-            merge_context(&coin_schema(), &coin_a, &coin_b, commitment.clone(), 11),
+            merge_context(&coin_schema(), &coin_a, Some(&coin_b), commitment.clone(), 11),
             &ledger::structure::INITIAL_PARAMETERS,
         )
         .is_err());
@@ -10985,7 +11025,7 @@ mod shielded_merge_tests {
         assert!(prepare_with_context(
             &plan,
             &inputs,
-            merge_context(&coin_schema(), &coin_a, &wrong_color_coin_b, commitment.clone(), 11),
+            merge_context(&coin_schema(), &coin_a, Some(&wrong_color_coin_b), commitment.clone(), 11),
             &ledger::structure::INITIAL_PARAMETERS,
         )
         .is_err());
@@ -10995,7 +11035,7 @@ mod shielded_merge_tests {
         assert!(prepare_with_context(
             &plan,
             &inputs,
-            merge_context(&coin_schema(), &overflow_a, &overflow_b, commitment.clone(), 11),
+            merge_context(&coin_schema(), &overflow_a, Some(&overflow_b), commitment.clone(), 11),
             &ledger::structure::INITIAL_PARAMETERS,
         )
         .is_err());
@@ -11017,7 +11057,7 @@ mod shielded_merge_tests {
             let compiled_execution = prepare_with_context(
                 &compiled_plan,
                 &compiled_inputs,
-                merge_context(schema, &coin_a, &coin_b, commitment, 11),
+                merge_context(schema, &coin_a, Some(&coin_b), commitment, 11),
                 &ledger::structure::INITIAL_PARAMETERS,
             )
             .unwrap();
@@ -11028,5 +11068,58 @@ mod shielded_merge_tests {
             assert_eq!(checked_schedule, compiled_execution.activity_schedule);
             super::check(&compiled_execution, &circuit).unwrap();
         }
+    }
+
+    #[test]
+    #[ignore = "requires compiler-emitted immediate merge artifacts"]
+    fn staged_shielded_merge_matches_compact_claims() {
+        let directory = std::env::var("NOCTIUM_CHECK_IMMEDIATE_MERGE_ARTIFACT").unwrap();
+        let directory = std::path::Path::new(&directory);
+        let plan: Plan = serde_json::from_slice(
+            &std::fs::read(directory.join("ShieldedCoinImmediateMerge.merge.impact.json")).unwrap(),
+        )
+        .unwrap();
+        let circuit = IrSource::load(
+            &std::fs::read(directory.join("ShieldedCoinImmediateMerge.merge.zkir")).unwrap()[..],
+        )
+        .unwrap();
+
+        let (a, b, result, nullifier_a, nullifier_b, output) =
+            merge_coins([0x42; 32], [0x41; 32], 5, [0x43; 32], [0x41; 32], 7);
+        let staged = b.commitment(&Recipient::Contract(ContractAddress(HashOutput(ADDRESS))));
+        let inputs = BTreeMap::from([
+            ("domain".into(), bytes_json(&[0x40; 32])),
+            ("nonceA".into(), bytes_json(&a.nonce.0.0)),
+            ("nonceB".into(), bytes_json(&b.nonce.0.0)),
+            ("colorB".into(), bytes_json(&b.type_.0.0)),
+        ]);
+        let schema = &plan.state[0].kind["tree"]["map"][1]["composite"];
+        let mut context = merge_context(schema, &a, None, output, 11);
+        let parameters = &ledger::structure::INITIAL_PARAMETERS;
+        assert!(prepare_with_context(&plan, &inputs, context.clone(), parameters).is_err());
+        context.call_context.com_indices = context.call_context.com_indices.insert(staged, 10);
+
+        let execution = prepare_with_context(&plan, &inputs, context, parameters).unwrap();
+        let effects = &execution.after.effects;
+        assert_eq!(effects.claimed_nullifiers.size(), 2);
+        assert!(effects.claimed_nullifiers.member(&nullifier_a));
+        assert!(effects.claimed_nullifiers.member(&nullifier_b));
+        assert_eq!(effects.claimed_shielded_spends.size(), 1);
+        assert!(effects.claimed_shielded_spends.member(&output));
+        assert_eq!(effects.claimed_shielded_receives.size(), 2);
+        assert!(effects.claimed_shielded_receives.iter().any(|claim| **claim == staged));
+        assert!(effects.claimed_shielded_receives.iter().any(|claim| **claim == output));
+        let StateValue::Array(slots) = execution.after.state.get_ref() else {
+            panic!("expected shielded merge state array")
+        };
+        let StateValue::Map(coins) = slots.get(0).unwrap() else {
+            panic!("expected shielded coin Map")
+        };
+        assert_eq!(coins.size(), 1);
+        assert_eq!(
+            coins.get(&AlignedValue::from(result.nonce)).as_deref(),
+            Some(&StateValue::Cell(Sp::new(AlignedValue::from(result.qualify(11)))))
+        );
+        super::check(&execution, &circuit).unwrap();
     }
 }
