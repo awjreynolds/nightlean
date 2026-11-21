@@ -3841,8 +3841,8 @@
       "id": "C-STDLIB-USERADDRESS",
       "layer": "standard-library",
       "surface": "UserAddress",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A named UserAddress wire codec supplies a nominal Bytes32 binding to the unshielded spend effect. Lean rejects a shielded key or contract address in the user branch.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3855,15 +3855,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/TypedPublicAddress.lean",
+        "tests/NativeUnshieldedSend.lean",
+        "tests/compact/unshielded-send.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-PUBLICADDRESS",
       "layer": "standard-library",
       "surface": "PublicAddress",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Typed user and contract constructors bind a fixed recipient tag before lowering. The two authored effects emit the same operations as the existing native-checked raw tag cases. This scope covers unshielded spend arguments, with aggregate transport and other operations still open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3876,7 +3880,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/TypedPublicAddress.lean",
+        "tests/NativeUnshieldedSend.lean",
+        "tests/compact/unshielded-send.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
