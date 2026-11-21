@@ -3762,8 +3762,8 @@
       "id": "C-STDLIB-SHIELDEDCOININFO",
       "layer": "standard-library",
       "surface": "ShieldedCoinInfo",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A reusable Lean codec names the unqualified nonce, color and UInt128 amount in the pinned order. The fixture checks zero and maximum values, rejects overflow and malformed fields, and emits the checked 80-byte path from a private named input. Settlement and other ABI paths remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3776,7 +3776,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Midnight/ShieldedCoinInfo.lean",
+        "tests/ShieldedCoinInfo.lean",
+        "tests/compact/shielded-coin-info.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

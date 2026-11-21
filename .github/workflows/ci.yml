@@ -144,6 +144,7 @@ jobs:
           lake env lean tests/IndexedShieldedNonce.lean
           lake env lean tests/ShieldedBurnAddress.lean
           lake env lean tests/QualifiedCoinCell.lean
+          lake env lean tests/ShieldedCoinInfo.lean
           lake env lean tests/QualifiedCoinSet.lean
           lake env lean tests/QualifiedCoinList.lean
           lake env lean tests/QualifiedCoinRecipient.lean
