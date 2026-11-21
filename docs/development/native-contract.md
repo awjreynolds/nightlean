@@ -227,6 +227,39 @@ an active call with two mint amounts, 17 and 2, in each namespace. Ledger
 9.1.0.1 finalized the call with the predicted contract state. The transaction
 settled no tokens to a recipient.
 
+## Mint an unshielded token to a tagged recipient
+
+Compact's `mintUnshieldedToken(domain, amount, recipient)` returns the token
+color derived from the executing contract and domain, records the mint, and
+claims a spend to a `ContractAddress` or `UserAddress`. The Noctium source
+surface has no single helper for this operation. Compose the existing effects
+and derive the same color explicitly:
+
+```lean
+readSelf as own
+mintUnshielded(domain, amount)
+claimUnshieldedCoinSpend(persistentHashVector32([
+  bytes32("midnight:derive_token"), domain, own]),
+  cast(UInt 128, amount), true, isContract, recipient)
+when boolAnd(isContract, eq(recipient, own))
+  incUnshieldedInputs(persistentHashVector32([
+    bytes32("midnight:derive_token"), domain, own]),
+    cast(UInt 128, amount), true)
+return color : Bytes32 := disclose(persistentHashVector32([
+  bytes32("midnight:derive_token"), domain, own]))
+```
+
+The self-credit applies only when the recipient tag is `ContractAddress` and
+its bytes equal the current contract address. A user recipient with the same
+bytes does not receive that credit. This path records no unshielded output.
+The [Lean fixture](../../tests/NativeUnshieldedMintRecipient.lean),
+[pinned Compact comparison](../../tests/compact/UnshieldedMintRecipient.compact)
+and [Compact runner](../../tests/compact/unshielded-mint-recipient.mjs) compare
+the returned color, mint, spend tags and self-credit for self-contract,
+other-contract and same-bytes user recipients. The
+[native checker](../../runtime/tests/native_unshielded_mint_recipient.rs)
+also checks the exact Compact color and rejects a changed recipient tag.
+
 ## Read the current contract address
 
 `readSelf as own` binds the executing contract's `Bytes32` address.
