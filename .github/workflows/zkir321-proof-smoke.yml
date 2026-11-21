@@ -1,0 +1,50 @@
+name: ZKIR 3.2.1 native proof smoke
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/zkir321-proof-smoke.yml'
+      - 'profiles/midnight-ledger-9*.json'
+      - 'runtime/Cargo.toml'
+      - 'runtime/Cargo.lock'
+      - 'runtime/src/profile.rs'
+      - 'runtime/tests/zkir321_proof_smoke.rs'
+      - 'tests/zkir321/jubjub-intermediate.zkir'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zkir321-proof-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-proof:
+    name: Native 3.2.1 keygen and proof binding
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install Rust 1.100.0
+        run: rustup toolchain install 1.100.0 --profile minimal --no-self-update
+      - name: Generate and verify a fresh native proof
+        run: |
+          set -euo pipefail
+          scratch=$(mktemp -d "${RUNNER_TEMP:-/tmp}/noctium-zkir321-proof.XXXXXX")
+          trap 'rm -rf "$scratch"' EXIT
+          srs="$scratch/bls_midnight_2p10"
+          # Official k10 entry: github.com/midnightntwrk/midnight-trusted-setup/MIDNIGHT_SRS_CATALOG.md.
+          curl --fail --location --retry 3 --retry-all-errors \
+            --silent --show-error \
+            https://srs.midnight.network/midnight-srs-2p10 \
+            --output "$srs"
+          printf '%s  %s\n' \
+            46b2290933cbed4c378889e4ba971f1a92888331ffb09466acd4ff61a1e2cb42 \
+            "$srs" | sha256sum --check --status
+          NOCTIUM_ZKIR321_K10_SRS="$srs" \
+            cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
+              --no-default-features --features zkir-321 \
+              --test zkir321_proof_smoke -- --ignored --nocapture
