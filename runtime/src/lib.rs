@@ -167,6 +167,62 @@ fn claim_hash_output(value: Value, label: &str) -> Result<HashOutput> {
     Ok(HashOutput(bytes))
 }
 
+fn explicit_shielded_recipient(
+    is_contract: &Expr,
+    recipient: &Expr,
+    env: &Environment,
+) -> Result<Recipient> {
+    let is_contract = evaluate(is_contract, env)?.boolean()?;
+    let recipient = claim_hash_output(evaluate(recipient, env)?, "shielded recipient")?;
+    Ok(if is_contract {
+        Recipient::Contract(ContractAddress(recipient))
+    } else {
+        Recipient::User(PublicKey(recipient))
+    })
+}
+
+fn booked_coin_recipient(
+    instruction: &Instruction,
+    context: &QueryContext<Db>,
+    env: &Environment,
+) -> Result<Recipient> {
+    match instruction {
+        Instruction::WriteShieldedCoinCellTo {
+            is_contract,
+            recipient,
+            ..
+        }
+        | Instruction::InsertShieldedCoinSetTo {
+            is_contract,
+            recipient,
+            ..
+        }
+        | Instruction::ListPushFrontCoinTo {
+            is_contract,
+            recipient,
+            ..
+        } => explicit_shielded_recipient(is_contract, recipient, env),
+        Instruction::WriteShieldedCoinCell { .. }
+        | Instruction::InsertShieldedCoinSet { .. }
+        | Instruction::ListPushFrontCoin { .. } => {
+            Ok(Recipient::Contract(context.address))
+        }
+        _ => bail!("instruction does not select a booked coin recipient"),
+    }
+}
+
+fn qualify_booked_coin_for(
+    context: &QueryContext<Db>,
+    coin: &ShieldedCoinInfo,
+    recipient: &Recipient,
+) -> Option<QualifiedInfo> {
+    context
+        .call_context
+        .com_indices
+        .get(&coin.commitment(recipient))
+        .map(|index| coin.qualify(*index))
+}
+
 fn byte_alignment_length(alignment: &str) -> Result<Option<usize>> {
     if alignment == "bytes32" {
         return Ok(Some(32));
@@ -443,6 +499,23 @@ pub enum Expr {
     PersistentHashNativeVector {
         values: Vec<Expr>,
     },
+    #[serde(rename = "persistentHashFab")]
+    PersistentHashFab {
+        schema: Json,
+        values: Vec<FabHashInput>,
+    },
+    #[serde(rename = "persistentCommitFab")]
+    PersistentCommitFab {
+        schema: Json,
+        opening: Box<Expr>,
+        values: Vec<FabHashInput>,
+    },
+    #[serde(rename = "transientCommitFab")]
+    TransientCommitFab {
+        schema: Json,
+        opening: Box<Expr>,
+        values: Vec<FabHashInput>,
+    },
     #[serde(rename = "transientHash")]
     TransientHash {
         values: Vec<Expr>,
@@ -539,6 +612,31 @@ pub enum Expr {
         right: Box<Expr>,
     },
 }
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(tag = "tag", rename_all = "camelCase", deny_unknown_fields)]
+pub enum FabHashInput {
+    Bytes {
+        length: usize,
+        value: Box<Expr>,
+    },
+    Bool {
+        value: Box<Expr>,
+    },
+    Uint {
+        maximum: String,
+        value: Box<Expr>,
+    },
+    EnumTag {
+        id: String,
+        maximum: String,
+        value: Box<Expr>,
+    },
+    Native {
+        value: Box<Expr>,
+    },
+}
+
 pub type Environment = BTreeMap<String, Value>;
 
 #[derive(Debug)]
@@ -567,6 +665,149 @@ fn persistent_hash(value: AlignedValue) -> Result<Value> {
     let mut bytes = zeroize::Zeroizing::new(Vec::new());
     ValueReprAlignedValue(decoded).binary_repr(&mut *bytes);
     Ok(Value::Bytes(Sha256::digest(bytes.as_slice()).to_vec()))
+}
+
+fn fab_uint_maximum(text: &str) -> Result<BigUint> {
+    ensure!(
+        !text.is_empty()
+            && text.bytes().all(|byte| byte.is_ascii_digit())
+            && (text == "0" || !text.starts_with('0')),
+        "noncanonical FAB unsigned maximum"
+    );
+    let maximum = BigUint::parse_bytes(text.as_bytes(), 10)
+        .ok_or_else(|| anyhow!("invalid FAB unsigned maximum"))?;
+    ensure!(
+        maximum <= scalars::max_uint(),
+        "FAB unsigned type exceeds target maximum"
+    );
+    Ok(maximum)
+}
+
+fn aligned_fab_uint(value: &Value, maximum: &BigUint) -> Result<AlignedValue> {
+    let Value::UInt {
+        number,
+        maximum: actual_maximum,
+    } = value
+    else {
+        bail!("FAB unsigned field requires UInt")
+    };
+    ensure!(actual_maximum == maximum, "FAB unsigned field type mismatch");
+    ensure!(number <= maximum, "FAB unsigned field outside declared type");
+    let length = usize::try_from(maximum.bits().div_ceil(8).max(1))?;
+    let bytes = ValueAtom(number.to_bytes_le()).normalize();
+    AlignedValue::new(
+        FabValue(vec![bytes]),
+        Alignment::singleton(AlignmentAtom::Bytes {
+            length: u32::try_from(length)?,
+        }),
+    )
+    .ok_or_else(|| anyhow!("invalid FAB unsigned alignment"))
+}
+
+fn aligned_fab_payload(
+    schema_json: &Json,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<AlignedValue> {
+    let schema_bytes = serde_json::to_vec(schema_json)?;
+    let schema = Schema::from_json(&schema_bytes)?;
+    let fields = schema.fab_hash_fields()?;
+    ensure!(!fields.is_empty(), "FAB hash requires at least one field");
+    ensure!(
+        fields.len() == values.len(),
+        "FAB hash value count differs from its schema"
+    );
+    let aligned = fields
+        .iter()
+        .zip(values)
+        .map(|(field, input)| -> Result<AlignedValue> {
+            match (field, input) {
+                (
+                    crate::aggregates::FabHashField::Bytes(expected),
+                    FabHashInput::Bytes { length, value },
+                ) => {
+                    ensure!(
+                        length == expected,
+                        "FAB byte field length differs from schema"
+                    );
+                    let value = evaluate(value, env)?;
+                    ensure!(
+                        value.scalar_type().bytes_length() == Some(*expected),
+                        "FAB byte field type differs from schema"
+                    );
+                    aligned_bytes(&value)
+                }
+                (crate::aggregates::FabHashField::Bool, FabHashInput::Bool { value }) => {
+                    aligned(&evaluate(value, env)?, "bit")
+                }
+                (
+                    crate::aggregates::FabHashField::UInt(expected),
+                    FabHashInput::Uint { maximum, value },
+                ) => {
+                    ensure!(
+                        fab_uint_maximum(maximum)? == *expected,
+                        "FAB unsigned maximum differs from schema"
+                    );
+                    let value = evaluate(value, env)?;
+                    aligned_fab_uint(&value, expected)
+                }
+                (
+                    crate::aggregates::FabHashField::EnumTag {
+                        id: expected_id,
+                        maximum: expected_maximum,
+                    },
+                    FabHashInput::EnumTag { id, maximum, value },
+                ) => {
+                    ensure!(id == expected_id, "FAB enum identity differs from schema");
+                    ensure!(
+                        fab_uint_maximum(maximum)? == *expected_maximum,
+                        "FAB enum tag maximum differs from schema"
+                    );
+                    let value = evaluate(value, env)?;
+                    aligned_fab_uint(&value, expected_maximum)
+                }
+                (crate::aggregates::FabHashField::Native, FabHashInput::Native { value }) => {
+                    Ok(field_value(evaluate(value, env)?.field()?))
+                }
+                _ => bail!("FAB hash value type differs from schema"),
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(AlignedValue::concat(&aligned))
+}
+
+fn persistent_hash_fab(
+    schema_json: &Json,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<Value> {
+    persistent_hash(aligned_fab_payload(schema_json, values, env)?)
+}
+
+fn persistent_commit_fab(
+    schema_json: &Json,
+    opening: &Expr,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<Value> {
+    let opening = claim_hash_output(evaluate(opening, env)?, "FAB persistent commitment opening")?;
+    let payload = aligned_fab_payload(schema_json, values, env)?;
+    let commitment = base_crypto::hash::persistent_commit(&ValueReprAlignedValue(payload), opening);
+    Ok(Value::Bytes(commitment.0.to_vec()))
+}
+
+fn transient_commit_fab(
+    schema_json: &Json,
+    opening: &Expr,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<Value> {
+    let opening = evaluate(opening, env)?.field()?;
+    let payload = aligned_fab_payload(schema_json, values, env)?;
+    Ok(Value::Native(transient_crypto::hash::transient_commit(
+        &ValueReprAlignedValue(payload),
+        opening,
+    )))
 }
 
 pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
@@ -771,6 +1012,17 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
                 .collect::<Result<Vec<_>>>()?;
             persistent_hash(AlignedValue::concat(&parts))?
         }
+        Expr::PersistentHashFab { schema, values } => persistent_hash_fab(schema, values, env)?,
+        Expr::PersistentCommitFab {
+            schema,
+            opening,
+            values,
+        } => persistent_commit_fab(schema, opening, values, env)?,
+        Expr::TransientCommitFab {
+            schema,
+            opening,
+            values,
+        } => transient_commit_fab(schema, opening, values, env)?,
         Expr::TransientHash { values } => {
             ensure!(
                 values.len() <= MAX_TRANSIENT_HASH_FIELDS,
@@ -1348,12 +1600,44 @@ pub enum Instruction {
         amount: Expr,
         commitment: Expr,
     },
+    #[serde(rename = "writeShieldedCoinCellTo", rename_all = "camelCase")]
+    WriteShieldedCoinCellTo {
+        slot: u32,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        is_contract: Expr,
+        recipient: Expr,
+        commitment: Expr,
+    },
     #[serde(rename = "insertShieldedCoinSet", rename_all = "camelCase")]
     InsertShieldedCoinSet {
         slot: u32,
         nonce: Expr,
         color: Expr,
         amount: Expr,
+        commitment: Expr,
+    },
+    #[serde(rename = "insertShieldedCoinSetTo", rename_all = "camelCase")]
+    InsertShieldedCoinSetTo {
+        slot: u32,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        is_contract: Expr,
+        recipient: Expr,
+        commitment: Expr,
+    },
+    #[serde(rename = "listPushFrontCoinTo", rename_all = "camelCase")]
+    ListPushFrontCoinTo {
+        slot: u32,
+        keys: Vec<PathPart>,
+        schema: Json,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        is_contract: Expr,
+        recipient: Expr,
         commitment: Expr,
     },
     #[serde(rename = "spendShieldedFromMap", rename_all = "camelCase")]
@@ -1634,10 +1918,20 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::ReceiveShieldedToMap { .. } => RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS.to_vec(),
         Instruction::WriteShieldedCoinCell { .. } => WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS.to_vec(),
+        Instruction::WriteShieldedCoinCellTo { .. } => {
+            WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS.to_vec()
+        }
         Instruction::ListPushFrontCoin { .. } => {
             bail!("qualified coin List push must be unguarded")
         }
+        Instruction::ListPushFrontCoinTo { .. } => {
+            bail!("qualified coin List push must be unguarded")
+        }
         Instruction::InsertShieldedCoinSet { slot, .. } => {
+            validate_shielded_coin_set(plan, *slot)?;
+            INSERT_SHIELDED_COIN_SET_FIELD_COUNTS.to_vec()
+        }
+        Instruction::InsertShieldedCoinSetTo { slot, .. } => {
             validate_shielded_coin_set(plan, *slot)?;
             INSERT_SHIELDED_COIN_SET_FIELD_COUNTS.to_vec()
         }
@@ -1834,10 +2128,19 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::WriteShieldedCoinCell { .. } => {
             bail!("shielded coin Cell write must be unguarded")
         }
+        Instruction::WriteShieldedCoinCellTo { .. } => {
+            bail!("shielded coin Cell write must be unguarded")
+        }
         Instruction::ListPushFrontCoin { .. } => {
             bail!("qualified coin List push must be unguarded")
         }
+        Instruction::ListPushFrontCoinTo { .. } => {
+            bail!("qualified coin List push must be unguarded")
+        }
         Instruction::InsertShieldedCoinSet { .. } => {
+            bail!("shielded coin Set insertion must be unguarded")
+        }
+        Instruction::InsertShieldedCoinSetTo { .. } => {
             bail!("shielded coin Set insertion must be unguarded")
         }
         Instruction::SpendShieldedFromMap { .. } => {
@@ -2014,25 +2317,32 @@ fn validate_scalar_storage_type(
         "typed ledger type differs from state schema"
     );
     if *ty == ScalarType::OpaqueString {
-        ensure!(
-            depth == 1,
-            "OpaqueString is only supported as a root Map value"
-        );
-        let tree = plan
+        let state = plan
             .state
             .get(slot as usize)
-            .and_then(|state| state.kind.get("tree"))
-            .ok_or_else(|| anyhow!("OpaqueString requires a root tree Map"))?;
-        let map = tree
-            .get("map")
-            .and_then(Json::as_array)
-            .filter(|parts| parts.len() == 2)
-            .ok_or_else(|| anyhow!("OpaqueString requires a root tree Map"))?;
-        ensure!(
-            map[0].as_str() == Some("Bytes<32>")
-                && map[1] == serde_json::json!({"scalar":"OpaqueString"}),
-            "OpaqueString requires a Bytes32-keyed Map leaf"
-        );
+            .ok_or_else(|| anyhow!("state slot out of range"))?;
+        if state.kind.get("cell").and_then(Json::as_str) == Some("OpaqueString") {
+            ensure!(depth == 0, "OpaqueString Cell path schema mismatch");
+        } else {
+            ensure!(
+                depth == 1,
+                "OpaqueString is only supported as a root Cell or Map value"
+            );
+            let tree = state
+                .kind
+                .get("tree")
+                .ok_or_else(|| anyhow!("OpaqueString requires a root tree Map"))?;
+            let map = tree
+                .get("map")
+                .and_then(Json::as_array)
+                .filter(|parts| parts.len() == 2)
+                .ok_or_else(|| anyhow!("OpaqueString requires a root tree Map"))?;
+            ensure!(
+                map[0].as_str() == Some("Bytes<32>")
+                    && map[1] == serde_json::json!({"scalar":"OpaqueString"}),
+                "OpaqueString requires a Bytes32-keyed Map leaf"
+            );
+        }
     }
     Ok(())
 }
@@ -2043,6 +2353,52 @@ fn opaque_compressed_storage_path(
     guard: Option<&Expr>,
     ty: &ScalarType,
 ) -> Result<(u32, usize)> {
+    let insert_operation = operation_index
+        .checked_add(1)
+        .and_then(|index| plan.operations.get(index))
+        .ok_or_else(|| anyhow!("opaque write has no adjacent insertion"))?;
+    let (insert_operation, insert_guard) = unguarded_operation(insert_operation);
+    ensure!(
+        insert_guard == guard,
+        "opaque insertion guard differs from its write"
+    );
+    if matches!(insert_operation, Instruction::Insert { n: 1 }) {
+        let index_operation = operation_index
+            .checked_sub(1)
+            .and_then(|index| plan.operations.get(index))
+            .ok_or_else(|| anyhow!("opaque Cell write has no adjacent slot push"))?;
+        let (index_operation, index_guard) = unguarded_operation(index_operation);
+        ensure!(
+            index_guard == guard,
+            "opaque Cell index guard differs from its write"
+        );
+        let Instruction::Push {
+            storage: false,
+            expression: Expr::Constant { value },
+            alignment,
+        } = index_operation
+        else {
+            bail!("opaque Cell write requires a constant root Cell slot")
+        };
+        ensure!(
+            alignment == "field",
+            "opaque Cell index must use field alignment"
+        );
+        let slot = value
+            .parse::<u32>()
+            .map_err(|_| anyhow!("opaque Cell index is not a canonical slot"))?;
+        ensure!(
+            plan.state
+                .get(slot as usize)
+                .and_then(|state| state.kind.get("cell"))
+                .and_then(Json::as_str)
+                .is_some(),
+            "opaque Cell write does not select a root Cell"
+        );
+        validate_scalar_storage_type(plan, slot, 0, ty)?;
+        return Ok((slot, 0));
+    }
+
     let key_operation = operation_index
         .checked_sub(1)
         .and_then(|index| plan.operations.get(index))
@@ -2091,13 +2447,8 @@ fn opaque_compressed_storage_path(
         key_types.len() == 1 && key_types[0] == ScalarType::Bytes32,
         "opaque Map key must be Bytes32"
     );
-    let insert_operation = operation_index
-        .checked_add(1)
-        .and_then(|index| plan.operations.get(index))
-        .ok_or_else(|| anyhow!("opaque write has no adjacent Map insertion"))?;
-    let (insert_operation, insert_guard) = unguarded_operation(insert_operation);
     ensure!(
-        insert_guard == guard && matches!(insert_operation, Instruction::Insert { n: 2 }),
+        matches!(insert_operation, Instruction::Insert { n: 2 }),
         "opaque Map value push must be followed by Insert(2)"
     );
     validate_scalar_storage_type(plan, *slot, 1, ty)?;
@@ -2676,6 +3027,7 @@ fn mutates_contract_state(operation: &Instruction) -> bool {
             | Instruction::MapRemove { .. }
             | Instruction::ListPushFront { .. }
             | Instruction::ListPushFrontCoin { .. }
+            | Instruction::ListPushFrontCoinTo { .. }
             | Instruction::ListPopFront { .. }
             | Instruction::ListReset { .. }
             | Instruction::MerkleTreeInsertHash { .. }
@@ -2684,7 +3036,9 @@ fn mutates_contract_state(operation: &Instruction) -> bool {
             | Instruction::MerkleTreeResetHistory { .. }
             | Instruction::ReceiveShieldedToMap { .. }
             | Instruction::WriteShieldedCoinCell { .. }
+            | Instruction::WriteShieldedCoinCellTo { .. }
             | Instruction::InsertShieldedCoinSet { .. }
+            | Instruction::InsertShieldedCoinSetTo { .. }
     )
 }
 
@@ -3031,6 +3385,23 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
                 ensure!(guard.is_none(), "qualified coin List push must be unguarded");
                 validate_shielded_coin_list(plan, *slot, keys, schema)?;
             }
+            Instruction::ListPushFrontCoinTo {
+                slot,
+                keys,
+                schema,
+                ..
+            } => {
+                ensure!(guard.is_none(), "qualified coin List push must be unguarded");
+                validate_shielded_coin_list(plan, *slot, keys, schema)?;
+            }
+            Instruction::WriteShieldedCoinCellTo { slot, .. } => {
+                ensure!(guard.is_none(), "shielded coin Cell write must be unguarded");
+                validate_shielded_coin_cell(plan, *slot)?;
+            }
+            Instruction::InsertShieldedCoinSetTo { slot, .. } => {
+                ensure!(guard.is_none(), "shielded coin Set insertion must be unguarded");
+                validate_shielded_coin_set(plan, *slot)?;
+            }
             Instruction::ListHead {
                 slot,
                 keys,
@@ -3305,6 +3676,7 @@ fn aligned_storage_cell(value: &Value) -> Result<AlignedValue> {
     match value {
         Value::Bytes(_) => aligned_bytes(value),
         Value::OpaqueBytes(_) => aligned_opaque_bytes(value),
+        Value::OpaqueString(_) => aligned_opaque_string(value),
         Value::JubjubScalar(_) | Value::JubjubPoint(_) => {
             Ok(aligned_fields(&typed_scalar_fields(value)?))
         }
@@ -5318,6 +5690,38 @@ fn probe_instruction(
             env,
             deferred_outputs,
         ),
+        Instruction::WriteShieldedCoinCellTo {
+            nonce,
+            color,
+            amount,
+            is_contract,
+            recipient,
+            commitment,
+            ..
+        }
+        | Instruction::InsertShieldedCoinSetTo {
+            nonce,
+            color,
+            amount,
+            is_contract,
+            recipient,
+            commitment,
+            ..
+        }
+        | Instruction::ListPushFrontCoinTo {
+            nonce,
+            color,
+            amount,
+            is_contract,
+            recipient,
+            commitment,
+            ..
+        } => probe_expressions(
+            [nonce, color, amount, is_contract, recipient, commitment],
+            plan,
+            env,
+            deferred_outputs,
+        ),
         Instruction::SpendShieldedFromMap {
             nonce,
             color,
@@ -6181,7 +6585,7 @@ impl PreparationCursor {
                             );
                             let (slot, keys) = previous_index
                                 .as_ref()
-                                .ok_or_else(|| anyhow!("OpaqueString read has no Map path"))?;
+                                .ok_or_else(|| anyhow!("OpaqueString read has no state path"))?;
                             validate_scalar_storage_type(plan, *slot, keys.len(), &read_type)?;
                         }
                         if let Some(length) = byte_alignment_length(alignment)? {
@@ -7515,6 +7919,14 @@ impl PreparationCursor {
                 color,
                 amount,
                 commitment,
+            }
+            | Instruction::WriteShieldedCoinCellTo {
+                slot,
+                nonce,
+                color,
+                amount,
+                commitment,
+                ..
             } => {
                 validate_shielded_coin_cell(plan, *slot)?;
                 let coin = ShieldedCoinInfo {
@@ -7528,16 +7940,22 @@ impl PreparationCursor {
                     )?),
                     value: unshielded_amount(amount, &env)?,
                 };
-                let recipient = Recipient::Contract(context.address);
+                let recipient = booked_coin_recipient(i, &context, &env)?;
                 let expected_commitment =
                     claim_hash_output(evaluate(commitment, &env)?, "shielded coin commitment")?;
+                let coin_commitment = coin.commitment(&recipient);
                 ensure!(
-                    coin.commitment(&recipient).0 == expected_commitment,
+                    coin_commitment.0 == expected_commitment,
                     "shielded coin Cell commitment mismatch"
                 );
-                context.qualify(&coin).ok_or_else(|| {
-                    anyhow!("shielded coin Cell commitment is absent from the current transaction")
-                })?;
+                let qualified = qualify_booked_coin_for(&context, &coin, &recipient).ok_or_else(
+                    || anyhow!("shielded coin Cell commitment is absent from the current transaction"),
+                )?;
+                ensure!(
+                    context.call_context.com_indices.get(&coin_commitment)
+                        == Some(&qualified.mt_index),
+                    "shielded coin Cell transaction index mismatch"
+                );
 
                 if has_written {
                     advance_native_state_prefix(
@@ -7600,6 +8018,16 @@ impl PreparationCursor {
                 color,
                 amount,
                 commitment,
+            }
+            | Instruction::ListPushFrontCoinTo {
+                slot,
+                keys,
+                schema,
+                nonce,
+                color,
+                amount,
+                commitment,
+                ..
             } => {
                 validate_shielded_coin_list(plan, *slot, keys, schema)?;
                 let coin = ShieldedCoinInfo {
@@ -7613,7 +8041,7 @@ impl PreparationCursor {
                     )?),
                     value: unshielded_amount(amount, &env)?,
                 };
-                let recipient = Recipient::Contract(context.address);
+                let recipient = booked_coin_recipient(i, &context, &env)?;
                 let expected_commitment = claim_hash_output(
                     evaluate(commitment, &env)?,
                     "qualified coin List commitment",
@@ -7623,11 +8051,9 @@ impl PreparationCursor {
                     coin_commitment.0 == expected_commitment,
                     "qualified coin List commitment mismatch"
                 );
-                let qualified = context.qualify(&coin).ok_or_else(|| {
-                    anyhow!(
-                        "qualified coin List commitment is absent from the current transaction"
-                    )
-                })?;
+                let qualified = qualify_booked_coin_for(&context, &coin, &recipient).ok_or_else(
+                    || anyhow!("qualified coin List commitment is absent from the current transaction"),
+                )?;
                 ensure!(
                     context.call_context.com_indices.get(&coin_commitment)
                         == Some(&qualified.mt_index),
@@ -7685,7 +8111,7 @@ impl PreparationCursor {
                     ),
                     "qualified coin List fragment initial pushes changed"
                 );
-                // The Compact fragment pushes the empty node before its index key.
+                // Compact pushes the empty node before the index key.
                 operations.swap(4, 5);
                 let Some(Op::Dup { n }) = operations.get_mut(6) else {
                     bail!("qualified coin List fragment has no context lookup duplicate")
@@ -7694,7 +8120,7 @@ impl PreparationCursor {
                     *n == u8::try_from(4 + 2 * path_length)?,
                     "qualified coin List fragment duplicate depth changed"
                 );
-                // The pinned depth selects effects. The commitment lookup needs context.
+                // This depth selects effects, while the commitment lookup needs context.
                 *n = n
                     .checked_add(1)
                     .ok_or_else(|| anyhow!("qualified coin List duplicate depth overflow"))?;
@@ -7711,6 +8137,14 @@ impl PreparationCursor {
                 color,
                 amount,
                 commitment,
+            }
+            | Instruction::InsertShieldedCoinSetTo {
+                slot,
+                nonce,
+                color,
+                amount,
+                commitment,
+                ..
             } => {
                 validate_shielded_coin_set(plan, *slot)?;
                 let coin = ShieldedCoinInfo {
@@ -7724,7 +8158,7 @@ impl PreparationCursor {
                     )?),
                     value: unshielded_amount(amount, &env)?,
                 };
-                let recipient = Recipient::Contract(context.address);
+                let recipient = booked_coin_recipient(i, &context, &env)?;
                 let expected_commitment = claim_hash_output(
                     evaluate(commitment, &env)?,
                     "shielded Set coin commitment",
@@ -7734,11 +8168,9 @@ impl PreparationCursor {
                     coin_commitment.0 == expected_commitment,
                     "shielded coin Set commitment mismatch"
                 );
-                let qualified = context.qualify(&coin).ok_or_else(|| {
-                    anyhow!(
-                        "shielded coin Set commitment is absent from the current transaction"
-                    )
-                })?;
+                let qualified = qualify_booked_coin_for(&context, &coin, &recipient).ok_or_else(
+                    || anyhow!("shielded coin Set commitment is absent from the current transaction"),
+                )?;
                 let qualified_key = AlignedValue::from(qualified);
                 ensure!(
                     qualified_key.alignment.fits(&qualified_key.value),
@@ -8363,12 +8795,15 @@ impl PreparationCursor {
                 | Instruction::MerkleTreeResetHistory { .. }
                 | Instruction::ListPushFront { .. }
                 | Instruction::ListPushFrontCoin { .. }
+                | Instruction::ListPushFrontCoinTo { .. }
                 | Instruction::ListPopFront { .. }
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
                 | Instruction::ReceiveShieldedToMap { .. }
                 | Instruction::WriteShieldedCoinCell { .. }
+                | Instruction::WriteShieldedCoinCellTo { .. }
                 | Instruction::InsertShieldedCoinSet { .. }
+                | Instruction::InsertShieldedCoinSetTo { .. }
         ) {
             mutation_boundary = program.len();
         }
@@ -8972,6 +9407,86 @@ mod shielded_spend_tests {
         inputs
     }
 
+    #[derive(Clone, Copy)]
+    enum BookedCollection {
+        Cell,
+        Set,
+        List,
+    }
+
+    fn booked_collection_context(
+        plan: &Plan,
+        commitment: Option<Commitment>,
+    ) -> QueryContext<Db> {
+        let config = plan
+            .state
+            .iter()
+            .map(|declaration| {
+                let tree = &declaration.kind["tree"];
+                let initial = if let Some(schema) = tree.get("composite") {
+                    default_record_value(schema).unwrap()
+                } else {
+                    json!([])
+                };
+                (declaration.name.clone(), initial)
+            })
+            .collect();
+        let state = create_state(plan, &config).unwrap();
+        let mut context = QueryContext::new(state, ContractAddress(HashOutput(ADDRESS)));
+        if let Some(commitment) = commitment {
+            context.call_context.com_indices =
+                context.call_context.com_indices.insert(commitment, 41);
+        }
+        context
+    }
+
+    fn booked_recipient_inputs(
+        coin: &ShieldedCoinInfo,
+        is_contract: bool,
+        recipient: [u8; 32],
+    ) -> BTreeMap<String, Json> {
+        BTreeMap::from([
+            ("nonce".into(), bytes_json(&coin.nonce.0.0)),
+            ("color".into(), bytes_json(&coin.type_.0.0)),
+            ("amount".into(), json!(coin.value.to_string())),
+            ("isContract".into(), json!(is_contract)),
+            ("recipient".into(), bytes_json(&recipient)),
+        ])
+    }
+
+    fn assert_booked_collection_record(
+        collection: BookedCollection,
+        plan: &Plan,
+        context: &QueryContext<Db>,
+        coin: &ShieldedCoinInfo,
+        index: u64,
+    ) {
+        let expected = AlignedValue::from(coin.qualify(index));
+        match collection {
+            BookedCollection::Cell => {
+                assert_eq!(read_state_aligned(context, 0, &[]).unwrap(), expected);
+            }
+            BookedCollection::Set => {
+                let set_state = read_state_value(context, 1, &[]).unwrap();
+                let StateValue::Map(members) = &set_state else {
+                    panic!("qualified coin Set is not a Map")
+                };
+                assert!(members.contains_key(&expected));
+            }
+            BookedCollection::List => {
+                let (length, head) = native_list_value(
+                    context,
+                    2,
+                    &[],
+                    list_element_schema_at_path(plan, 2, 0).unwrap(),
+                )
+                .unwrap();
+                assert_eq!(length, 1);
+                assert_eq!(head, Some(expected));
+            }
+        }
+    }
+
     fn context(key_nonce: [u8; 32], record_nonce: [u8; 32]) -> QueryContext<Db> {
         context_with_amount(key_nonce, record_nonce, 5)
     }
@@ -9112,6 +9627,84 @@ mod shielded_spend_tests {
             ))
         );
         (input_commitment, nullifier, output_commitment)
+    }
+
+    #[test]
+    #[ignore = "requires fresh ZKIR 3.2.1 artifacts from tests/QualifiedCoinRecipient.lean"]
+    fn explicit_booked_recipient_collections_match_typed_ledger_bookings() {
+        let coin = ShieldedCoinInfo {
+            nonce: Nonce(HashOutput(NONCE)),
+            type_: ShieldedTokenType(HashOutput(COLOR)),
+            value: 5,
+        };
+        let parameters = &ledger::structure::INITIAL_PARAMETERS;
+        let artifact_dir = std::path::PathBuf::from(
+            std::env::var_os("NOCTIUM_EXPLICIT_RECIPIENT_DIR")
+                .expect("set NOCTIUM_EXPLICIT_RECIPIENT_DIR to the emitted contract artifacts"),
+        );
+        for (collection, entrypoint) in [
+            (BookedCollection::Cell, "writeCellTo"),
+            (BookedCollection::Set, "insertSetTo"),
+            (BookedCollection::List, "pushListTo"),
+        ] {
+            let stem = format!("QualifiedCoinRecipient.{entrypoint}");
+            let plan: Plan = serde_json::from_slice(
+                &std::fs::read(artifact_dir.join(format!("{stem}.impact.json"))).unwrap(),
+            )
+            .unwrap();
+            let circuit_bytes = std::fs::read(artifact_dir.join(format!("{stem}.zkir"))).unwrap();
+            let circuit = IrSource::load(circuit_bytes.as_slice()).unwrap();
+
+            for (is_contract, recipient_bytes) in [(false, RECIPIENT), (true, RELAY_TARGET)] {
+                let recipient = if is_contract {
+                    Recipient::Contract(ContractAddress(HashOutput(recipient_bytes)))
+                } else {
+                    Recipient::User(PublicKey(HashOutput(recipient_bytes)))
+                };
+                let commitment = coin.commitment(&recipient);
+                let inputs = booked_recipient_inputs(&coin, is_contract, recipient_bytes);
+                let execution = prepare_with_context(
+                    &plan,
+                    &inputs,
+                    booked_collection_context(&plan, Some(commitment)),
+                    parameters,
+                )
+                .unwrap_or_else(|error| panic!("booked recipient was rejected: {error:#}"));
+                assert_booked_collection_record(collection, &plan, &execution.after, &coin, 41);
+                let checked_schedule = execution
+                    .preimage
+                    .check(&circuit)
+                    .unwrap_or_else(|error| panic!("compiled preimage check failed: {error:#}"));
+                assert_eq!(checked_schedule, execution.activity_schedule);
+                super::check(&execution, &circuit)
+                    .unwrap_or_else(|error| panic!("compiled relation check failed: {error:#}"));
+
+                let wrong_address = [7; 32];
+                assert!(prepare_with_context(
+                    &plan,
+                    &booked_recipient_inputs(&coin, is_contract, wrong_address),
+                    booked_collection_context(&plan, Some(commitment)),
+                    parameters,
+                )
+                .is_err());
+
+                assert!(prepare_with_context(
+                    &plan,
+                    &booked_recipient_inputs(&coin, !is_contract, recipient_bytes),
+                    booked_collection_context(&plan, Some(commitment)),
+                    parameters,
+                )
+                .is_err());
+
+                assert!(prepare_with_context(
+                    &plan,
+                    &inputs,
+                    booked_collection_context(&plan, None),
+                    parameters,
+                )
+                .is_err());
+            }
+        }
     }
 
     fn expected_coin_effects() -> (Nullifier, Commitment) {

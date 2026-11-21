@@ -61,6 +61,13 @@ private def checkConstants : Expr ty → Except String Unit
   | .bytes32Literal _ => pure ()
   | .persistentHashVector32 _ => pure ()
   | .persistentHashNative value => checkConstants value
+  | .persistentHashFab _ _ values => checkFabConstants values
+  | .persistentCommitFab _ _ opening values => do
+    checkConstants opening
+    checkFabConstants values
+  | .transientCommitFab _ _ opening values => do
+    checkConstants opening
+    checkFabConstants values
   | .hashToCurve values | .persistentHashNativeVector values | .transientHash values => checkNativeConstants values
   | .jubjubScalarFromNative value | .jubjubScalarToNative value
   | .jubjubMulGenerator value | .jubjubNeg value
@@ -84,7 +91,25 @@ private def checkConstants : Expr ty → Except String Unit
     checkConstants a
     checkConstants b
 termination_by value => sizeOf value
-decreasing_by all_goals simp_wf <;> omega
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | exact sizeOfSigmaExprHeadLt _ _
+    | exact sizeOfSigmaExprValueLt _
+    | have h := sizeOfMemberListLt (by assumption); omega
+    | omega
+
+private def checkFabConstants : List (Sigma Expr) → Except String Unit
+  | [] => pure ()
+  | ⟨_, value⟩ :: rest => do
+    checkConstants value
+    checkFabConstants rest
+termination_by values => sizeOf values
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | exact sizeOfSigmaExprHeadLt _ _
+    | omega
 
 private def checkNativeConstants : List (Expr .native) → Except String Unit
   | [] => pure ()
@@ -366,6 +391,19 @@ private def bytes32VectorAlignment (length : Nat) : Json :=
 private def nativeFieldAtom : Json := Json.mkObj [
   ("tag", toJson ("atom" : String)),
   ("value", Json.mkObj [("tag", toJson ("field" : String))])]
+
+private def bytesAlignmentAtom (length : Nat) : Json := Json.mkObj [
+  ("tag", toJson ("atom" : String)),
+  ("value", Json.mkObj [("tag", toJson ("bytes" : String)), ("length", toJson length)])]
+
+private def fabHashAlignmentAtom : Types.Layout → Json
+  | .bytes length .byteField => bytesAlignmentAtom length
+  | .scalar .nativeField => nativeFieldAtom
+  | .scalar .booleanField => bytesAlignmentAtom 1
+  | .scalar (.boundedUnsignedField maximum) =>
+      bytesAlignmentAtom (Native.fabHashByteWidth maximum)
+  | .enumeration _ (.enumTagField _) _ 0 _ _ => bytesAlignmentAtom 1
+  | _ => Json.null
 
 private def nativeFieldAlignment : Json := Json.arr #[nativeFieldAtom]
 
@@ -885,6 +923,38 @@ private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
       let result ← lowerPersistentHash ("native-field-vector:" ++ toString values.length)
         (nativeFieldVectorAlignment values.length) operands
       pure {values := result, packed := true}
+  | .persistentHashFab environment type values => do
+    match validateFabHashLayout environment type values with
+    | .error message =>
+      rejectLowering message
+      pure {values := []}
+    | .ok compiled => do
+      let .structure _ fields := compiled
+        | rejectLowering "mixed FAB persistent hash requires a named flat structure"
+          pure {values := []}
+      let operands ← lowerFabHashFields fields values
+      let alignment := Json.arr (fields.map (fun field => fabHashAlignmentAtom field.2) |>.toArray)
+      let result ← lowerPersistentHash ("fab:" ++ type.fingerprint environment) alignment operands
+      pure {values := result, packed := true}
+  | .persistentCommitFab environment type opening values => do
+    match validateFabHashLayout environment type values with
+    | .error message =>
+      rejectLowering message
+      pure {values := []}
+    | .ok compiled => do
+      let .structure _ fields := compiled
+        | rejectLowering "mixed FAB persistent commitment requires a named flat structure"
+          pure {values := []}
+      let openingBytes ← lowerBytes opening
+      let (openingHighByte, openingLow31) ← alignedBytes32Fields openingBytes.values
+      let payloadOperands ← lowerFabHashFields fields values
+      let alignment := Json.arr
+        (#[bytesAlignmentAtom 32] ++
+          (fields.map (fun field => fabHashAlignmentAtom field.2) |>.toArray))
+      let result ← lowerPersistentHash
+        ("fab-commit:" ++ type.fingerprint environment) alignment
+        ([openingHighByte, openingLow31] ++ payloadOperands)
+      pure {values := result, packed := true}
   | .foreignToBytes (kind := kind) value => do
     lowerForeignToBytes kind (← lowerExpr value)
   | .toBytes32 value => do
@@ -925,6 +995,35 @@ private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
 termination_by value => sizeOf value
 decreasing_by
   all_goals simp_wf <;> omega
+
+private def lowerFabHashFields : List (String × Types.Layout) → List (Sigma Expr) → LowerM (List String)
+  | [], [] => pure []
+  | field :: fields, value :: rest => do
+    let aligned ← match field.2, value with
+      | .bytes length .byteField, ⟨.bytes _, expression⟩ => do
+        let bytes ← lowerBytes expression
+        if length == 32 then do
+          let (highByte, low31) ← alignedBytes32Fields bytes.values
+          pure [highByte, low31]
+        else byteChunks length bytes
+      | .scalar .nativeField, ⟨.native, expression⟩ => pure [← lowerExpr expression]
+      | .scalar .booleanField, ⟨.bool, expression⟩ => pure [← lowerExpr expression]
+      | .scalar (.boundedUnsignedField _), ⟨.uint _, expression⟩ => pure [← lowerExpr expression]
+      | .enumeration _ (.enumTagField _) _ 0 _ _, ⟨.uint _, expression⟩ =>
+        pure [← lowerExpr expression]
+      | _, _ => do
+        rejectLowering "mixed FAB persistent hash field type differs from its checked layout"
+        pure []
+    pure (aligned ++ (← lowerFabHashFields fields rest))
+  | _, _ => do
+    rejectLowering "mixed FAB persistent hash field count differs from its checked layout"
+    pure []
+termination_by _ values => sizeOf values
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | exact sizeOfSigmaExprHeadLt _ _
+    | omega
 
 private def lowerBytes32VectorFields : List (Expr (.bytes 32)) → LowerM (List String)
   | [] => pure []
@@ -1033,6 +1132,24 @@ def lowerExpr : Expr ty → LowerM String
     emit "transient_hash" [("inputs", toJson operands), ("output", toJson output)]
     modify fun state => {state with expressions := (key, output) :: state.expressions}
     pure output
+  | .transientCommitFab environment type opening values => do
+    match validateFabHashLayout environment type values with
+    | .error message =>
+      rejectLowering message
+      pure "0x00"
+    | .ok compiled => do
+      let .structure _ fields := compiled
+        | rejectLowering "mixed FAB transient commitment requires a named flat structure"
+          pure "0x00"
+      let opening ← lowerExpr opening
+      let payload ← lowerFabHashFields fields values
+      let operands := opening :: payload
+      let key : ExpressionKey := ("transient_hash", operands, none)
+      if let some existing := (← get).expressions.lookup key then return existing
+      let output ← fresh
+      emit "transient_hash" [("inputs", toJson operands), ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
   | .jubjubMulGenerator scalar => do
     let scalar ← lowerExpr scalar
     let key : ExpressionKey := ("ec_mul_generator", [scalar], none)
@@ -1156,7 +1273,9 @@ def lowerExpr : Expr ty → LowerM String
   | .foreignToBytes _ | .sha256 _ | .sha512 _ | .keccak256 _ | .keccak256Secp256k1Point _
   | .bytesLiteral _ _ | .reverseBytes _ | .sliceBytes _ _ _ | .concatBytes _ _
   | .bytes32Literal _ | .persistentHash32 _ | .persistentHashVector32 _
-  | .persistentHashNative _ | .persistentHashNativeVector _ | .toBytes32 _ | .reverseBytes32 _ => do
+  | .persistentHashNative _ | .persistentHashNativeVector _ | .persistentHashFab _ _ _
+  | .persistentCommitFab _ _ _ _
+  | .toBytes32 _ | .reverseBytes32 _ => do
     rejectLowering "Bytes32 expressions must be consumed with their typed FAB alignment"
     pure "0x00"
 termination_by value => sizeOf value

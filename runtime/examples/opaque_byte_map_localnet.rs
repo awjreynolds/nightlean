@@ -91,6 +91,7 @@ fn compressed(bytes: &[u8]) -> Result<AlignedValue> {
 fn assert_stored(
     state: &ContractState<Db>,
     plan: &Plan,
+    map_name: &str,
     key: &[u8; 32],
     expected: &[u8],
 ) -> Result<()> {
@@ -100,15 +101,15 @@ fn assert_stored(
     let slot = plan
         .state
         .iter()
-        .position(|declaration| declaration.name == "payloads")
-        .context("payload map declaration missing")?;
+        .position(|declaration| declaration.name == map_name)
+        .context("opaque map declaration missing")?;
     let StateValue::Map(payloads) = &*slots.get(slot).context("payload map slot missing")? else {
-        bail!("expected OpaqueBytes map");
+        bail!("expected opaque map");
     };
     let key: AlignedValue = (*key).into();
     let StateValue::Cell(value) = &*payloads.get(&key).context("stored payload entry missing")?
     else {
-        bail!("expected OpaqueBytes cell");
+        bail!("expected opaque cell");
     };
     ensure!(
         **value == compressed(expected)?,
@@ -117,23 +118,27 @@ fn assert_stored(
     Ok(())
 }
 
-fn check_read_return(execution: &noctium_runtime::Execution, expected: &[u8]) -> Result<Vec<Fr>> {
+fn check_read_return(
+    execution: &noctium_runtime::Execution,
+    return_name: &str,
+    expected_json: &Json,
+    expected_bytes: &[u8],
+) -> Result<Vec<Fr>> {
     ensure!(
-        execution.returns_json().get("payload")
-            == Some(&json!({"kind":"opaqueBytes", "values":expected})),
-        "native read return differs from expected OpaqueBytes"
+        execution.returns_json().get(return_name) == Some(expected_json),
+        "native read return differs from expected opaque value"
     );
     let returns = execution.returns();
     ensure!(
-        returns.len() == 1 && returns[0].0 == "payload",
+        returns.len() == 1 && returns[0].0 == return_name,
         "unexpected native read outputs"
     );
     ensure!(
-        returns[0].1.public_json() == json!({"kind":"opaqueBytes", "values":expected}),
-        "typed native read return differs from expected OpaqueBytes"
+        returns[0].1.public_json() == expected_json.clone(),
+        "typed native read return differs from expected opaque value"
     );
     let mut projection = Vec::new();
-    compressed(expected)?.value_only_field_repr(&mut projection);
+    compressed(expected_bytes)?.value_only_field_repr(&mut projection);
     ensure!(projection.len() == 1, "expected one Compress field");
     ensure!(
         execution.preimage.public_transcript_outputs.len() == 3,
@@ -162,9 +167,104 @@ fn check_frozen_read_output(intent_bytes: &[u8], expected: &[Fr]) -> Result<()> 
     ensure!(
         preimage.public_transcript_outputs.len() == expected.len() + 2
             && &preimage.public_transcript_outputs[2..] == expected,
-        "frozen proof does not bind the expected OpaqueBytes return"
+        "frozen proof does not bind the expected opaque return"
     );
     Ok(())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OpaqueValueKind {
+    Bytes,
+    String,
+}
+
+impl OpaqueValueKind {
+    fn parse(source_type: &str) -> Result<Self> {
+        match source_type {
+            "OpaqueBytes" => Ok(Self::Bytes),
+            "OpaqueString" => Ok(Self::String),
+            _ => bail!("unsupported opaque Map value type"),
+        }
+    }
+
+    fn source_type(self) -> &'static str {
+        match self {
+            Self::Bytes => "OpaqueBytes",
+            Self::String => "OpaqueString",
+        }
+    }
+
+    fn input_json(self) -> (Json, Vec<u8>) {
+        match self {
+            Self::Bytes => (
+                json!({"kind":"opaqueBytes", "values":[0,1,255]}),
+                vec![0, 1, 255],
+            ),
+            Self::String => {
+                let value = "é\0λ";
+                (
+                    json!({"kind":"opaqueString", "value":value}),
+                    value.as_bytes().to_vec(),
+                )
+            }
+        }
+    }
+}
+
+struct OpaqueMapShape {
+    kind: OpaqueValueKind,
+    state_name: String,
+    input_name: String,
+    return_name: String,
+}
+
+fn opaque_map_shape(store_plan: &Plan, read_plan: &Plan) -> Result<OpaqueMapShape> {
+    let values: Vec<_> = store_plan
+        .circuit
+        .inputs
+        .iter()
+        .filter(|input| matches!(input.ty.as_str(), "OpaqueBytes" | "OpaqueString"))
+        .collect();
+    ensure!(
+        values.len() == 1,
+        "store plan must have one opaque value input"
+    );
+    let input = values[0];
+    let kind = OpaqueValueKind::parse(&input.ty)?;
+
+    let returns: Vec<_> = read_plan
+        .returns
+        .iter()
+        .filter(|output| matches!(output.ty.as_str(), "OpaqueBytes" | "OpaqueString"))
+        .collect();
+    ensure!(returns.len() == 1, "read plan must return one opaque value");
+    let output = returns[0];
+    ensure!(
+        OpaqueValueKind::parse(&output.ty)? == kind,
+        "store and read opaque value types differ"
+    );
+
+    ensure!(
+        store_plan.state.len() == 1 && read_plan.state.len() == 1,
+        "opaque Map contract must have one state declaration"
+    );
+    let state = &store_plan.state[0];
+    ensure!(
+        state.kind["tree"]["map"][0] == "Bytes<32>"
+            && state.kind["tree"]["map"][1]["scalar"] == kind.source_type(),
+        "opaque value type differs from the root Bytes32 Map schema"
+    );
+    ensure!(
+        state.name == read_plan.state[0].name && state.kind == read_plan.state[0].kind,
+        "store and read Map schemas differ"
+    );
+
+    Ok(OpaqueMapShape {
+        kind,
+        state_name: state.name.clone(),
+        input_name: input.name.clone(),
+        return_name: output.name.clone(),
+    })
 }
 
 struct Host {
@@ -404,6 +504,8 @@ async fn run(configuration: Configuration) -> Result<()> {
         store_plan.entrypoint == "store" && read_plan.entrypoint == "read",
         "bundle entrypoint mismatch"
     );
+    let shape = opaque_map_shape(&store_plan, &read_plan)?;
+    let (payload_json, payload_bytes) = shape.kind.input_json();
     let store_circuit = IrSource::load(store_bundle.file(Role::Circuit)?)?;
     let read_circuit = IrSource::load(read_bundle.file(Role::Circuit)?)?;
 
@@ -429,9 +531,11 @@ async fn run(configuration: Configuration) -> Result<()> {
     let read_parameters = cache.parameters(read_circuit.k()).await?;
     let set = ContractBundleSet::new(vec![store_bundle, read_bundle])?;
     let deployment_ttl = snapshot.block.tblock.to_secs() + 1800;
+    let mut initial_state = serde_json::Map::new();
+    initial_state.insert(shape.state_name.clone(), json!([]));
     let target = WitnessContractTarget::from_state_config(
         set,
-        br#"{"state":{"payloads":[]}}"#,
+        &serde_json::to_vec(&json!({"state":initial_state}))?,
         deployment_ttl,
         &mut OsRng,
     )?;
@@ -458,7 +562,11 @@ async fn run(configuration: Configuration) -> Result<()> {
     let (_, _, current, deploy_receipt) = host.finish(deployment, &address, "Deploy").await?;
 
     let key = [0x22; 32];
-    let payload = [0x00, 0x01, 0xff];
+    let mut store_inputs = BTreeMap::from([(
+        "key".into(),
+        json!({"kind":"bytes","values":key.as_slice()}),
+    )]);
+    store_inputs.insert(shape.input_name.clone(), payload_json.clone());
     let store_operation = target.operation(
         "store",
         &store_parameters,
@@ -468,16 +576,7 @@ async fn run(configuration: Configuration) -> Result<()> {
     let store_prepared = store_operation.prepare_call(
         &mut state_token,
         &store_parameters,
-        BTreeMap::from([
-            (
-                "key".into(),
-                json!({"kind":"bytes","values":key.as_slice()}),
-            ),
-            (
-                "payload".into(),
-                json!({"kind":"opaqueBytes","values":payload}),
-            ),
-        ]),
+        store_inputs,
         &mut OsRng,
     )?;
     ensure!(
@@ -498,7 +597,13 @@ async fn run(configuration: Configuration) -> Result<()> {
         target.start_call_client(&store_operation, &mut store_proved, &descriptor, &setup)?;
     let (store_state_bytes, store_state, current, store_receipt) =
         host.finish(store_client, &address, "Call").await?;
-    assert_stored(&store_state, &store_plan, &key, &payload)?;
+    assert_stored(
+        &store_state,
+        &store_plan,
+        &shape.state_name,
+        &key,
+        &payload_bytes,
+    )?;
 
     let live = host.node.sync()?;
     let read_inputs = BTreeMap::from([(
@@ -514,7 +619,12 @@ async fn run(configuration: Configuration) -> Result<()> {
         contract_address,
     )?;
     noctium_runtime::check(&read_execution, &read_circuit)?;
-    let expected_projection = check_read_return(&read_execution, &payload)?;
+    let expected_projection = check_read_return(
+        &read_execution,
+        &shape.return_name,
+        &payload_json,
+        &payload_bytes,
+    )?;
 
     let read_operation =
         target.operation("read", &read_parameters, live.block.tblock.to_secs() + 1800)?;
@@ -549,7 +659,8 @@ async fn run(configuration: Configuration) -> Result<()> {
         "schemaVersion":1,
         "profile":noctium_runtime::profile::NAME,
         "contractAddress":target.contract_address(),
-        "payload":{"kind":"opaqueBytes","values":payload},
+        "valueType":shape.kind.source_type(),
+        "payload":payload_json,
         "checks":{"deploymentFinalized":true,"storeProofAccepted":true,"rawCompressMapCellMatched":true,"readProofReturnMatched":true,"readTranscriptOutputMatched":true,"readFinalizedStateUnchanged":true},
         "receipts":{"deploy":deploy_receipt,"store":store_receipt,"read":read_receipt},
         "storeStateBytes":store_state_bytes.len(),

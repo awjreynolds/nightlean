@@ -44,7 +44,12 @@ private def opaqueStringReadEntry : Entrypoint :=
   | .ok _ => Bool.true
   | .error _ => Bool.false
 
-#guard ([StateKind.cell .opaqueString, .map (.bytes 32) .opaqueString,
+#guard match ({name := "MutableOpaqueStringCell", state := [
+    {name := "value", kind := .cell .opaqueString}]} : Contract).validate Capabilities.source with
+  | .ok _ => Bool.true
+  | .error _ => Bool.false
+
+#guard ([StateKind.map (.bytes 32) .opaqueString,
     .tree (.map .native (.map (.bytes 32) (.scalar .opaqueString)))]).all fun kind =>
   let unsupported : Contract := {name := "Unsupported", state := [{name := "strings", kind}]}
   match unsupported.validate Capabilities.source with
