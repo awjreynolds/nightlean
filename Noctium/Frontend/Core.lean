@@ -361,6 +361,8 @@ scoped syntax "checkRoot" nlpath "against" nlexpr "as" ident : nleffect
 scoped syntax "tokenBalance(" nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "tokenBalanceLt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "tokenBalanceGt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
+scoped syntax "headOrDefault" nlpath "as" "(" ident "," ident ")" : nleffect
+scoped syntax "when" nlexpr "headOrDefault" nlpath "as" "(" ident "," ident ")" : nleffect
 scoped syntax ident nlpath "as" ident : nleffect
 scoped syntax "readCaller" "as" "(" ident "," ident "," ident "," ident ")" : nleffect
 scoped syntax "when" nlexpr "readCaller" "as" "(" ident "," ident "," ident "," ident ")" : nleffect
@@ -1602,6 +1604,7 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr tokenBalance($_:nlexpr, $_:nlexpr) as $_:ident)
   | `(nleffect| when $condition:nlexpr tokenBalanceLt($_:nlexpr, $_:nlexpr, $_:nlexpr) as $_:ident)
   | `(nleffect| when $condition:nlexpr tokenBalanceGt($_:nlexpr, $_:nlexpr, $_:nlexpr) as $_:ident) => some condition
+  | `(nleffect| when $condition:nlexpr headOrDefault $_:nlpath as ($_:ident, $_:ident)) => some condition
   | `(nleffect| when $condition:nlexpr $_operation:ident $_path:nlpath as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr increment $_state:ident by $_amount:num) => some condition
   | `(nleffect| when $condition:nlexpr increment $_state:ident [ $_key:nlexpr ] by $_amount:num) => some condition
@@ -1643,13 +1646,14 @@ private def merkleFieldLeafHash (loweredLeaf : TSyntax `term) : CommandElabM (TS
   let preimage ← `(Noctium.Expr.concatBytes $domain $fieldBytes)
   `(Noctium.Expr.sha256 $preimage)
 
-private def chooseBranchLocalName (env : Bindings) (used : List String) (next : Nat) :
+private def chooseBranchLocalName (env : Bindings) (used : List String) (next : Nat)
+    (namePrefix : String := "noctium_if_local_") :
     String × Nat := Id.run do
   let mut candidateIndex := next
-  let mut candidate := s!"noctium_if_local_{candidateIndex}"
+  let mut candidate := s!"{namePrefix}{candidateIndex}"
   while env.any (fun binding => binding.1 == candidate) || used.contains candidate do
     candidateIndex := candidateIndex + 1
-    candidate := s!"noctium_if_local_{candidateIndex}"
+    candidate := s!"{namePrefix}{candidateIndex}"
   return (candidate, candidateIndex + 1)
 
 private partial def syntaxIdentifiers : Syntax → List String
@@ -1797,6 +1801,38 @@ private def elaborateListHead (schema : List (String × StateKind))
   let term ← `(Noctium.Effect.listHead
     $(stringTerm storage.getId.toString) $(stringTerm readName) $keys $typeTerm $destinations)
   pure {updated with terms := updated.terms.push term}
+
+private def elaborateListHeadOrDefault (schema : List (String × StateKind))
+    (path : TSyntax `nlpath) (present record : TSyntax `ident) (depth : Nat)
+    (guard span : TSyntax `term) (state : EntryEffects) : CommandElabM EntryEffects := do
+  let (storage, keys, _, _) ← lowerListPath schema state.env path
+  ensureFresh state.env present
+  let (lengthName, nextLocal) := chooseBranchLocalName state.env
+    state.usedLocalNames state.nextLocal "noctiumOptionalHeadLength"
+  let lengthEffect ← `(Noctium.Effect.listLength
+    $(stringTerm storage.getId.toString) $(stringTerm lengthName) $keys)
+  let maximum := 2 ^ 64 - 1
+  let lengthType ← tyTerm (.uint maximum)
+  let lengthRef ← `(@Noctium.Expr.ref $lengthType $(stringTerm lengthName))
+  let zero ← `(Noctium.Expr.uint $(natTerm maximum) 0)
+  let isZero ← `(Noctium.Expr.eq $lengthRef $zero)
+  let presentValue ← `(Noctium.Expr.eq $isZero (Noctium.Expr.bool Bool.false))
+  let headGuard ← match guard with
+    | `(term| none) => `(some $presentValue)
+    | `(term| some $outer) =>
+      `(some (Noctium.Backend.Impact.activityGuardWithin $outer $presentValue))
+    | _ => throwError "invalid optional List head effect guard"
+  let presentName := present.getId.toString
+  let updated : EntryEffects := {
+    state with
+    env := (presentName, .bool, presentValue) :: state.env
+    terms := state.terms.push lengthEffect
+    spans := state.spans.push span |>.push span
+    guards := state.guards.push guard |>.push headGuard
+    nextLocal
+    usedLocalNames := lengthName :: state.usedLocalNames
+  }
+  elaborateListHead schema path record depth updated
 
 private def elaborateListPushFront (schema : List (String × StateKind))
     (path : TSyntax `nlpath) (payload : TSyntax `nlleaves)
@@ -2071,6 +2107,17 @@ private def elaborateEvent (env : Bindings) (event : TSyntax `ident)
 private def elaborateEffect (schema : List (String × StateKind))
     (parent : Option (TSyntax `term)) (depth : Nat) (state : EntryEffects)
     (effect : TSyntax `nleffect) : CommandElabM EntryEffects := do
+  let optionalHead? : Option (TSyntax `nlpath × TSyntax `ident × TSyntax `ident) :=
+    match effect with
+    | `(nleffect| headOrDefault $path:nlpath as ($present:ident, $record:ident)) =>
+      some (path, present, record)
+    | `(nleffect| when $_:nlexpr headOrDefault $path:nlpath as ($present:ident, $record:ident)) =>
+      some (path, present, record)
+    | _ => none
+  if let some (path, present, record) := optionalHead? then
+    let guard ← effectGuardTerm state.env parent effect
+    let span ← spanTerm effect
+    return ← elaborateListHeadOrDefault schema path present record depth guard span state
   let guard ← effectGuardTerm state.env parent effect
   let span ← spanTerm effect
   let mut state := {state with

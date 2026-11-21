@@ -1343,6 +1343,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .setInsert .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
+            .listLength .. | .listHead .. | .listPushFront .. | .listPopFront .. | .listReset .. |
             .mapIsEmpty .. | .mapSize .. | .merkleTreeIsFull .. |
             .merkleTreeCheckRoot .. | .merkleTreeInsertHash .. |
             .merkleTreeInsertHashIndex .. | .merkleTreeReset .. | .merkleTreeResetHistory .. |
