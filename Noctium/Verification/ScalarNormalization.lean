@@ -16,6 +16,7 @@ def sourceNumber? : (ty : Ty) → ty.Denote → Except String Nat
   | .native, value | .uint _, value => .ok value
   | .bool, value => .ok (if value then 1 else 0)
   | .bytes _, _ | .opaqueBytes, _ => .error "byte strings do not support scalar conversion"
+  | .opaqueString, _ => .error "opaque strings do not support scalar conversion"
   | .jubjubScalar, _ => .error "Jubjub scalars do not support scalar conversion"
   | .jubjubPoint, _ => .error "Jubjub points do not support scalar conversion"
   | .foreign _, _ => .error "foreign values do not support scalar conversion"
@@ -115,7 +116,7 @@ def Canonical (ty : Ty) (value : ty.Denote) : Prop :=
       | .native => True
       | .bool => True
       | .uint maximum => maximum ≤ ScalarPolicy.maxUint ∧ value ≤ maximum
-      | .bytes _ | .opaqueBytes | .jubjubScalar | .jubjubPoint | .foreign _ => False
+      | .bytes _ | .opaqueBytes | .opaqueString | .jubjubScalar | .jubjubPoint | .foreign _ => False
 
 /-- The source-side scalar interpretation is partial for the same admission
 boundary as `sourceNumber?`. -/
@@ -338,7 +339,7 @@ private def typeBounds (ty : Ty) (term : Term) (bounds : List (Term × Nat)) : L
   | .native => bounds
   | .bool => bounds ++ [(term, 1)]
   | .uint maximum => bounds ++ [(term, maximum)]
-  | .bytes _ | .opaqueBytes | .jubjubScalar | .jubjubPoint | .foreign _ => bounds
+  | .bytes _ | .opaqueBytes | .opaqueString | .jubjubScalar | .jubjubPoint | .foreign _ => bounds
 
 private theorem represent_with_bound (hash : Hash) (inputs : Assignment) (ty : Ty)
     (term : Term) (bounds : List (Term × Nat)) (assertions : List Term)
@@ -371,7 +372,7 @@ private theorem represent_with_bound (hash : Hash) (inputs : Assignment) (ty : T
         refine ⟨scalar value, ?_, ?_⟩
         · simpa [sourceScalar?, sourceNumber?] using meaning
         · simpa [scalar, Nat.mod_eq_of_lt canonical.1] using canonical.2.2
-    | bytes _ | opaqueBytes | jubjubScalar | jubjubPoint | foreign _ => cases canonical
+    | bytes _ | opaqueBytes | opaqueString | jubjubScalar | jubjubPoint | foreign _ => cases canonical
   · exact requirements.2
 
 /-- Successful source evaluation establishes every range and assertion retained
