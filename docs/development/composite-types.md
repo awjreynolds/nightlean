@@ -71,3 +71,14 @@ neighboring records and rejection of a missing field. Each record remains one
 aligned Cell. Native coordinate fields alone establish no curve validity or
 encryption property. Mixed typed records, lists and full token integration remain
 separate work. No new keys, proofs or deployments were generated.
+
+## Map defaults
+
+`insertDefault balances[key]` inserts the declared value's default or replaces
+the existing entry. `insertDefault balances[owner][key]` requires the owner map
+to exist. Defaults use the existing scalar and record layouts, empty Map, Set
+and List state, zero Counters, and empty ordinary or historic Merkle Trees.
+
+`when enabled insertDefault balances[owner][key]` skips the path and write when
+disabled. Private keys and guards require explicit disclosure.
+[Source example](../../tests/NativeMapDefault.lean)
