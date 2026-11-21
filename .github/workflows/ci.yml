@@ -3,7 +3,13 @@ name: POC compiler checks
 on:
   push:
     branches: [main]
+    paths-ignore: &docs-only-paths
+      - '*.md'
+      - 'docs/**/*.md'
+      - 'docs/**/*.png'
+      - 'docs/**/*.svg'
   pull_request:
+    paths-ignore: *docs-only-paths
   workflow_dispatch:
 
 permissions:
@@ -125,6 +131,7 @@ jobs:
           lake env lean tests/NativeBlockTime.lean
           lake env lean tests/NativeList.lean
           lake env lean tests/NativeScalarList.lean
+          lake env lean tests/NativeScalarListMaybe.lean
           lake env lean tests/NativeMapDefault.lean
           lake env lean tests/OptionalListHead.lean
           lake env lean tests/MixedLedgerRecord.lean

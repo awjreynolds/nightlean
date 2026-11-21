@@ -2602,7 +2602,7 @@
       "layer": "language-ledger",
       "surface": "Map.resetToDefault",
       "noctiumStatus": "subset",
-      "notes": "Reset lowers to native empty-map replacement for a standalone or nested Map. Nested emptyMap insertion exercises the same effect in the native fixtures. A dedicated reference comparison for clearing a populated Map remains open.",
+      "notes": "Reset lowers to native empty-map replacement for a standalone or nested Map. A matched in-memory Compact 0.36.1 and Noctium case clears a two-entry Map, returns size zero and absent membership, and checks the exact empty native Map after-state. Full equivalence remains unverified.",
       "source": [
         "adt"
       ],
@@ -2615,7 +2615,11 @@
         "Noctium/Frontend/Core.lean",
         "Noctium/Backend/Impact.lean",
         "tests/Issue69NestedCounter.lean",
-        "runtime/tests/nested_counter.rs"
+        "runtime/tests/nested_counter.rs",
+        "tests/NativeMapDefault.lean",
+        "tests/compact/NativeMapDefault.compact",
+        "tests/compact/native-map-default.mjs",
+        "runtime/tests/native_map_default.rs"
       ],
       "equivalence": "unverified"
     },
@@ -2667,7 +2671,7 @@
       "layer": "language-ledger",
       "surface": "List.head",
       "noctiumStatus": "subset",
-      "notes": "Scalar and named-record Lists expose strict head and headOrDefault. Strict head requires a nonempty List. The optional form binds presence and a typed scalar or the declared record fields. The matched Native and Bytes128 case checks empty and nonempty values. Compact returns Maybe<T>. The host ledger getter remains unqualified.",
+      "notes": "Scalar and named-record Lists expose strict head and headOrDefault. Strict head requires a nonempty List. The optional form binds presence and a typed scalar or the declared record fields. The matched Native and Bytes128 case checks empty and nonempty values. The matched UInt8 case returns a single typed Maybe view on both compilers, with tag first and canonical zero for an empty List. The host ledger getter remains unqualified.",
       "source": [
         "adt"
       ],
@@ -2677,6 +2681,10 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "tests/NativeScalarListMaybe.lean",
+        "runtime/tests/scalar_list_maybe.rs",
+        "tests/compact/ListHeadMaybe.compact",
+        "tests/compact/list-head-maybe.mjs",
         "tests/OptionalListHead.lean",
         "runtime/tests/optional_list_head.rs",
         "tests/MixedLedgerRecord.lean",
@@ -3416,8 +3424,8 @@
       "id": "C-STDLIB-MAYBE",
       "layer": "standard-library",
       "surface": "Maybe",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "Scalar native List heads return the typed Maybe shape. Matched Compact 0.36.1 and Noctium on ZKIR 3.2.1 UInt8 cases cover empty and one-item Lists. General Maybe values in other source positions and element families remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3430,7 +3438,12 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeScalarListMaybe.lean",
+        "runtime/tests/scalar_list_maybe.rs",
+        "tests/compact/ListHeadMaybe.compact",
+        "tests/compact/list-head-maybe.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

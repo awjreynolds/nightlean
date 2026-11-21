@@ -63,6 +63,7 @@ pub enum Role {
     Toolchain,
     WitnessBinding,
     WitnessControl,
+    RustBinding,
 }
 impl Role {
     fn path(self, name: &str) -> String {
@@ -79,6 +80,7 @@ impl Role {
             Self::Toolchain => "provenance/native-zkir.json".into(),
             Self::WitnessBinding => "witness/entrypoint.binding.json".into(),
             Self::WitnessControl => "witness/entrypoint.control.json".into(),
+            Self::RustBinding => format!("bindings/rust/{name}"),
         }
     }
 }
@@ -87,6 +89,7 @@ fn file_limit(role: Role) -> u64 {
     match role {
         Role::WitnessBinding => 524_288,
         Role::WitnessControl => 1_048_576,
+        Role::RustBinding => 1_048_576,
         _ => MAX_FILE_BYTES,
     }
 }
@@ -611,6 +614,7 @@ fn validate_name(role: Role, name: &str) -> Result<()> {
         Role::Toolchain => name == "native-zkir.json",
         Role::WitnessBinding => !name.contains('/') && name.ends_with(".witness.json"),
         Role::WitnessControl => !name.contains('/') && name.ends_with(".witness.control.json"),
+        Role::RustBinding => !name.contains('/') && name.ends_with(".rs"),
     };
     require(
         expected,
@@ -828,21 +832,40 @@ fn one(payloads: &Payloads, role: Role) -> Result<(&str, &[u8])> {
 fn validate_compiler_inventory(metadata: &Value, plan: &Value, payloads: &Payloads) -> Result<()> {
     if metadata["schemaVersion"] == 1 {
         return require(
-            metadata.get("artifacts").is_none(),
+            metadata.get("artifacts").is_none() && !payloads.contains_key(&Role::RustBinding),
             "unsupported_schema",
-            "compiler metadata version 1 has no artifact inventory",
+            "compiler metadata version 1 cannot bind selected Rust modules",
         );
     }
     let files = metadata["artifacts"]
         .as_array()
         .ok_or_else(|| error("unsupported_schema", "compiler metadata lacks artifact inventory"))?;
     let mut roles = BTreeMap::new();
+    let mut rust_binding_hashes = BTreeMap::new();
     for row in files {
-        only_fields(row, &["file", "role"])?;
         let file = row["file"]
             .as_str()
             .ok_or_else(|| error("unsupported_schema", "artifact inventory lacks file name"))?;
         let role = row["role"].as_str().unwrap_or_default();
+        if role == "rustBinding" {
+            only_fields(row, &["file", "role", "sha256"])?;
+            if let Some(value) = row.get("sha256") {
+                let sha256 = value.as_str().ok_or_else(|| {
+                    error(
+                        "unsupported_schema",
+                        "Rust binding inventory digest is invalid",
+                    )
+                })?;
+                require(
+                    hex_length(sha256, 64),
+                    "unsupported_schema",
+                    "Rust binding inventory digest must be lowercase SHA-256",
+                )?;
+                rust_binding_hashes.insert(file, sha256);
+            }
+        } else {
+            only_fields(row, &["file", "role"])?;
+        }
         let name = if role == "rustBinding" {
             file.strip_prefix("bindings/rust/").unwrap_or_default()
         } else {
@@ -871,14 +894,28 @@ fn validate_compiler_inventory(metadata: &Value, plan: &Value, payloads: &Payloa
         (Role::Plan, "ledger"),
         (Role::WitnessBinding, "witness"),
         (Role::WitnessControl, "witness"),
+        (Role::RustBinding, "rustBinding"),
     ] {
         if payloads.contains_key(&payload_role) {
-            let (file, _) = one(payloads, payload_role)?;
+            let (file, bytes) = one(payloads, payload_role)?;
+            let inventory_file = if payload_role == Role::RustBinding {
+                format!("bindings/rust/{file}")
+            } else {
+                file.to_owned()
+            };
             require(
-                roles.get(file) == Some(&compiler_role),
+                roles.get(inventory_file.as_str()) == Some(&compiler_role),
                 "plan_mismatch",
                 "selected artifact differs from the compiler inventory",
             )?;
+            if payload_role == Role::RustBinding {
+                let actual = digest(bytes);
+                require(
+                    rust_binding_hashes.get(inventory_file.as_str()) == Some(&actual.as_str()),
+                    "plan_mismatch",
+                    "selected Rust module bytes differ from the compiler inventory",
+                )?;
+            }
         }
     }
     if let Some(standalone) = plan["circuit"].get("file") {
@@ -1283,11 +1320,12 @@ fn validate_witness_payloads(
     )?;
     let binding_present = payloads.contains_key(&Role::WitnessBinding);
     let control_present = payloads.contains_key(&Role::WitnessControl);
+    let rust_binding_present = payloads.contains_key(&Role::RustBinding);
     if selected.is_empty() {
         return require(
-            !binding_present && !control_present,
+            !binding_present && !control_present && !rust_binding_present,
             "plan_mismatch",
-            "unreferenced typed witness artifacts",
+            "unreferenced typed witness or Rust binding artifacts",
         );
     }
     let (binding_name, binding) = one(payloads, Role::WitnessBinding)?;
@@ -1305,6 +1343,18 @@ fn validate_witness_payloads(
         "plan_mismatch",
         "typed witness selection differs from compiler metadata",
     )?;
+    if rust_binding_present {
+        let expected = control_name
+            .strip_suffix(".witness.control.json")
+            .map(|prefix| format!("{prefix}.rs"))
+            .ok_or_else(|| error("plan_mismatch", "selected control has no Rust module name"))?;
+        let (rust_name, rust_bytes) = one(payloads, Role::RustBinding)?;
+        require(
+            rust_name == expected && rust_bytes.len() as u64 <= file_limit(Role::RustBinding),
+            "plan_mismatch",
+            "Rust module does not match the selected witness control",
+        )?;
+    }
     let binding_value = json(binding)?;
     require(
         binding_value["circuitName"] == plan["circuit"]["name"]
@@ -1633,6 +1683,7 @@ fn assemble_selected(recipe: Recipe, destination: &Path, omit_prover_key: bool) 
             Role::ProverKey => "prover",
             Role::VerifierKey => "verifier",
             Role::Abi if selection.name.ends_with(".h") => "h",
+            Role::RustBinding => "rs",
             _ => "json",
         };
         require(
