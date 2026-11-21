@@ -489,6 +489,9 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| sha512($value)) => s!"sha512({renderExpr value})"
   | `(nlexpr| keccak256($value)) => s!"keccak256({renderExpr value})"
   | `(nlexpr| bytes32($literal:str)) => s!"bytes32({(toJson literal.getString).compress})"
+  | `(nlexpr| nativeToken()) => "nativeToken()"
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    s!"tokenType({renderExpr domain}, {renderExpr contractAddress})"
   | `(nlexpr| bytes($length:num, $literal:str)) =>
     s!"bytes({length.getNat}, {(toJson literal.getString).compress})"
   | `(nlexpr| byteAt($value, $index:num)) =>
@@ -596,6 +599,8 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHashNativeVector([$values,*]))
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.flatMap disclosedValues
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    disclosedValues domain ++ disclosedValues contractAddress
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
   | `(nlexpr| jubjubMulGenerator($value))
@@ -656,6 +661,8 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHashNativeVector([$values,*]))
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.flatMap inlineAssertions
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    inlineAssertions domain ++ inlineAssertions contractAddress
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
   | `(nlexpr| jubjubMulGenerator($value))
@@ -1051,6 +1058,10 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
       type := .scalar (.foreign (.point .curve25519))
       term := .foreignConstant (.point .curve25519) (Foreign.identityEncoding .curve25519)
     }
+  | `(nlexpr| nativeToken()) | `(nlexpr| tokenType($_:nlexpr, $_:nlexpr)) => do
+    let some expanded ← Noctium.expandTokenHelperSyntax stx
+      | throwErrorAt stx "token helper expansion failed"
+    lowerExpr programName callPrefix env expanded
   | `(nlexpr| bytes32($literal:str)) => do
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"

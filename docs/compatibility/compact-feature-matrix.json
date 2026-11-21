@@ -5230,8 +5230,8 @@
       "id": "C-STDLIB-NATIVETOKEN",
       "layer": "standard-library",
       "surface": "nativeToken",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean nativeToken returns the canonical all-zero Bytes32 color. The pinned Compact comparator and emitted native relation return the same bytes.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5244,15 +5244,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeTokenColors.lean",
+        "runtime/tests/native_token_colors.rs",
+        "tests/compact/native-token-colors.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-TOKENTYPE",
       "layer": "standard-library",
       "surface": "tokenType",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean tokenType hashes the padded native domain, the supplied Bytes32 domain separator, and contract address bytes in order. Two changed-address cases match pinned Compact through the emitted native relation. The source helper accepts checked Bytes32 operands.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5265,7 +5269,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeTokenColors.lean",
+        "runtime/tests/native_token_colors.rs",
+        "tests/compact/native-token-colors.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
