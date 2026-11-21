@@ -20,6 +20,14 @@ rejects a trailing NUL, malformed UTF-8 in stored state, and opaque byte
 payloads presented to a string entrypoint. The string limit is 1 MiB of UTF-8.
 [Lean fixture](../../tests/OpaqueStringMap.lean) · [Native check](../../runtime/tests/opaque_string_map.rs) · [Compact reference](../../tests/compact/opaque-string-cases.mjs)
 
+Mutable root Cells accept both types through `cell text : OpaqueString` or
+`cell bytes : OpaqueBytes`. The empty value initializes each Cell. A write
+stores the exact public payload and binds its Compress projection. A read
+binds one field and returns the original value. The native query-context check
+matches Compact for the empty, embedded-NUL string and binary payload cases.
+Altering a bound input or output makes the relation check fail.
+[Lean fixture](../../tests/OpaqueCells.lean) · [Native check](../../runtime/tests/opaque_cells.rs) · [Compact fixture](../../tests/compact/OpaqueCells.compact)
+
 ```sh
 lake exe noctium compile tests/OpaqueByteMap.lean \
   --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
