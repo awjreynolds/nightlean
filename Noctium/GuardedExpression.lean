@@ -115,6 +115,8 @@ def totalize (guard : Expr .bool) : Expr ty → Expr ty
       (totalizeFabValues guard values)
   | .transientHash values => .transientHash (values.map (totalize guard))
   | .hashToCurve values => .hashToCurve (values.map (totalize guard))
+  | .hashToCurveFab environment type values =>
+    .hashToCurveFab environment type (totalizeFabValues guard values)
   | .toBytes32 value => .toBytes32 (totalize guard value)
   | .reverseBytes32 value => .reverseBytes32 (totalize guard value)
   | .fromBytes32 (target := .jubjubPoint) value =>

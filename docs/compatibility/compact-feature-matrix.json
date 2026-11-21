@@ -5035,8 +5035,8 @@
       "id": "C-STDLIB-HASHTOCURVE",
       "layer": "standard-library",
       "surface": "hashToCurve",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean hashToCurveFab lowers checked flat FAB layouts to the native Jubjub hash-to-curve instruction. Two changed private payloads in the mixed named record fixture match Compact 0.36.1, including the Bytes32 field split and enum tag. The native checker rejects a changed private field in the transcript. Recursive layouts and other host paths remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5049,7 +5049,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/MixedFabHashToCurve.lean",
+        "runtime/tests/hash_to_curve_fab.rs",
+        "tests/compact/mixed-fab-hash-to-curve.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
