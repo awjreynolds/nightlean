@@ -53,6 +53,7 @@ private def typeName : Ty → String
   | .bytes 32 => "Bytes32"
   | .bytes length => s!"Bytes {length}"
   | .opaqueBytes => "OpaqueBytes"
+  | .opaqueString => "OpaqueString"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
   | .foreign kind => kind.sourceName
@@ -330,6 +331,7 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .uint maximum => `(Noctium.Ty.uint $(natTerm maximum))
   | .bytes length => `(Noctium.Ty.bytes $(natTerm length))
   | .opaqueBytes => `(Noctium.Ty.opaqueBytes)
+  | .opaqueString => `(Noctium.Ty.opaqueString)
   | .jubjubScalar => `(Noctium.Ty.jubjubScalar)
   | .jubjubPoint => `(Noctium.Ty.jubjubPoint)
   | .foreign (.base .secp256k1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256k1))
@@ -438,6 +440,7 @@ private partial def renderType : TSyntax `nltype → String
   | `(nltype| Bytes32) => "Bytes32"
   | `(nltype| Bytes $length:num) => s!"Bytes {length.getNat}"
   | `(nltype| OpaqueBytes) => "OpaqueBytes"
+  | `(nltype| OpaqueString) => "OpaqueString"
   | `(nltype| JubjubScalar) => "JubjubScalar"
   | `(nltype| JubjubPoint) => "JubjubPoint"
   | `(nltype| Secp256k1Base) => "Secp256k1Base"

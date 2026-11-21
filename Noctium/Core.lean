@@ -22,6 +22,8 @@ inductive Ty where
   | bytes (length : Nat)
   /-- Dynamically sized host bytes with the native FAB Compress projection. -/
   | opaqueBytes
+  /-- Valid UTF-8 text with the native FAB Compress projection. -/
+  | opaqueString
   | jubjubScalar | jubjubPoint
   | foreign (kind : Foreign.Kind)
   deriving Repr, BEq, DecidableEq, Inhabited
@@ -32,6 +34,7 @@ def Ty.scalarKind : Ty → ScalarPolicy.Kind
   | .uint maximum => .uint maximum
   | .bytes length => .bytes length
   | .opaqueBytes => .opaqueBytes
+  | .opaqueString => .opaqueBytes
   | .jubjubScalar => .jubjubScalar
   | .jubjubPoint => .jubjubPoint
   | .foreign kind => .foreign kind
@@ -42,6 +45,10 @@ def Ty.isBytes : Ty → Bool
 
 def Ty.isOpaqueBytes : Ty → Bool
   | .opaqueBytes => true
+  | _ => false
+
+def Ty.isOpaqueString : Ty → Bool
+  | .opaqueString => true
   | _ => false
 
 def Ty.isJubjub : Ty → Bool

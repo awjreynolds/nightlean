@@ -1,13 +1,11 @@
 //! Public constructor evaluation and immutable deployment cells.
-use crate::{Db, Expr, Plan, ScalarType, StateDecl, create_state, evaluate, input_value};
+use crate::{Db, Expr, Plan, ScalarType, StateDecl, create_state, evaluate, input_value, scalars};
 use anyhow::{Result, anyhow, bail, ensure};
-use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom};
+use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue};
 use onchain_runtime::state::{ChargedState, StateValue};
 use serde::Deserialize;
 use serde_json::{Value as Json, json};
 use std::collections::{BTreeMap, BTreeSet};
-
-const MAX_CONSTRUCTOR_BYTES: usize = 1_048_576;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -45,12 +43,7 @@ pub(crate) fn opaque_string(value: &Json) -> Result<AlignedValue> {
     let text = value
         .as_str()
         .ok_or_else(|| anyhow!("expected opaque UTF-8 string"))?;
-    ensure!(
-        text.len() <= MAX_CONSTRUCTOR_BYTES,
-        "opaque string exceeds byte limit"
-    );
-    let atom = ValueAtom(text.as_bytes().to_vec());
-    ensure!(atom.is_in_normal_form(), "opaque string has trailing zero bytes");
+    let atom = scalars::opaque_string_atom(text)?;
     AlignedValue::new(
         FabValue(vec![atom]),
         Alignment::singleton(AlignmentAtom::Compress),
@@ -67,11 +60,7 @@ pub fn decode_opaque_string(value: &AlignedValue) -> Result<String> {
     );
     let atom = &value.value.0[0];
     let bytes = &atom.0;
-    ensure!(
-        bytes.len() <= MAX_CONSTRUCTOR_BYTES,
-        "opaque string exceeds byte limit"
-    );
-    ensure!(atom.is_in_normal_form(), "opaque string has trailing zero bytes");
+    scalars::validate_opaque_string_atom(atom)?;
     Ok(String::from_utf8(bytes.clone())?)
 }
 
@@ -93,6 +82,9 @@ fn scalar_zero(ty: &str) -> Result<Json> {
         ScalarType::Bytes32 => json!({"kind":"bytes", "values":vec![0u8;32]}),
         ScalarType::Bytes(length) => json!({"kind":"bytes", "values":vec![0u8;length]}),
         ScalarType::OpaqueBytes => json!({"kind":"opaqueBytes", "values":Vec::<u8>::new()}),
+        ScalarType::OpaqueString => {
+            bail!("OpaqueString requires the dedicated opaque string state kind")
+        }
         ScalarType::JubjubScalar => json!({"kind":"jubjubScalar", "value":"0"}),
         ScalarType::JubjubPoint => json!({"kind":"jubjubPoint", "x":"0", "y":"1"}),
         #[cfg(feature = "zkir-321")]
@@ -167,7 +159,7 @@ pub fn construct_state(
                 .checked_add(text.len())
                 .ok_or_else(|| anyhow!("constructor byte size overflow"))?;
             ensure!(
-                string_bytes <= MAX_CONSTRUCTOR_BYTES,
+                string_bytes <= scalars::MAX_OPAQUE_STRING_LENGTH,
                 "constructor string byte limit"
             );
             strings.insert(parameter.name.as_str(), value);

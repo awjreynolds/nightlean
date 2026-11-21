@@ -1357,12 +1357,18 @@ impl Parser<'_> {
                                 bail!("control arithmetic requires numeric scalar operands")
                             }
                             (
-                                ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes,
+                                ScalarType::Bytes32
+                                | ScalarType::Bytes(_)
+                                | ScalarType::OpaqueBytes
+                                | ScalarType::OpaqueString,
                                 _,
                             )
                             | (
                                 _,
-                                ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes,
+                                ScalarType::Bytes32
+                                | ScalarType::Bytes(_)
+                                | ScalarType::OpaqueBytes
+                                | ScalarType::OpaqueString,
                             ) => {
                                 bail!("control byte arithmetic")
                             }
@@ -1819,7 +1825,10 @@ impl Parser<'_> {
                 };
                 let index = self.expr(field(v, "index")?, env, depth + 1)?;
                 ensure!(
-                    matches!(scalar_type(&index.ty)?, ScalarType::Native | ScalarType::UInt(_)),
+                    matches!(
+                        scalar_type(&index.ty)?,
+                        ScalarType::Native | ScalarType::UInt(_)
+                    ),
                     "aggregate index requires Native or UInt"
                 );
                 let projected = text(v, "type")?.to_owned();
@@ -2355,7 +2364,10 @@ fn validate_relation_inputs(
                 None
             }
             ScalarType::UInt(maximum) => Some(maximum.bits()),
-            ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes => None,
+            ScalarType::Bytes32
+            | ScalarType::Bytes(_)
+            | ScalarType::OpaqueBytes
+            | ScalarType::OpaqueString => None,
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => None,
             #[cfg(feature = "zkir-321")]
             ScalarType::Foreign(_) => None,
@@ -2833,7 +2845,10 @@ fn validate_native_binding(
                 private_parameters.insert(source_name.as_str());
             } else if matches!(parse_type(source_type, registry)?, Type::Aggregate(_)) {
                 let members: Vec<_> = bound_names.iter().filter_map(Json::as_str).collect();
-                if call_inputs.iter().any(|input| members.contains(&input.as_str())) {
+                if call_inputs
+                    .iter()
+                    .any(|input| members.contains(&input.as_str()))
+                {
                     let start = call_inputs
                         .iter()
                         .position(|input| Some(input.as_str()) == members.first().copied());
@@ -2841,7 +2856,10 @@ fn validate_native_binding(
                         start
                             .and_then(|start| call_inputs.get(start..start + members.len()))
                             .is_some_and(|fields| {
-                                fields.iter().map(String::as_str).eq(members.iter().copied())
+                                fields
+                                    .iter()
+                                    .map(String::as_str)
+                                    .eq(members.iter().copied())
                             }),
                         "native aggregate call input must commit all leaves in layout order"
                     );
@@ -2851,7 +2869,9 @@ fn validate_native_binding(
         }
     }
     ensure!(
-        call_inputs.iter().all(|name| private_parameters.contains(name.as_str())),
+        call_inputs
+            .iter()
+            .all(|name| private_parameters.contains(name.as_str())),
         "native call inputs must come from private source parameters"
     );
     let mut witness_slot_ordinals = BTreeMap::new();
@@ -7348,7 +7368,8 @@ mod completed_invocation_tests {
             }
         }
         assert!(
-            super::validate_relation_inputs(&bad_relation, &relation_inputs, &input_order, &[]).is_err()
+            super::validate_relation_inputs(&bad_relation, &relation_inputs, &input_order, &[])
+                .is_err()
         );
 
         let read_index = reads

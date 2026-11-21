@@ -48,6 +48,7 @@ private def checkConstants : Expr ty → Except String Unit
     else throw "noncanonical unsigned constant"
   | .bytesField value _ | .bytesAt value _ => checkConstants value
   | .opaqueBytesProjection value => checkConstants value
+  | .opaqueStringProjection value => checkConstants value
   | .toBytes32 value => checkConstants value
   | .copyValue value | .reverseBytes32 value | .reverseBytes value | .sliceBytes value _ _ => checkConstants value
   | .concatBytes left right => do checkConstants left; checkConstants right
@@ -179,6 +180,7 @@ def constrainType (ty : Ty) (value : String) : LowerM Unit :=
   | .uint maximum => constrainUnsigned maximum value
   | .bytes _ => rejectLowering "Bytes32 must be expanded into byte inputs"
   | .opaqueBytes => pure ()
+  | .opaqueString => pure ()
   | .jubjubScalar | .jubjubPoint | .foreign _ => rejectLowering "opaque values require their typed input bridge"
 
 private def lowerJubjubScalarFromNative (native : String) : LowerM String := do
@@ -728,7 +730,7 @@ private def lowerByteInput (input : Input) (raw : Bool := false) : LowerM Unit :
     let output := "%input_" ++ input.name
     read output (toJson kind.nativeName)
     modify fun state => {state with aliases := (input.name, output) :: state.aliases}
-  | .opaqueBytes => do
+  | .opaqueBytes | .opaqueString => do
     let output := "%input_" ++ input.name
     read output
     modify fun state => {state with aliases := (input.name, output) :: state.aliases}
@@ -779,6 +781,29 @@ private def lowerOpaqueBytes : Expr .opaqueBytes → LowerM String
     lowerOpaqueBytes body
   | _ => do
     rejectLowering "unsupported OpaqueBytes expression in Compress projection"
+    pure "0x00"
+termination_by value => sizeOf value
+decreasing_by
+  all_goals simp_wf <;> omega
+
+private def lowerOpaqueString : Expr .opaqueString → LowerM String
+  | .ref name => do
+    pure ((← get).aliases.lookup name |>.getD ("%input_" ++ name))
+  | .disclose _ value => lowerOpaqueString value
+  | .copyValue value => do
+    unary "copy" (← lowerOpaqueString value) "val"
+  | @Expr.letE .opaqueString _ name value body => do
+    let value ← lowerOpaqueString value
+    let aliases := (← get).aliases
+    modify fun state => {state with aliases := (name, value) :: aliases}
+    let result ← lowerOpaqueString body
+    modify fun state => {state with aliases}
+    pure result
+  | .assertE condition body => do
+    emit "assert" [("cond", toJson (← lowerExpr condition))]
+    lowerOpaqueString body
+  | _ => do
+    rejectLowering "unsupported OpaqueString expression in Compress projection"
     pure "0x00"
 termination_by value => sizeOf value
 decreasing_by
@@ -935,6 +960,7 @@ def lowerExpr : Expr ty → LowerM String
   | .foreignFromBytes (length := length) kind value => do
     lowerForeignFromBytes kind length (← lowerBytes value)
   | .opaqueBytesProjection value => lowerOpaqueBytes value
+  | .opaqueStringProjection value => lowerOpaqueString value
   | .foreignBase curve value => lowerForeignConstant (.base curve) (Foreign.encodeField (.base curve) value)
   | .foreignScalar curve value => lowerForeignConstant (.scalar curve) (Foreign.encodeField (.scalar curve) value)
   | .foreignPoint curve value => lowerForeignConstant (.point curve) (Foreign.encodePoint curve value)
@@ -960,7 +986,7 @@ def lowerExpr : Expr ty → LowerM String
     lowerBoolGate "xor" left right
   | .ref name => do
     match ty with
-    | .bytes _ | .opaqueBytes => do
+    | .bytes _ | .opaqueBytes | .opaqueString => do
       rejectLowering "byte strings require their typed FAB alignment"
       pure "0x00"
     | .jubjubScalar | .jubjubPoint =>
@@ -1086,6 +1112,9 @@ def lowerExpr : Expr ty → LowerM String
       pure "0x00"
     | .opaqueBytes => do
       rejectLowering "opaque byte strings do not support scalar casts"
+      pure "0x00"
+    | .opaqueString => do
+      rejectLowering "opaque strings do not support scalar casts"
       pure "0x00"
     | .jubjubScalar | .jubjubPoint | .foreign _ => do
       rejectLowering "opaque values do not support generic scalar casts"

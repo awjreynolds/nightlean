@@ -76,6 +76,7 @@ impl Type {
             Self::Scalar(ScalarType::Bytes32) => "Bytes<32>".to_owned(),
             Self::Scalar(ScalarType::Bytes(length)) => format!("Bytes<{length}>"),
             Self::Scalar(ScalarType::OpaqueBytes) => "OpaqueBytes".to_owned(),
+            Self::Scalar(ScalarType::OpaqueString) => "OpaqueString".to_owned(),
             Self::Scalar(ScalarType::JubjubScalar) => "JubjubScalar".to_owned(),
             Self::Scalar(ScalarType::JubjubPoint) => "JubjubPoint".to_owned(),
             #[cfg(feature = "zkir-321")]
@@ -104,6 +105,7 @@ fn scalar_type_key(ty: &ScalarType) -> String {
         ScalarType::Bytes32 => "bytes32".to_owned(),
         ScalarType::Bytes(length) => format!("bytes{length}"),
         ScalarType::OpaqueBytes => "opaqueBytes".to_owned(),
+        ScalarType::OpaqueString => "opaqueString".to_owned(),
         ScalarType::JubjubScalar => "jubjubScalar".to_owned(),
         ScalarType::JubjubPoint => "jubjubPoint".to_owned(),
         #[cfg(feature = "zkir-321")]
@@ -140,6 +142,7 @@ fn validate_scalar(ty: &ScalarType, value: &Json) -> Result<()> {
         ScalarType::Bytes32
         | ScalarType::Bytes(_)
         | ScalarType::OpaqueBytes
+        | ScalarType::OpaqueString
         | ScalarType::JubjubScalar
         | ScalarType::JubjubPoint => {
             let token = Type::Scalar(ty.clone()).token();
@@ -398,7 +401,10 @@ impl Registry {
                 ScalarType::Native => "native",
                 ScalarType::Bool => "bool",
                 ScalarType::UInt(_) => "uint",
-                ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes => {
+                ScalarType::Bytes32
+                | ScalarType::Bytes(_)
+                | ScalarType::OpaqueBytes
+                | ScalarType::OpaqueString => {
                     bail!("byte projections require an aggregate schema")
                 }
                 ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
@@ -435,7 +441,10 @@ impl Registry {
                         .and_then(Json::as_bool)
                         .ok_or_else(|| anyhow!("aggregate projection Boolean value missing"))?,
                 ),
-                ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes => {
+                ScalarType::Bytes32
+                | ScalarType::Bytes(_)
+                | ScalarType::OpaqueBytes
+                | ScalarType::OpaqueString => {
                     bail!("byte projections require an aggregate schema")
                 }
                 ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
@@ -460,6 +469,7 @@ fn scalar_token_from_key(key: &str) -> Option<String> {
         "sN" => Some("Native".to_owned()),
         "sB" => Some("Bool".to_owned()),
         "opaqueBytes" => Some("OpaqueBytes".to_owned()),
+        "opaqueString" => Some("OpaqueString".to_owned()),
         _ => {
             let maximum = key.strip_prefix("sU")?.strip_suffix(';')?;
             let value = BigUint::parse_bytes(maximum.as_bytes(), 10)?;

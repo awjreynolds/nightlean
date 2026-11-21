@@ -31,6 +31,7 @@ inductive Aligned where
   | bytes32 (value : Expr (.bytes 32))
   | bytes (length : Nat) (value : Expr (.bytes length))
   | compress (value : Expr .opaqueBytes)
+  | compressString (value : Expr .opaqueString)
   | nativeFields (values : List Scalar)
   | counter (value : Expr (.uint (2 ^ 64 - 1)))
   deriving Repr
@@ -66,6 +67,7 @@ private def ledgerFieldPayloads : LedgerFieldExpr → List Scalar
   | .mk (.bytes length) value =>
       (List.range (alignedByteChunkCount length)).map (.bytesField value)
   | .mk .opaqueBytes value => [.opaqueBytesProjection value]
+  | .mk .opaqueString value => [.opaqueStringProjection value]
   | .mk .jubjubScalar value => [.jubjubScalarToNative value]
   | .mk .jubjubPoint value => [.jubjubCoordinate value 0, .jubjubCoordinate value 1]
   | .mk (.foreign kind) value => foreignNativeFields kind value
@@ -90,6 +92,7 @@ private def refLedgerFieldExpr (name : String) (ty : Ty) : LedgerFieldExpr :=
   | .uint maximum => .mk (.uint maximum) (.ref name)
   | .bytes length => .mk (.bytes length) (.ref name)
   | .opaqueBytes => .mk .opaqueBytes (.ref name)
+  | .opaqueString => .mk .opaqueString (.ref name)
   | .jubjubScalar => .mk .jubjubScalar (.ref name)
   | .jubjubPoint => .mk .jubjubPoint (.ref name)
   | .foreign kind => .mk (.foreign kind) (.ref name)
@@ -231,6 +234,7 @@ def Aligned.fields : Aligned → List Scalar
   | .bytes length value => [.native 1, .native length] ++
       (List.range (alignedByteChunkCount length)).map (.bytesField value)
   | .compress value => [.native 1, .native (Field.modulus - 1), .opaqueBytesProjection value]
+  | .compressString value => [.native 1, .native (Field.modulus - 1), .opaqueStringProjection value]
   | .nativeFields values => nativeFieldSequence values
   | .counter value => [.native 1, .native 8, .cast .native value]
 
@@ -914,6 +918,8 @@ def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
   | .bytes _, _ | _, none => none
   | .opaqueBytes, some guard => some (.eq (.opaqueBytesProjection (.ref read.name))
       (.select guard (.opaqueBytesProjection (.ref read.name)) (.native 0)))
+  | .opaqueString, some guard => some (.eq (.opaqueStringProjection (.ref read.name))
+      (.select guard (.opaqueStringProjection (.ref read.name)) (.native 0)))
   | .jubjubScalar, some guard => some (.eq
       (.jubjubScalarToNative (.ref read.name))
       (.select guard (.jubjubScalarToNative (.ref read.name)) (.native 0)))
@@ -1009,7 +1015,7 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
     (plan.reads.drop publicCount).flatMap fun read =>
       read.scalarReads.flatMap fun scalarRead =>
         (match scalarRead.ty with
-          | .bytes _ | .opaqueBytes | .jubjubPoint => [(scalarRead.name, scalarRead.ty)]
+          | .bytes _ | .opaqueBytes | .opaqueString | .jubjubPoint => [(scalarRead.name, scalarRead.ty)]
           | _ => []) ++ scalarRead.bindings
   for field in plan.fields do field.validate expressionCapabilities env
   for guard in plan.guards do guard.validate expressionCapabilities env
@@ -1036,6 +1042,7 @@ private def nativeValue : (ty : Ty) → Expr ty → Except String Scalar
   | .uint _, value => pure (.cast .native value)
   | .bytes _, _ => throw "Bytes32 requires byte alignment, not scalar conversion"
   | .opaqueBytes, _ => throw "OpaqueBytes require Compress alignment, not scalar conversion"
+  | .opaqueString, _ => throw "OpaqueString requires Compress alignment, not scalar conversion"
   | .jubjubScalar, _ | .jubjubPoint, _ | .foreign _, _ => throw "opaque values require explicit encoding projections"
 
 private def nativeAligned : (ty : Ty) → Expr ty → Except String Aligned
@@ -1045,6 +1052,7 @@ private def nativeAligned : (ty : Ty) → Expr ty → Except String Aligned
   | .bytes 32, value => pure (.bytes32 value)
   | .bytes length, value => pure (.bytes length value)
   | .opaqueBytes, value => pure (.compress value)
+  | .opaqueString, value => pure (.compressString value)
   | .foreign kind, value => pure (.foreignKey kind value)
   | .jubjubScalar, _ | .jubjubPoint, _ => throw "opaque values require explicit encoding projections"
 
@@ -1055,6 +1063,7 @@ private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
   | .uint maximum => pure (.cast .native (.ref name : Expr (.uint maximum)))
   | .bytes _ => throw "Bytes32 is read through byte alignment"
   | .opaqueBytes => pure (.opaqueBytesProjection (.ref name))
+  | .opaqueString => pure (.opaqueStringProjection (.ref name))
   | .jubjubScalar | .jubjubPoint | .foreign _ => throw "opaque inputs use reserved Native projections"
 
 private def pushKey : Aligned → Op
@@ -1083,6 +1092,7 @@ private def storageWriteValue : (ty : Ty) → Expr ty → Except String Op
   | .bytes 32, value => pure (.push (.bytes32 value) true)
   | .bytes length, value => pure (.push (.bytes length value) true)
   | .opaqueBytes, value => pure (.push (.compress value) true)
+  | .opaqueString, value => pure (.push (.compressString value) true)
   | ty, value => do
     pure (.push (.field (← nativeValue ty value)) true)
 
@@ -1097,6 +1107,9 @@ private def storageReadValue (ty : Ty) (name : String) : Except String Op := do
   | .opaqueBytes =>
     let value : Expr .opaqueBytes := .ref name
     pure (.popeq (.compress value))
+  | .opaqueString =>
+    let value : Expr .opaqueString := .ref name
+    pure (.popeq (.compressString value))
   | .foreign kind =>
     let value : Expr (.foreign kind) := .ref name
     pure (.popeqFields (Lean.Json.str kind.sourceName)
@@ -1364,6 +1377,7 @@ private def merkleTreeResetHistoryAtOp (state : List StateDecl) (name : String)
 private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ | .foreignBase _ _ | .foreignScalar _ _ | .foreignPoint _ _ => []
   | .opaqueBytesProjection value => expressionNames value
+  | .opaqueStringProjection value => expressionNames value
   | .foreignEncodedField value _ | .foreignUnary _ value | .foreignToBytes value
   | .foreignFromBytes _ value => expressionNames value
   | .foreignBinary _ left right => expressionNames left ++ expressionNames right
@@ -2098,6 +2112,11 @@ private def publicInputStep (input : Input) (plan : Plan) : Except String Plan :
     pure {plan with
       operations := plan.operations ++ [.push value, .popeq value]
       reads := plan.reads ++ [{name := input.name, ty := .opaqueBytes}]}
+  | .opaqueString => do
+    let value := Aligned.compressString (.ref input.name)
+    pure {plan with
+      operations := plan.operations ++ [.push value, .popeq value]
+      reads := plan.reads ++ [{name := input.name, ty := .opaqueString}]}
   | .native | .bool | .uint _ => do
     let value := Aligned.field (← nativeRead input.ty input.name)
     pure { plan with
@@ -2578,6 +2597,13 @@ def Aligned.toJson (ctx : EvalContext) (env : EvalEnv) (value : Aligned) : Excep
     | .compress expression => do
       let values ← expression.eval ctx env
       pure (Lean.Json.arr #[Lean.Json.arr (values.toArray.map Lean.toJson)],
+        Lean.Json.mkObj [("tag", Lean.toJson ("compress" : String))])
+    | .compressString expression => do
+      let text ← expression.eval ctx env
+      let bytes := text.toUTF8.data.toList.map UInt8.toNat
+      unless bytes.length ≤ maxOpaqueStringBytes && (bytes.isEmpty || bytes.getLast! != 0) do
+        throw "opaque string is not in canonical UTF-8 Compress form"
+      pure (Lean.Json.arr #[Lean.Json.arr (bytes.toArray.map Lean.toJson)],
         Lean.Json.mkObj [("tag", Lean.toJson ("compress" : String))])
     | .nativeFields _ => throw "grouped Native fields serialize through pushFields/popeqFields"
     | .counter expression => do
