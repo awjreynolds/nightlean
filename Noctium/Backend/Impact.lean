@@ -1207,7 +1207,8 @@ private def expressionNames : Expr ty → List String
   | .foreignFromBytes _ value => expressionNames value
   | .foreignBinary _ left right => expressionNames left ++ expressionNames right
   | .bytesField value _ | .bytesAt value _ => expressionNames value
-  | .sha256 value | .sha512 value | .keccak256 value | .persistentHash32 value => expressionNames value
+  | .sha256 value | .sha512 value | .keccak256 value
+  | .keccak256Secp256k1Point value | .persistentHash32 value => expressionNames value
   | .bytes32Literal _ | .bytesLiteral _ _ => []
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value

@@ -332,6 +332,10 @@ pub enum Expr {
         length: usize,
         value: Box<Expr>,
     },
+    #[serde(rename = "keccak256Secp256k1Point")]
+    Keccak256Secp256k1Point {
+        value: Box<Expr>,
+    },
     #[serde(rename = "sliceBytes")]
     SliceBytes {
         length: usize,
@@ -797,6 +801,43 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
         }
         Expr::Keccak256 { length, value } => {
             Value::Bytes(sha3::Keccak256::digest(evaluated_bytes(value, *length, env)?).to_vec())
+        }
+        #[cfg(feature = "zkir-321")]
+        Expr::Keccak256Secp256k1Point { value } => {
+            let Value::Foreign(point) = evaluate(value, env)? else {
+                bail!("keccak256Secp256k1Point requires a typed foreign point")
+            };
+            let expected = foreign::ForeignType::new(
+                foreign::ForeignFamily::Secp256k1,
+                foreign::ForeignRole::Point,
+            );
+            ensure!(
+                point.foreign_type() == expected,
+                "keccak256Secp256k1Point requires Secp256k1Point"
+            );
+            let encoded = point.encode()?;
+            ensure!(
+                encoded.len() == 5,
+                "Secp256k1Point Encode must produce five fields"
+            );
+            let mut preimage = Vec::with_capacity(96);
+            for (field, width) in encoded.iter().zip([24usize, 8, 24, 8, 32]) {
+                let bytes = field.as_le_bytes();
+                ensure!(
+                    bytes[width..].iter().all(|byte| *byte == 0),
+                    "Secp256k1Point Encode field exceeds its FAB alignment"
+                );
+                preimage.extend_from_slice(&bytes[..width]);
+            }
+            ensure!(
+                preimage.len() == 96,
+                "Secp256k1Point FAB preimage must be 96 bytes"
+            );
+            Value::Bytes(sha3::Keccak256::digest(preimage).to_vec())
+        }
+        #[cfg(not(feature = "zkir-321"))]
+        Expr::Keccak256Secp256k1Point { .. } => {
+            bail!("keccak256Secp256k1Point requires the ZKIR 3.2.1 runtime")
         }
         Expr::SliceBytes {
             length,

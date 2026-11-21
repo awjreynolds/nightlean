@@ -67,6 +67,9 @@ private def nativeExpressionJson : Expr ty → Json
   | .keccak256 (length := length) value => Json.mkObj [
       ("tag", toJson ("keccak256" : String)), ("length", toJson length),
       ("value", nativeExpressionJson value)]
+  | .keccak256Secp256k1Point value => Json.mkObj [
+      ("tag", toJson ("keccak256Secp256k1Point" : String)),
+      ("value", nativeExpressionJson value)]
   | .reverseBytes32 value => Json.mkObj [("tag", toJson ("reverseBytes32" : String)),
       ("value", nativeExpressionJson value)]
   | .persistentHash32 value => Json.mkObj [("tag", toJson ("persistentHash32" : String)),
