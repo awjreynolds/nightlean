@@ -1,0 +1,12 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger values: List<Uint<8>>;
+
+export circuit push(value: Uint<8>): [] {
+  values.pushFront(disclose(value));
+}
+
+export circuit head(): Maybe<Uint<8>> {
+  return values.head();
+}
