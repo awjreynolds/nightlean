@@ -57,6 +57,7 @@ jobs:
           lake env lean tests/Issue70PersistentHash.lean
           lake env lean tests/MixedFabPersistentHash.lean
           lake env lean tests/MixedFabCommitments.lean
+          lake env lean tests/FlatFabTuple.lean
           lake env lean tests/Issue70HashPreimages.lean
           lake env lean tests/Issue70Jubjub.lean
           lake env lean tests/Issue70DerivedCrypto.lean
