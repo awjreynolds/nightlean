@@ -28,11 +28,18 @@ noctium_contract FundedShieldedReceive where
     value : UInt 128
     mtIndex : UInt 64
   }
+  list coinList : struct Coin {
+    nonce : Bytes32
+    color : Bytes32
+    value : UInt 128
+    mtIndex : UInt 64
+  }
 
   entry tip uses fundedShieldedReceiveInputs where
     mintShielded(domain, 5)
     receiveShieldedToMap(pot, disclose(nonce), disclose(color), 5)
     writeShieldedCoinCell(held, disclose(nonce), disclose(color), 5)
     insertShieldedCoinSet(registry, disclose(nonce), disclose(color), 5)
+    pushFrontCoin(coinList, disclose(nonce), disclose(color), 5)
   end
 end
