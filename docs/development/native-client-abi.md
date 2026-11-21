@@ -44,6 +44,48 @@ Both 3.2.0 and 3.2.1 passed the worker's ordinary Rust suite and six retained-ma
 
 Counts, source hashes, native binary identities, public receipt IDs, full-state digests, and independent qualification records are in [native client ABI evidence](../../tests/native-client-abi-evidence.json). This is an isolated development-network qualification. It does not prove consensus finality, universal compiler correctness, source-effect execution, business-spec correctness, or public-network behavior. The node, proof parameters and keys, entropy, external service policy, signing approval, and durable journal store remain host trust assumptions. Cancellation does not hard-stop in-flight CPU or transport work. The ABI makes no blanket native-memory erasure claim. TypeScript/WASM, Kotlin, and Swift bindings remain future goals.
 
+## Call multiple entrypoints on one deployment
+
+Use `noctium_native_contract_target_begin` with authenticated operation bundles
+from one contract and its initial state. The target keeps one verifier map and
+deployment address. Start the deployment with
+`noctium_client_contract_deployment_start` and drive it through the native
+client. `noctium_native_contract_state_take` issues each next state token once,
+after finalized receipt validation, durable acknowledgement and private commit.
+
+Select an operation in `noctium_client_contract_call_start` with its pinned
+SRS, canonical scalar inputs and fresh entropy. The ABI proves locally and
+starts a bound client. A successful start consumes the current token. A
+rejected call leaves the token available for a corrected input.
+Use this path for entrypoints without a witness-control sidecar.
+
+For development recovery, use the same explicitly authorized journal with
+`noctium_native_contract_target_restore` and
+`noctium_native_contract_call_recover`. Pass the deployment attempt ID to
+restore the original target, and the selected call attempt ID with its matching
+host context to recover the client. Reobserve the finalized receipt and
+complete the private commit before requesting the next state token.
+
+Use the linked C++ test with the four authenticated
+[ModuleLedger bundles](modules.md) and the pinned K6 SRS. The target and
+localnet descriptors share one private journal directory. Keep the handoff
+file in that directory with private permissions.
+
+```sh
+"$CPP_HOST" modules-run "$CLIENT" "$LOCALNET" "$TARGET" "$INITIAL_STATE" \
+  "$K6_SRS" "$K6_SHA256" "$HANDOFF"
+"$CPP_HOST" modules-recover "$CLIENT" "$LOCALNET" "$TARGET" "$INITIAL_STATE" \
+  "$K6_SRS" "$K6_SHA256" "$HANDOFF"
+```
+
+On Ledger 9, the first process deployed all four operations and lost the
+acknowledgement for `firstUpdate`. A new process recovered the original signed
+transaction, confirmed finality and committed private state once. It then
+called `againRead`, `againUpdate` and `differentUpdate`. Every finalized state
+digest matched the Rust module run. A mismatched recovery context and a stale
+read both rejected.
+[C++ receipts and artifact pins](module-ledger-cpp-localnet-receipts.json)
+
 ## Read Merkle snapshots
 
 `noctium_ledger_collection_page` reads ordinary and historic Merkle trees

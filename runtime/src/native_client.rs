@@ -115,7 +115,7 @@ fn snapshot_copy(s: &Snapshot) -> Snapshot {
 fn record_copy(r: &RecoveryRecord) -> Result<RecoveryRecord, HostFailure> {
     serde_json::from_slice(&r.private_bytes().map_err(|_| HostFailure)?).map_err(|_| HostFailure)
 }
-fn recovery_host_context(context: &[u8]) -> Result<host::Context, client::Error> {
+pub(crate) fn recovery_host_context(context: &[u8]) -> Result<host::Context, client::Error> {
     let value: Json = serde_json::from_slice(context).map_err(|_| client::Error::Identity)?;
     if value.get("recoveryVersion").is_some() {
         serde_json::from_value(value["context"].clone()).map_err(|_| client::Error::Identity)

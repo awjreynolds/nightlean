@@ -616,6 +616,20 @@ impl WitnessExecution {
 }
 
 impl WitnessContractTarget {
+    /// Restore the retained deployment identity from its SDK60 journal after a host restart.
+    pub async fn restore_deployment_from_journal(
+        self,
+        store: &impl client::JournalStore,
+        deployment_attempt_id: &str,
+        ttl: u64,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
+        let attempt = client::SubmissionAttempt::recover(store, deployment_attempt_id)
+            .await
+            .map_err(Error::Client)?;
+        self.restore_deployment(&attempt, ttl, rng).map_err(Error::Proof)
+    }
+
     /// Rebind a trusted durable attempt to authenticated artifacts, then reobserve finality and CAS.
     pub async fn recover_client(
         &self,
@@ -624,6 +638,11 @@ impl WitnessContractTarget {
         descriptor_json: &[u8],
         context_json: &[u8],
     ) -> Result<WitnessClient> {
+        let recovery_context = native_client::recovery_host_context(context_json)
+            .map_err(Error::Client)?;
+        if recovery_context.attempt_id != attempt_id {
+            return Err(Error::Client(client::Error::Identity));
+        }
         let attempt = client::SubmissionAttempt::recover(store, attempt_id)
             .await
             .map_err(Error::Client)?;
@@ -946,6 +965,10 @@ pub struct WitnessClient {
     driver: Driver,
 }
 impl WitnessClient {
+    pub(crate) fn into_driver(self) -> Driver {
+        self.driver
+    }
+
     /// Restore a client from the exact private context in its trusted journal domain.
     pub fn recover(descriptor_json: &[u8], context: &[u8]) -> Result<Self> {
         let descriptor: Descriptor =
