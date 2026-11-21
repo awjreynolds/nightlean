@@ -1,6 +1,6 @@
 # Typed Secp inputs and results
 
-This slice connects the six Secp256k1/Secp256r1 Base, Scalar and Point types to typed inputs, constants, equality, selection and results. The complete operation package remains tracked in [issue 75](https://github.com/awjreynolds/noctium/issues/75).
+Secp256k1 and Secp256r1 Base, Scalar and Point types support typed inputs, constants, equality, selection and results. [Secp implementation](https://github.com/awjreynolds/noctium/issues/75)
 
 | Source type | Native type | Encoded Native fields |
 | --- | --- | --- |
