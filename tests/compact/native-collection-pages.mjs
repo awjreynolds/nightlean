@@ -43,4 +43,10 @@ for (const reverse of [false, true]) {
   assert.deepEqual(actualFlags, [[1n, true], [2n, false], [10n, true]]);
   assert.deepEqual(actualMembers, [1, 4, 9].map(value => new Uint8Array(32).fill(value)));
 }
-console.log('Compact 0.36.1 Map and Set snapshots match the native pagination fixture contents');
+let listState = currentContractState.data;
+assert.deepEqual([...ledger(listState).values], []);
+for (const value of [33n, 22n, 11n]) {
+  listState = await call(listState, 'prepend', value);
+}
+assert.deepEqual([...ledger(listState).values], [11n, 22n, 33n]);
+console.log('Compact 0.36.1 Map, Set and List snapshots match the native pagination fixture contents');
