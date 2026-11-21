@@ -2820,8 +2820,8 @@
       "id": "C-ADT-LIST-PUSHFRONTCOIN",
       "layer": "language-ledger",
       "surface": "List.pushFrontCoin",
-      "noctiumStatus": "missing",
-      "notes": "Qualified shielded-coin insertion requires a coin index allocated in the current transaction. The coin-valued method remains open.",
+      "noctiumStatus": "subset",
+      "notes": "A root List prepends the fixed QualifiedInfo record using a coin index booked for the current contract. The native query-context fixture checks head-to-tail order and rejects missing or wrong-recipient bookings. Finalized ledger execution and broader recipient cases remain open.",
       "source": [
         "adt"
       ],
@@ -2830,7 +2830,10 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/QualifiedCoinList.lean",
+        "runtime/tests/qualified_coin_list.rs"
+      ],
       "equivalence": "unverified"
     },
     {

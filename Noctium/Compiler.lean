@@ -300,6 +300,12 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
       ("amount", nativeExpressionJson amount),
       ("commitment", nativeExpressionJson commitment)]
+  | .listPushFrontCoin slot keys schema nonce color amount commitment => Json.mkObj [
+      ("op", toJson ("listPushFrontCoin" : String)), ("slot", toJson slot),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
+      ("schema", schema), ("nonce", nativeExpressionJson nonce),
+      ("color", nativeExpressionJson color), ("amount", nativeExpressionJson amount),
+      ("commitment", nativeExpressionJson commitment)]
   | .spendShieldedFromMap nonce color amount recipient nullifier outputCommitment => Json.mkObj [
       ("op", toJson ("spendShieldedFromMap" : String)),
       ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
@@ -400,6 +406,10 @@ private def effectJson : Effect → Json
       ("amount", expressionJson amount), ("selfAddress", expressionJson selfAddress)]
   | .writeShieldedCoinCell state nonce color amount selfAddress => Json.mkObj [
       ("op", toJson ("writeShieldedCoinCell" : String)), ("state", toJson state),
+      ("nonce", expressionJson nonce), ("color", expressionJson color),
+      ("amount", expressionJson amount), ("selfAddress", expressionJson selfAddress)]
+  | .pushFrontCoin state nonce color amount selfAddress => Json.mkObj [
+      ("op", toJson ("pushFrontCoin" : String)), ("state", toJson state),
       ("nonce", expressionJson nonce), ("color", expressionJson color),
       ("amount", expressionJson amount), ("selfAddress", expressionJson selfAddress)]
   | .spendShieldedFromMap state nonce color amount recipient selfAddress => Json.mkObj [
