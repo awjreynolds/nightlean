@@ -167,6 +167,62 @@ fn claim_hash_output(value: Value, label: &str) -> Result<HashOutput> {
     Ok(HashOutput(bytes))
 }
 
+fn explicit_shielded_recipient(
+    is_contract: &Expr,
+    recipient: &Expr,
+    env: &Environment,
+) -> Result<Recipient> {
+    let is_contract = evaluate(is_contract, env)?.boolean()?;
+    let recipient = claim_hash_output(evaluate(recipient, env)?, "shielded recipient")?;
+    Ok(if is_contract {
+        Recipient::Contract(ContractAddress(recipient))
+    } else {
+        Recipient::User(PublicKey(recipient))
+    })
+}
+
+fn booked_coin_recipient(
+    instruction: &Instruction,
+    context: &QueryContext<Db>,
+    env: &Environment,
+) -> Result<Recipient> {
+    match instruction {
+        Instruction::WriteShieldedCoinCellTo {
+            is_contract,
+            recipient,
+            ..
+        }
+        | Instruction::InsertShieldedCoinSetTo {
+            is_contract,
+            recipient,
+            ..
+        }
+        | Instruction::ListPushFrontCoinTo {
+            is_contract,
+            recipient,
+            ..
+        } => explicit_shielded_recipient(is_contract, recipient, env),
+        Instruction::WriteShieldedCoinCell { .. }
+        | Instruction::InsertShieldedCoinSet { .. }
+        | Instruction::ListPushFrontCoin { .. } => {
+            Ok(Recipient::Contract(context.address))
+        }
+        _ => bail!("instruction does not select a booked coin recipient"),
+    }
+}
+
+fn qualify_booked_coin_for(
+    context: &QueryContext<Db>,
+    coin: &ShieldedCoinInfo,
+    recipient: &Recipient,
+) -> Option<QualifiedInfo> {
+    context
+        .call_context
+        .com_indices
+        .get(&coin.commitment(recipient))
+        .map(|index| coin.qualify(*index))
+}
+
 fn byte_alignment_length(alignment: &str) -> Result<Option<usize>> {
     if alignment == "bytes32" {
         return Ok(Some(32));
@@ -1488,12 +1544,44 @@ pub enum Instruction {
         amount: Expr,
         commitment: Expr,
     },
+    #[serde(rename = "writeShieldedCoinCellTo", rename_all = "camelCase")]
+    WriteShieldedCoinCellTo {
+        slot: u32,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        is_contract: Expr,
+        recipient: Expr,
+        commitment: Expr,
+    },
     #[serde(rename = "insertShieldedCoinSet", rename_all = "camelCase")]
     InsertShieldedCoinSet {
         slot: u32,
         nonce: Expr,
         color: Expr,
         amount: Expr,
+        commitment: Expr,
+    },
+    #[serde(rename = "insertShieldedCoinSetTo", rename_all = "camelCase")]
+    InsertShieldedCoinSetTo {
+        slot: u32,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        is_contract: Expr,
+        recipient: Expr,
+        commitment: Expr,
+    },
+    #[serde(rename = "listPushFrontCoinTo", rename_all = "camelCase")]
+    ListPushFrontCoinTo {
+        slot: u32,
+        keys: Vec<PathPart>,
+        schema: Json,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        is_contract: Expr,
+        recipient: Expr,
         commitment: Expr,
     },
     #[serde(rename = "spendShieldedFromMap", rename_all = "camelCase")]
@@ -1774,10 +1862,20 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::ReceiveShieldedToMap { .. } => RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS.to_vec(),
         Instruction::WriteShieldedCoinCell { .. } => WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS.to_vec(),
+        Instruction::WriteShieldedCoinCellTo { .. } => {
+            WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS.to_vec()
+        }
         Instruction::ListPushFrontCoin { .. } => {
             bail!("qualified coin List push must be unguarded")
         }
+        Instruction::ListPushFrontCoinTo { .. } => {
+            bail!("qualified coin List push must be unguarded")
+        }
         Instruction::InsertShieldedCoinSet { slot, .. } => {
+            validate_shielded_coin_set(plan, *slot)?;
+            INSERT_SHIELDED_COIN_SET_FIELD_COUNTS.to_vec()
+        }
+        Instruction::InsertShieldedCoinSetTo { slot, .. } => {
             validate_shielded_coin_set(plan, *slot)?;
             INSERT_SHIELDED_COIN_SET_FIELD_COUNTS.to_vec()
         }
@@ -1974,10 +2072,19 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::WriteShieldedCoinCell { .. } => {
             bail!("shielded coin Cell write must be unguarded")
         }
+        Instruction::WriteShieldedCoinCellTo { .. } => {
+            bail!("shielded coin Cell write must be unguarded")
+        }
         Instruction::ListPushFrontCoin { .. } => {
             bail!("qualified coin List push must be unguarded")
         }
+        Instruction::ListPushFrontCoinTo { .. } => {
+            bail!("qualified coin List push must be unguarded")
+        }
         Instruction::InsertShieldedCoinSet { .. } => {
+            bail!("shielded coin Set insertion must be unguarded")
+        }
+        Instruction::InsertShieldedCoinSetTo { .. } => {
             bail!("shielded coin Set insertion must be unguarded")
         }
         Instruction::SpendShieldedFromMap { .. } => {
@@ -2816,6 +2923,7 @@ fn mutates_contract_state(operation: &Instruction) -> bool {
             | Instruction::MapRemove { .. }
             | Instruction::ListPushFront { .. }
             | Instruction::ListPushFrontCoin { .. }
+            | Instruction::ListPushFrontCoinTo { .. }
             | Instruction::ListPopFront { .. }
             | Instruction::ListReset { .. }
             | Instruction::MerkleTreeInsertHash { .. }
@@ -2824,7 +2932,9 @@ fn mutates_contract_state(operation: &Instruction) -> bool {
             | Instruction::MerkleTreeResetHistory { .. }
             | Instruction::ReceiveShieldedToMap { .. }
             | Instruction::WriteShieldedCoinCell { .. }
+            | Instruction::WriteShieldedCoinCellTo { .. }
             | Instruction::InsertShieldedCoinSet { .. }
+            | Instruction::InsertShieldedCoinSetTo { .. }
     )
 }
 
@@ -3170,6 +3280,23 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
             } => {
                 ensure!(guard.is_none(), "qualified coin List push must be unguarded");
                 validate_shielded_coin_list(plan, *slot, keys, schema)?;
+            }
+            Instruction::ListPushFrontCoinTo {
+                slot,
+                keys,
+                schema,
+                ..
+            } => {
+                ensure!(guard.is_none(), "qualified coin List push must be unguarded");
+                validate_shielded_coin_list(plan, *slot, keys, schema)?;
+            }
+            Instruction::WriteShieldedCoinCellTo { slot, .. } => {
+                ensure!(guard.is_none(), "shielded coin Cell write must be unguarded");
+                validate_shielded_coin_cell(plan, *slot)?;
+            }
+            Instruction::InsertShieldedCoinSetTo { slot, .. } => {
+                ensure!(guard.is_none(), "shielded coin Set insertion must be unguarded");
+                validate_shielded_coin_set(plan, *slot)?;
             }
             Instruction::ListHead {
                 slot,
@@ -5458,6 +5585,38 @@ fn probe_instruction(
             env,
             deferred_outputs,
         ),
+        Instruction::WriteShieldedCoinCellTo {
+            nonce,
+            color,
+            amount,
+            is_contract,
+            recipient,
+            commitment,
+            ..
+        }
+        | Instruction::InsertShieldedCoinSetTo {
+            nonce,
+            color,
+            amount,
+            is_contract,
+            recipient,
+            commitment,
+            ..
+        }
+        | Instruction::ListPushFrontCoinTo {
+            nonce,
+            color,
+            amount,
+            is_contract,
+            recipient,
+            commitment,
+            ..
+        } => probe_expressions(
+            [nonce, color, amount, is_contract, recipient, commitment],
+            plan,
+            env,
+            deferred_outputs,
+        ),
         Instruction::SpendShieldedFromMap {
             nonce,
             color,
@@ -7655,6 +7814,14 @@ impl PreparationCursor {
                 color,
                 amount,
                 commitment,
+            }
+            | Instruction::WriteShieldedCoinCellTo {
+                slot,
+                nonce,
+                color,
+                amount,
+                commitment,
+                ..
             } => {
                 validate_shielded_coin_cell(plan, *slot)?;
                 let coin = ShieldedCoinInfo {
@@ -7668,16 +7835,22 @@ impl PreparationCursor {
                     )?),
                     value: unshielded_amount(amount, &env)?,
                 };
-                let recipient = Recipient::Contract(context.address);
+                let recipient = booked_coin_recipient(i, &context, &env)?;
                 let expected_commitment =
                     claim_hash_output(evaluate(commitment, &env)?, "shielded coin commitment")?;
+                let coin_commitment = coin.commitment(&recipient);
                 ensure!(
-                    coin.commitment(&recipient).0 == expected_commitment,
+                    coin_commitment.0 == expected_commitment,
                     "shielded coin Cell commitment mismatch"
                 );
-                context.qualify(&coin).ok_or_else(|| {
-                    anyhow!("shielded coin Cell commitment is absent from the current transaction")
-                })?;
+                let qualified = qualify_booked_coin_for(&context, &coin, &recipient).ok_or_else(
+                    || anyhow!("shielded coin Cell commitment is absent from the current transaction"),
+                )?;
+                ensure!(
+                    context.call_context.com_indices.get(&coin_commitment)
+                        == Some(&qualified.mt_index),
+                    "shielded coin Cell transaction index mismatch"
+                );
 
                 if has_written {
                     advance_native_state_prefix(
@@ -7740,6 +7913,16 @@ impl PreparationCursor {
                 color,
                 amount,
                 commitment,
+            }
+            | Instruction::ListPushFrontCoinTo {
+                slot,
+                keys,
+                schema,
+                nonce,
+                color,
+                amount,
+                commitment,
+                ..
             } => {
                 validate_shielded_coin_list(plan, *slot, keys, schema)?;
                 let coin = ShieldedCoinInfo {
@@ -7753,7 +7936,7 @@ impl PreparationCursor {
                     )?),
                     value: unshielded_amount(amount, &env)?,
                 };
-                let recipient = Recipient::Contract(context.address);
+                let recipient = booked_coin_recipient(i, &context, &env)?;
                 let expected_commitment = claim_hash_output(
                     evaluate(commitment, &env)?,
                     "qualified coin List commitment",
@@ -7763,11 +7946,9 @@ impl PreparationCursor {
                     coin_commitment.0 == expected_commitment,
                     "qualified coin List commitment mismatch"
                 );
-                let qualified = context.qualify(&coin).ok_or_else(|| {
-                    anyhow!(
-                        "qualified coin List commitment is absent from the current transaction"
-                    )
-                })?;
+                let qualified = qualify_booked_coin_for(&context, &coin, &recipient).ok_or_else(
+                    || anyhow!("qualified coin List commitment is absent from the current transaction"),
+                )?;
                 ensure!(
                     context.call_context.com_indices.get(&coin_commitment)
                         == Some(&qualified.mt_index),
@@ -7825,7 +8006,7 @@ impl PreparationCursor {
                     ),
                     "qualified coin List fragment initial pushes changed"
                 );
-                // The Compact fragment pushes the empty node before its index key.
+                // Compact pushes the empty node before the index key.
                 operations.swap(4, 5);
                 let Some(Op::Dup { n }) = operations.get_mut(6) else {
                     bail!("qualified coin List fragment has no context lookup duplicate")
@@ -7834,7 +8015,7 @@ impl PreparationCursor {
                     *n == u8::try_from(4 + 2 * path_length)?,
                     "qualified coin List fragment duplicate depth changed"
                 );
-                // The pinned depth selects effects. The commitment lookup needs context.
+                // This depth selects effects, while the commitment lookup needs context.
                 *n = n
                     .checked_add(1)
                     .ok_or_else(|| anyhow!("qualified coin List duplicate depth overflow"))?;
@@ -7851,6 +8032,14 @@ impl PreparationCursor {
                 color,
                 amount,
                 commitment,
+            }
+            | Instruction::InsertShieldedCoinSetTo {
+                slot,
+                nonce,
+                color,
+                amount,
+                commitment,
+                ..
             } => {
                 validate_shielded_coin_set(plan, *slot)?;
                 let coin = ShieldedCoinInfo {
@@ -7864,7 +8053,7 @@ impl PreparationCursor {
                     )?),
                     value: unshielded_amount(amount, &env)?,
                 };
-                let recipient = Recipient::Contract(context.address);
+                let recipient = booked_coin_recipient(i, &context, &env)?;
                 let expected_commitment = claim_hash_output(
                     evaluate(commitment, &env)?,
                     "shielded Set coin commitment",
@@ -7874,11 +8063,9 @@ impl PreparationCursor {
                     coin_commitment.0 == expected_commitment,
                     "shielded coin Set commitment mismatch"
                 );
-                let qualified = context.qualify(&coin).ok_or_else(|| {
-                    anyhow!(
-                        "shielded coin Set commitment is absent from the current transaction"
-                    )
-                })?;
+                let qualified = qualify_booked_coin_for(&context, &coin, &recipient).ok_or_else(
+                    || anyhow!("shielded coin Set commitment is absent from the current transaction"),
+                )?;
                 let qualified_key = AlignedValue::from(qualified);
                 ensure!(
                     qualified_key.alignment.fits(&qualified_key.value),
@@ -8503,12 +8690,15 @@ impl PreparationCursor {
                 | Instruction::MerkleTreeResetHistory { .. }
                 | Instruction::ListPushFront { .. }
                 | Instruction::ListPushFrontCoin { .. }
+                | Instruction::ListPushFrontCoinTo { .. }
                 | Instruction::ListPopFront { .. }
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
                 | Instruction::ReceiveShieldedToMap { .. }
                 | Instruction::WriteShieldedCoinCell { .. }
+                | Instruction::WriteShieldedCoinCellTo { .. }
                 | Instruction::InsertShieldedCoinSet { .. }
+                | Instruction::InsertShieldedCoinSetTo { .. }
         ) {
             mutation_boundary = program.len();
         }
@@ -9112,6 +9302,86 @@ mod shielded_spend_tests {
         inputs
     }
 
+    #[derive(Clone, Copy)]
+    enum BookedCollection {
+        Cell,
+        Set,
+        List,
+    }
+
+    fn booked_collection_context(
+        plan: &Plan,
+        commitment: Option<Commitment>,
+    ) -> QueryContext<Db> {
+        let config = plan
+            .state
+            .iter()
+            .map(|declaration| {
+                let tree = &declaration.kind["tree"];
+                let initial = if let Some(schema) = tree.get("composite") {
+                    default_record_value(schema).unwrap()
+                } else {
+                    json!([])
+                };
+                (declaration.name.clone(), initial)
+            })
+            .collect();
+        let state = create_state(plan, &config).unwrap();
+        let mut context = QueryContext::new(state, ContractAddress(HashOutput(ADDRESS)));
+        if let Some(commitment) = commitment {
+            context.call_context.com_indices =
+                context.call_context.com_indices.insert(commitment, 41);
+        }
+        context
+    }
+
+    fn booked_recipient_inputs(
+        coin: &ShieldedCoinInfo,
+        is_contract: bool,
+        recipient: [u8; 32],
+    ) -> BTreeMap<String, Json> {
+        BTreeMap::from([
+            ("nonce".into(), bytes_json(&coin.nonce.0.0)),
+            ("color".into(), bytes_json(&coin.type_.0.0)),
+            ("amount".into(), json!(coin.value.to_string())),
+            ("isContract".into(), json!(is_contract)),
+            ("recipient".into(), bytes_json(&recipient)),
+        ])
+    }
+
+    fn assert_booked_collection_record(
+        collection: BookedCollection,
+        plan: &Plan,
+        context: &QueryContext<Db>,
+        coin: &ShieldedCoinInfo,
+        index: u64,
+    ) {
+        let expected = AlignedValue::from(coin.qualify(index));
+        match collection {
+            BookedCollection::Cell => {
+                assert_eq!(read_state_aligned(context, 0, &[]).unwrap(), expected);
+            }
+            BookedCollection::Set => {
+                let set_state = read_state_value(context, 1, &[]).unwrap();
+                let StateValue::Map(members) = &set_state else {
+                    panic!("qualified coin Set is not a Map")
+                };
+                assert!(members.contains_key(&expected));
+            }
+            BookedCollection::List => {
+                let (length, head) = native_list_value(
+                    context,
+                    2,
+                    &[],
+                    list_element_schema_at_path(plan, 2, 0).unwrap(),
+                )
+                .unwrap();
+                assert_eq!(length, 1);
+                assert_eq!(head, Some(expected));
+            }
+        }
+    }
+
     fn context(key_nonce: [u8; 32], record_nonce: [u8; 32]) -> QueryContext<Db> {
         context_with_amount(key_nonce, record_nonce, 5)
     }
@@ -9252,6 +9522,84 @@ mod shielded_spend_tests {
             ))
         );
         (input_commitment, nullifier, output_commitment)
+    }
+
+    #[test]
+    #[ignore = "requires fresh ZKIR 3.2.1 artifacts from tests/QualifiedCoinRecipient.lean"]
+    fn explicit_booked_recipient_collections_match_typed_ledger_bookings() {
+        let coin = ShieldedCoinInfo {
+            nonce: Nonce(HashOutput(NONCE)),
+            type_: ShieldedTokenType(HashOutput(COLOR)),
+            value: 5,
+        };
+        let parameters = &ledger::structure::INITIAL_PARAMETERS;
+        let artifact_dir = std::path::PathBuf::from(
+            std::env::var_os("NOCTIUM_EXPLICIT_RECIPIENT_DIR")
+                .expect("set NOCTIUM_EXPLICIT_RECIPIENT_DIR to the emitted contract artifacts"),
+        );
+        for (collection, entrypoint) in [
+            (BookedCollection::Cell, "writeCellTo"),
+            (BookedCollection::Set, "insertSetTo"),
+            (BookedCollection::List, "pushListTo"),
+        ] {
+            let stem = format!("QualifiedCoinRecipient.{entrypoint}");
+            let plan: Plan = serde_json::from_slice(
+                &std::fs::read(artifact_dir.join(format!("{stem}.impact.json"))).unwrap(),
+            )
+            .unwrap();
+            let circuit_bytes = std::fs::read(artifact_dir.join(format!("{stem}.zkir"))).unwrap();
+            let circuit = IrSource::load(circuit_bytes.as_slice()).unwrap();
+
+            for (is_contract, recipient_bytes) in [(false, RECIPIENT), (true, RELAY_TARGET)] {
+                let recipient = if is_contract {
+                    Recipient::Contract(ContractAddress(HashOutput(recipient_bytes)))
+                } else {
+                    Recipient::User(PublicKey(HashOutput(recipient_bytes)))
+                };
+                let commitment = coin.commitment(&recipient);
+                let inputs = booked_recipient_inputs(&coin, is_contract, recipient_bytes);
+                let execution = prepare_with_context(
+                    &plan,
+                    &inputs,
+                    booked_collection_context(&plan, Some(commitment)),
+                    parameters,
+                )
+                .unwrap_or_else(|error| panic!("booked recipient was rejected: {error:#}"));
+                assert_booked_collection_record(collection, &plan, &execution.after, &coin, 41);
+                let checked_schedule = execution
+                    .preimage
+                    .check(&circuit)
+                    .unwrap_or_else(|error| panic!("compiled preimage check failed: {error:#}"));
+                assert_eq!(checked_schedule, execution.activity_schedule);
+                super::check(&execution, &circuit)
+                    .unwrap_or_else(|error| panic!("compiled relation check failed: {error:#}"));
+
+                let wrong_address = [7; 32];
+                assert!(prepare_with_context(
+                    &plan,
+                    &booked_recipient_inputs(&coin, is_contract, wrong_address),
+                    booked_collection_context(&plan, Some(commitment)),
+                    parameters,
+                )
+                .is_err());
+
+                assert!(prepare_with_context(
+                    &plan,
+                    &booked_recipient_inputs(&coin, !is_contract, recipient_bytes),
+                    booked_collection_context(&plan, Some(commitment)),
+                    parameters,
+                )
+                .is_err());
+
+                assert!(prepare_with_context(
+                    &plan,
+                    &inputs,
+                    booked_collection_context(&plan, None),
+                    parameters,
+                )
+                .is_err());
+            }
+        }
     }
 
     fn expected_coin_effects() -> (Nullifier, Commitment) {

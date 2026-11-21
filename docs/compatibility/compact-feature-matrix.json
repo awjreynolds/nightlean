@@ -2127,7 +2127,7 @@
       "layer": "language-ledger",
       "surface": "Cell.writeCoin",
       "noctiumStatus": "subset",
-      "notes": "A direct Lean effect qualifies an already-booked self-contract coin into a root composite Cell. The native test stores the exact record at allocated index 42 and rejects absent or wrong-recipient bookings. A funded development Ledger 9 run stores the same qualified coin in Map, Cell and Set and checks each against the finalized self-minted output. Other recipients remain open.",
+      "notes": "A direct Lean effect qualifies an already-booked self-contract coin into a root composite Cell. The native test stores the exact record at allocated index 42 and rejects absent or wrong-recipient bookings. A funded development Ledger 9 run stores the same qualified coin in Map, Cell and Set and checks each against the finalized self-minted output. The emitted explicit-recipient circuit also accepts matching wallet and other-contract bookings in the native query context. Finalized tests for those recipients remain open.",
       "source": [
         "adt"
       ],
@@ -2139,7 +2139,10 @@
       "observedEvidence": [
         "tests/QualifiedCoinCell.lean",
         "runtime/tests/qualified_coin_cell.rs",
-        "docs/development/shielded-coin-collections-localnet-receipt.json"
+        "docs/development/shielded-coin-collections-localnet-receipt.json",
+        "tests/QualifiedCoinRecipient.lean",
+        "runtime/src/lib.rs",
+        "tests/compact/explicit-booked-coin-recipients.mjs"
       ],
       "equivalence": "unverified"
     },
@@ -2286,7 +2289,7 @@
       "layer": "language-ledger",
       "surface": "Set.insertCoin",
       "noctiumStatus": "subset",
-      "notes": "A root Set accepts an exact QualifiedInfo record with a coin index booked for the current contract. The native query-context fixture preserves existing members, checks idempotent insertion, and rejects missing or wrong-recipient bookings. A funded development Ledger 9 run checks the exact Set key and marker against the finalized self-minted output. Broader recipient cases remain open.",
+      "notes": "A root Set accepts an exact QualifiedInfo record with a coin index booked for the current contract. The native query-context fixture preserves existing members, checks idempotent insertion, and rejects missing or wrong-recipient bookings. A funded development Ledger 9 run checks the exact Set key and marker against the finalized self-minted output. The emitted explicit-recipient circuit also accepts matching wallet and other-contract bookings in the native query context. Finalized tests for those recipients remain open.",
       "source": [
         "adt"
       ],
@@ -2298,7 +2301,10 @@
       "observedEvidence": [
         "tests/QualifiedCoinSet.lean",
         "runtime/tests/qualified_coin_set.rs",
-        "docs/development/shielded-coin-collections-localnet-receipt.json"
+        "docs/development/shielded-coin-collections-localnet-receipt.json",
+        "tests/QualifiedCoinRecipient.lean",
+        "runtime/src/lib.rs",
+        "tests/compact/explicit-booked-coin-recipients.mjs"
       ],
       "equivalence": "unverified"
     },
@@ -2857,7 +2863,7 @@
       "layer": "language-ledger",
       "surface": "List.pushFrontCoin",
       "noctiumStatus": "subset",
-      "notes": "A root List prepends the fixed QualifiedInfo record using a coin index booked for the current contract. The native query-context fixture checks head-to-tail order and rejects missing or wrong-recipient bookings. A funded development Ledger 9 run matches a single finalized List head to the self-minted output and the other three collection records. Broader recipient cases remain open.",
+      "notes": "A root List prepends the fixed QualifiedInfo record using a coin index booked for the current contract. The native query-context fixture checks head-to-tail order and rejects missing or wrong-recipient bookings. A funded development Ledger 9 run matches a single finalized List head to the self-minted output and the other three collection records. The emitted explicit-recipient circuit also accepts matching wallet and other-contract bookings in the native query context. Finalized tests for those recipients remain open.",
       "source": [
         "adt"
       ],
@@ -2869,7 +2875,10 @@
       "observedEvidence": [
         "tests/QualifiedCoinList.lean",
         "runtime/tests/qualified_coin_list.rs",
-        "docs/development/shielded-coin-collections-localnet-receipt.json"
+        "docs/development/shielded-coin-collections-localnet-receipt.json",
+        "tests/QualifiedCoinRecipient.lean",
+        "runtime/src/lib.rs",
+        "tests/compact/explicit-booked-coin-recipients.mjs"
       ],
       "equivalence": "unverified"
     },
@@ -3510,8 +3519,8 @@
       "id": "C-STDLIB-EITHER",
       "layer": "standard-library",
       "surface": "Either",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean returnEither emits a typed Native, Bool or bounded UInt sum return in is_left, left, right order. A matched Compact and native UInt8/UInt16 fixture checks both tags and zero inactive operands. General arguments and nested sum values remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3524,7 +3533,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeScalarEitherReturns.lean",
+        "runtime/tests/scalar_either_returns.rs",
+        "tests/compact/scalar-either-returns.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -4171,8 +4184,8 @@
       "id": "C-STDLIB-LEFT",
       "layer": "standard-library",
       "surface": "left",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The left branch of a scalar returnEither preserves its typed left payload and emits typed zero for the inactive right side. The UInt8/UInt16 case matches Compact left in the public native return. General constructors remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4185,15 +4198,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeScalarEitherReturns.lean",
+        "runtime/tests/scalar_either_returns.rs",
+        "tests/compact/scalar-either-returns.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-RIGHT",
       "layer": "standard-library",
       "surface": "right",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The right branch of a scalar returnEither preserves its typed right payload and emits typed zero for the inactive left side. The UInt8/UInt16 case matches Compact right in the public native return. General constructors remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4206,7 +4223,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeScalarEitherReturns.lean",
+        "runtime/tests/scalar_either_returns.rs",
+        "tests/compact/scalar-either-returns.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

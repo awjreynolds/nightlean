@@ -8,6 +8,7 @@ import Noctium.Modules
 import Noctium.Crypto.Signatures
 import Noctium.Backend.Impact
 import Noctium.Types.Maybe
+import Noctium.Types.Either
 import Noctium.EntryPointHash
 import Noctium.Wire
 import Lean
@@ -364,8 +365,11 @@ scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "receiveShieldedToMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "insertShieldedCoinSet" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "insertShieldedCoinSet" "(" ident "," nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "writeShieldedCoinCell" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "writeShieldedCoinCell" "(" ident "," nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "pushFrontCoin" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "pushFrontCoin" "(" ident "," nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "sendShieldedFromMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "relayShieldedImmediate" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
@@ -463,6 +467,7 @@ scoped syntax "if" nlexpr "then" "{" nlstatement* "}" "else" "{" nlstatement* "}
 declare_syntax_cat nlreturn
 scoped syntax "return" ident ":" nltype ":=" nlexpr : nlreturn
 scoped syntax "returnMaybe" ident "as" "(" ident "," ident ")" : nlreturn
+scoped syntax "returnEither" ident "as" "(" ident "," ident "," ident ")" : nlreturn
 scoped syntax "return" ident : nlreturn
 
 declare_syntax_cat nlentry
@@ -2481,6 +2486,27 @@ private def elaborateEffect (schema : List (String × StateKind))
         spans := state.spans.push span
         guards := state.guards.push noGuard}
     | `(nlupdate| insertShieldedCoinSet($storage:ident, $nonce:nlexpr,
+        $color:nlexpr, $amount:nlexpr, $isContract:nlexpr, $recipient:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "insertShieldedCoinSet must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "insertShieldedCoinSet must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .shieldedCoinSet environment recordType := treeSchema
+        | throwErrorAt storage "insertShieldedCoinSet requires a root QualifiedShieldedCoinInfo Set"
+      match LedgerValueType.shieldedCoinRecordFields environment recordType with
+      | .ok _ => pure ()
+      | .error message => throwErrorAt storage message
+      let nonce ← checkedExpression state.env nonce (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let isContract ← checkedExpression state.env isContract .bool
+      let recipient ← checkedExpression state.env recipient (.bytes 32)
+      let insertTerm ← `(Noctium.Effect.insertShieldedCoinSetTo
+        $(stringTerm storage.getId.toString) $nonce $color $amount $isContract $recipient)
+      state := {state with terms := state.terms.push insertTerm}
+    | `(nlupdate| insertShieldedCoinSet($storage:ident, $nonce:nlexpr,
         $color:nlexpr, $amount:nlexpr)) => do
       unless depth == 0 do
         throwErrorAt update "insertShieldedCoinSet must be unguarded"
@@ -2511,6 +2537,27 @@ private def elaborateEffect (schema : List (String × StateKind))
         spans := state.spans.push span
         guards := state.guards.push noGuard}
     | `(nlupdate| writeShieldedCoinCell($storage:ident, $nonce:nlexpr,
+        $color:nlexpr, $amount:nlexpr, $isContract:nlexpr, $recipient:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "writeShieldedCoinCell must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "writeShieldedCoinCell must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .composite environment recordType := treeSchema
+        | throwErrorAt storage "writeShieldedCoinCell requires a root qualified coin Cell"
+      match LedgerValueType.shieldedCoinRecordFields environment recordType with
+      | .ok _ => pure ()
+      | .error message => throwErrorAt storage message
+      let nonce ← checkedExpression state.env nonce (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let isContract ← checkedExpression state.env isContract .bool
+      let recipient ← checkedExpression state.env recipient (.bytes 32)
+      let writeTerm ← `(Noctium.Effect.writeShieldedCoinCellTo
+        $(stringTerm storage.getId.toString) $nonce $color $amount $isContract $recipient)
+      state := {state with terms := state.terms.push writeTerm}
+    | `(nlupdate| writeShieldedCoinCell($storage:ident, $nonce:nlexpr,
         $color:nlexpr, $amount:nlexpr)) => do
       unless depth == 0 do
         throwErrorAt update "writeShieldedCoinCell must be unguarded"
@@ -2540,6 +2587,27 @@ private def elaborateEffect (schema : List (String × StateKind))
         terms := state.terms.push writeTerm
         spans := state.spans.push span
         guards := state.guards.push noGuard}
+    | `(nlupdate| pushFrontCoin($storage:ident, $nonce:nlexpr,
+        $color:nlexpr, $amount:nlexpr, $isContract:nlexpr, $recipient:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "pushFrontCoin must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "pushFrontCoin must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .«list» environment recordType := treeSchema
+        | throwErrorAt storage "pushFrontCoin requires a root qualified coin List"
+      match LedgerValueType.shieldedCoinRecordFields environment recordType with
+      | .ok _ => pure ()
+      | .error message => throwErrorAt storage message
+      let nonce ← checkedExpression state.env nonce (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let isContract ← checkedExpression state.env isContract .bool
+      let recipient ← checkedExpression state.env recipient (.bytes 32)
+      let pushTerm ← `(Noctium.Effect.pushFrontCoinTo
+        $(stringTerm storage.getId.toString) $nonce $color $amount $isContract $recipient)
+      state := {state with terms := state.terms.push pushTerm}
     | `(nlupdate| pushFrontCoin($storage:ident, $nonce:nlexpr,
         $color:nlexpr, $amount:nlexpr)) => do
       unless depth == 0 do
@@ -3060,6 +3128,63 @@ private def elaborateMaybeReturn (contractName : String) (label : TSyntax `ident
     returns := state.returns.push isSomeReturn |>.push payloadReturn
     returnViews := state.returnViews.push view}
 
+private def scalarDefault (payloadType : Ty) : CommandElabM (TSyntax `term) := do
+  match payloadType with
+  | .native => `(Noctium.Expr.native 0)
+  | .bool => `(Noctium.Expr.bool Bool.false)
+  | .uint maximum => `(Noctium.Expr.uint $(natTerm maximum) 0)
+  | _ => throwError "scalar tagged return payload must be Native, Bool, or UInt"
+
+private def elaborateEitherReturn (contractName : String) (label : TSyntax `ident)
+    (isLeftName leftName rightName : TSyntax `ident) (statement : TSyntax `nlreturn)
+    (state : EntryEffects) : CommandElabM EntryEffects := do
+  let labelName := label.getId.toString
+  let isLeftBindingName := isLeftName.getId.toString
+  let leftBindingName := leftName.getId.toString
+  let rightBindingName := rightName.getId.toString
+  let some (.bool, isLeftExpression) := maybeReturnBinding state.env isLeftBindingName
+    | throwErrorAt isLeftName "returnEither tag must reference a Bool binding"
+  let some (leftType, leftExpression) := maybeReturnBinding state.env leftBindingName
+    | throwErrorAt leftName "returnEither left value must reference a scalar binding"
+  let some (rightType, rightExpression) := maybeReturnBinding state.env rightBindingName
+    | throwErrorAt rightName "returnEither right value must reference a scalar binding"
+  let typeId ← match Noctium.Types.Either.scalarTypeId contractName leftType rightType with
+    | .ok value => pure value
+    | .error message => throwErrorAt statement message
+  let _environment ← match Noctium.Types.Either.scalarEnvironment typeId leftType rightType with
+    | .ok value => pure value
+    | .error message => throwErrorAt statement message
+  let fieldTypes ← match Noctium.Types.Either.scalarFieldTypes leftType rightType with
+    | .ok value => pure value
+    | .error message => throwErrorAt statement message
+  let typeIdTerm := stringTerm typeId
+  let span ← spanTerm statement
+  let mut fieldTerms := #[]
+  for (fieldName, fieldTy) in fieldTypes do
+    let fieldNameTerm := stringTerm fieldName
+    let fieldType ← `(Noctium.Types.CompositeType.scalar $(← tyTerm fieldTy))
+    fieldTerms := fieldTerms.push (← `({ name := $fieldNameTerm, type := $fieldType, span := $span : Noctium.Types.Field }))
+  let structureTerm ← `({ id := $typeIdTerm, fields := [$fieldTerms,*], span := $span : Noctium.Types.StructDecl })
+  let environmentTerm ← `({ structures := [$structureTerm] : Noctium.Types.CompositeEnv })
+  let leftDefault ← scalarDefault leftType
+  let rightDefault ← scalarDefault rightType
+  let canonicalLeft ← `(Noctium.Expr.select $isLeftExpression $leftExpression $leftDefault)
+  let canonicalRight ← `(Noctium.Expr.select $isLeftExpression $rightDefault $rightExpression)
+  let isLeftReturnName := s!"{labelName}_is_left"
+  let leftReturnName := s!"{labelName}_left"
+  let rightReturnName := s!"{labelName}_right"
+  for returnName in [isLeftReturnName, leftReturnName, rightReturnName] do
+    if state.env.any (fun binding => binding.1 == returnName) then
+      throwErrorAt label s!"structured return field '{returnName}' collides with an input or read binding"
+  let isLeftReturn ← `({ name := $(stringTerm isLeftReturnName), ty := Noctium.Ty.native, value := (Noctium.Expr.cast Noctium.Ty.native $isLeftExpression), span := $span : Noctium.Output })
+  let leftReturn ← `({ name := $(stringTerm leftReturnName), ty := Noctium.Ty.native, value := (Noctium.Expr.cast Noctium.Ty.native $canonicalLeft), span := $span : Noctium.Output })
+  let rightReturn ← `({ name := $(stringTerm rightReturnName), ty := Noctium.Ty.native, value := (Noctium.Expr.cast Noctium.Ty.native $canonicalRight), span := $span : Noctium.Output })
+  let compositeType ← `(Noctium.Types.CompositeType.structure $typeIdTerm)
+  let view ← `({ name := $(stringTerm labelName), environment := $environmentTerm, type := $compositeType, fields := [$(stringTerm isLeftReturnName), $(stringTerm leftReturnName), $(stringTerm rightReturnName)] : Noctium.ReturnView })
+  pure {state with
+    returns := state.returns.push isLeftReturn |>.push leftReturn |>.push rightReturn
+    returnViews := state.returnViews.push view}
+
 private def elaborateReturns (contractName : String) (statements : Array (TSyntax `nlreturn))
     (info : CircuitInfo) (initial : EntryEffects) : CommandElabM EntryEffects := do
   let mut state := initial
@@ -3073,6 +3198,14 @@ private def elaborateReturns (contractName : String) (statements : Array (TSynta
       if state.env.any (fun binding => binding.1 == labelName) then
         throwErrorAt label "entry return label '{labelName}' collides with an input or read binding"
       state ← elaborateMaybeReturn contractName label present payload statement state
+      labels := labelName :: labels
+    | `(nlreturn| returnEither $label:ident as ($isLeft:ident, $left:ident, $right:ident)) => do
+      let labelName := label.getId.toString
+      if labels.contains labelName then
+        throwErrorAt label "duplicate entry return label '{labelName}'"
+      if state.env.any (fun binding => binding.1 == labelName) then
+        throwErrorAt label "entry return label '{labelName}' collides with an input or read binding"
+      state ← elaborateEitherReturn contractName label isLeft left right statement state
       labels := labelName :: labels
     | `(nlreturn| return $label:ident : $returnTy:nltype := $value:nlexpr) => do
       let labelName := label.getId.toString

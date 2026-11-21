@@ -1242,9 +1242,15 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       throw "reference evaluator cannot determine the native shielded receive index"
     | .insertShieldedCoinSet .. =>
       throw "reference evaluator cannot determine the booked shielded coin index"
+    | .insertShieldedCoinSetTo .. =>
+      throw "reference evaluator cannot determine the booked shielded coin index"
     | .writeShieldedCoinCell .. =>
       throw "reference evaluator cannot determine the booked shielded coin index"
+    | .writeShieldedCoinCellTo .. =>
+      throw "reference evaluator cannot determine the booked shielded coin index"
     | .pushFrontCoin .. =>
+      throw "reference evaluator cannot determine the booked shielded coin index"
+    | .pushFrontCoinTo .. =>
       throw "reference evaluator cannot determine the booked shielded coin index"
     | .spendShieldedFromMap .. =>
       throw "reference evaluator cannot determine the native shielded spend commitment"
@@ -1565,9 +1571,15 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           throw "reference evaluator cannot determine the native shielded receive index"
         | .insertShieldedCoinSet .. =>
           throw "reference evaluator cannot determine the booked shielded coin index"
+        | .insertShieldedCoinSetTo .. =>
+          throw "reference evaluator cannot determine the booked shielded coin index"
         | .writeShieldedCoinCell .. =>
           throw "reference evaluator cannot determine the booked shielded coin index"
+        | .writeShieldedCoinCellTo .. =>
+          throw "reference evaluator cannot determine the booked shielded coin index"
         | .pushFrontCoin .. =>
+          throw "reference evaluator cannot determine the booked shielded coin index"
+        | .pushFrontCoinTo .. =>
           throw "reference evaluator cannot determine the booked shielded coin index"
         | .spendShieldedFromMap .. =>
           throw "reference evaluator cannot determine the native shielded spend commitment"
@@ -1814,6 +1826,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .claimUnshieldedCoinSpend .. | .emitEvent .. |
             .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. | .pushFrontCoin .. |
+            .insertShieldedCoinSetTo .. | .writeShieldedCoinCellTo .. | .pushFrontCoinTo .. |
             .listPopFront .. | .listReset .. | .setInsert .. | .removePath .. => pure ()
         | .readPath _ destination _ ty =>
           let zero : ty.Denote := match ty with
