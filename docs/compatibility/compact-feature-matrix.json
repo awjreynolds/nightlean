@@ -5600,8 +5600,8 @@
       "id": "C-STDLIB-BLOCKTIMELT",
       "layer": "standard-library",
       "surface": "blockTimeLt",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The exact standard-library export is absent. Scoped direct support uses blockTimeBefore(UInt64 deadline), which compares Unix-second current time < deadline. Lean, Compact 0.36.1 and native checks cover the strict boundary and guarded case. The finalized receipt uses both strict kernel predicates, not this exact standard-library export. Full equivalence and hosted-context integration remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5614,15 +5614,26 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Frontend/Core.lean",
+        "Noctium/Backend/Impact.lean",
+        "Noctium/Semantics.lean",
+        "tests/NativeBlockTime.lean",
+        "tests/compact/BlockTime.compact",
+        "tests/compact/block-time.mjs",
+        "runtime/src/lib.rs",
+        "runtime/tests/native_block_time.rs",
+        "docs/development/native-block-time-localnet-receipt.json",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-BLOCKTIMEGTE",
       "layer": "standard-library",
       "surface": "blockTimeGte",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "No direct non-strict helper is evidenced. The related strict blockTimeBefore(UInt64 deadline) result can be inverted with select(result, false, true) to express current time >= deadline. Evidence covers the strict operand and Bool select, not a differential case or finalized call for this exact helper. Full equivalence remains unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5635,15 +5646,25 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Frontend/Core.lean",
+        "Noctium/Backend/Impact.lean",
+        "Noctium/Semantics.lean",
+        "tests/NativeBlockTime.lean",
+        "tests/BoundedScalars.lean",
+        "tests/compact/BlockTime.compact",
+        "tests/compact/block-time.mjs",
+        "runtime/src/lib.rs",
+        "runtime/tests/native_block_time.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-BLOCKTIMEGT",
       "layer": "standard-library",
       "surface": "blockTimeGt",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The exact standard-library export is absent. Scoped direct support uses blockTimeAfter(UInt64 deadline), which compares deadline < Unix-second current time. Lean, Compact 0.36.1 and native checks cover the strict boundary and guarded case. The finalized receipt uses both strict kernel predicates, not this exact standard-library export. Full equivalence and hosted-context integration remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5656,15 +5677,26 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Frontend/Core.lean",
+        "Noctium/Backend/Impact.lean",
+        "Noctium/Semantics.lean",
+        "tests/NativeBlockTime.lean",
+        "tests/compact/BlockTime.compact",
+        "tests/compact/block-time.mjs",
+        "runtime/src/lib.rs",
+        "runtime/tests/native_block_time.rs",
+        "docs/development/native-block-time-localnet-receipt.json",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-BLOCKTIMELTE",
       "layer": "standard-library",
       "surface": "blockTimeLte",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "No direct non-strict helper is evidenced. The related strict blockTimeAfter(UInt64 deadline) result can be inverted with select(result, false, true) to express current time <= deadline. Evidence covers the strict operand and Bool select, not a differential case or finalized call for this exact helper. Full equivalence remains unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5677,7 +5709,17 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Frontend/Core.lean",
+        "Noctium/Backend/Impact.lean",
+        "Noctium/Semantics.lean",
+        "tests/NativeBlockTime.lean",
+        "tests/BoundedScalars.lean",
+        "tests/compact/BlockTime.compact",
+        "tests/compact/block-time.mjs",
+        "runtime/src/lib.rs",
+        "runtime/tests/native_block_time.rs"
+      ],
       "equivalence": "unverified"
     },
     {
