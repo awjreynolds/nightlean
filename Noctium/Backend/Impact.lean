@@ -141,6 +141,8 @@ inductive Op where
   | listReset (slot : Nat) (keys : List Aligned)
   | mapRemove (slot : Nat) (keys : List Aligned)
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
+  | receiveShieldedToMap (slot : Nat) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (commitment : Expr (.bytes 32))
   | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
@@ -205,9 +207,40 @@ private def mintFieldGroups (slot : Nat) (domain : Expr (.bytes 32))
   accumulateTokenFields slot (Aligned.bytes32 domain).fields
     ([.native 0x10, .native 1] ++ (Aligned.counter amount).fields)
 
+private def receiveShieldedCommitment (nonce color : Expr (.bytes 32))
+    (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32)) : Expr (.bytes 32) :=
+  let domain : Expr (.bytes 21) :=
+    .bytesLiteral 21 ("midnight:zswap-cc[v1]".toList.map Char.toNat)
+  let amountBytes : Expr (.bytes 16) :=
+    .sliceBytes (.toBytes32 (.cast .native amount)) 0 16
+  let recipientTag : Expr (.bytes 1) := .bytesLiteral 1 [0]
+  let preimage : Expr (.bytes 134) :=
+    .concatBytes domain (.concatBytes nonce (.concatBytes color
+      (.concatBytes amountBytes (.concatBytes recipientTag selfAddress))))
+  .sha256 preimage
+
 private def indexPathFields (slot : Nat) (pushPath : Bool) (keys : List Aligned) : List Scalar :=
   [.native ((if pushPath then 0x70 else 0x50) + keys.length)] ++
     (Aligned.field (.native slot)).fields ++ keys.flatMap Aligned.fields
+
+private def receiveShieldedFieldGroups (slot : Nat) (nonce color : Expr (.bytes 32))
+    (amount : Expr (.uint (2 ^ 128 - 1))) (commitment : Expr (.bytes 32)) : List (List Scalar) :=
+  let claim :=
+    [[.native 0x40], [.native 0x80, .native 1, .native 1, .native 1],
+      [.native 0x10, .native 1, .native 1, .native 32,
+        .bytesField commitment 0, .bytesField commitment 1],
+      [.native 0x10, .native 0], [.native 0xa2], [.native 0x40]]
+  let coin := [.native 0x10, .native 1, .native 3, .native 32, .native 32, .native 16,
+    .bytesField nonce 0, .bytesField nonce 1, .bytesField color 0, .bytesField color 1,
+    .cast .native amount]
+  let insert :=
+    [[.native 0x70, .native 1, .native 1, .native slot],
+      [.native 0x10, .native 1] ++ (Aligned.bytes32 nonce).fields,
+      [.native 0x35],
+      [.native 0x10, .native 1] ++ (Aligned.bytes32 commitment).fields,
+      [.native 0x61, .native 1, .native 1, .native 1, .native (Field.modulus - 1)],
+      coin, [.native 0x40], [.native 0x17, .native 91], [.native 0x91], [.native 0xa1]]
+  claim ++ insert
 
 private def listIndexFields (index : Nat) : List Scalar :=
   [.native 0x50, .native 1, .native 1, .native index]
@@ -548,6 +581,8 @@ def Op.fields : Op → List Scalar
           finalKey.fields ++ [.native 0x19, .native (0x90 + keys.length)]
   | .claimContractCall address entryPointHash commitment =>
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
+  | .receiveShieldedToMap slot nonce color amount commitment =>
+      (receiveShieldedFieldGroups slot nonce color amount commitment).flatten
   | .mintShielded domain amount => (mintFieldGroups 4 domain amount).flatten
   | .mintUnshielded domain amount => (mintFieldGroups 5 domain amount).flatten
   | .incUnshieldedInputs color amount isUnshielded =>
@@ -647,6 +682,8 @@ def Op.fieldGroups : Op → List (List Scalar)
           [.native 0x19], [.native (0x90 + keys.length)]]
   | .claimContractCall address entryPointHash commitment =>
       claimContractCallFieldGroups address entryPointHash commitment
+  | .receiveShieldedToMap slot nonce color amount commitment =>
+      receiveShieldedFieldGroups slot nonce color amount commitment
   | .mintShielded domain amount => mintFieldGroups 4 domain amount
   | .mintUnshielded domain amount => mintFieldGroups 5 domain amount
   | .incUnshieldedInputs color amount isUnshielded =>
@@ -886,7 +923,9 @@ private def nativePathKeys (keys : List PathKey) : Except String (List Aligned) 
 
 def recordSchema (environment : Types.CompositeEnv) (type : Types.CompositeType) :
     Except String Lean.Json := do
-  let fields ← LedgerValueType.recordFields environment type
+  let fields ← match LedgerValueType.recordFields environment type with
+    | .ok fields => pure fields
+    | .error _ => LedgerValueType.shieldedCoinRecordFields environment type
   if fields.all (fun (_, ty) => ty == .native) then
     let compiled ← (Types.compileType environment type).mapError (·.message)
     Types.schemaJson compiled
@@ -1270,6 +1309,12 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     pure {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .receiveShieldedToMap stateName nonce color amount selfAddress => do
+    let slot ← stateSlot state stateName
+    if slot > 255 then throw "shielded coin map index exceeds native u8 range"
+    let commitment := receiveShieldedCommitment nonce color amount selfAddress
+    pure {plan with operations := plan.operations ++ [
+      .receiveShieldedToMap slot nonce color amount commitment]}
   | .checkpoint => pure {plan with operations := plan.operations ++ [.checkpoint]}
   | .mintShielded domain amount =>
     pure {plan with operations := plan.operations ++ [.mintShielded domain amount]}
@@ -1885,6 +1930,12 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     plan := {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .receiveShieldedToMap stateName nonce color amount selfAddress => do
+    let slot ← stateSlot state stateName
+    if slot > 255 then throw "shielded coin map index exceeds native u8 range"
+    let commitment := receiveShieldedCommitment nonce color amount selfAddress
+    plan := {plan with operations := plan.operations ++ [
+      .receiveShieldedToMap slot nonce color amount commitment]}
   | .checkpoint => plan := {plan with operations := plan.operations ++ [.checkpoint]}
   | .mintShielded domain amount =>
     plan := {plan with operations := plan.operations ++ [.mintShielded domain amount]}
@@ -2305,6 +2356,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .mapRemove slot keys => pure (Lean.Json.mkObj [("mapRemove", Lean.Json.mkObj [
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
+  | .receiveShieldedToMap .. => throw "shielded coin receive uses its dedicated native-plan operation JSON"
   | .mintShielded .. => throw "shielded mint uses its dedicated native-plan operation JSON"
   | .mintUnshielded .. => throw "unshielded mint uses its dedicated native-plan operation JSON"
   | .incUnshieldedInputs .. => throw "unshielded input accumulation uses its dedicated native-plan operation JSON"

@@ -6,9 +6,11 @@ use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue
 use base_crypto::hash::HashOutput;
 use base_crypto::repr::BinaryHashRepr;
 use coin_structure::coin::{
-    PublicAddress, ShieldedTokenType, TokenType, UnshieldedTokenType, UserAddress,
+    Info as ShieldedCoinInfo, Nonce, PublicAddress, ShieldedTokenType, TokenType,
+    UnshieldedTokenType, UserAddress,
 };
 use coin_structure::contract::ContractAddress;
+use coin_structure::transfer::Recipient;
 use ledger::{
     construct::{PreTranscript, partition_transcripts},
     structure::LedgerParameters,
@@ -1243,6 +1245,14 @@ pub enum Instruction {
         is_contract: Expr,
         recipient: Expr,
     },
+    #[serde(rename = "receiveShieldedToMap", rename_all = "camelCase")]
+    ReceiveShieldedToMap {
+        slot: u32,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        commitment: Expr,
+    },
     #[serde(rename = "requireContractCaller")]
     RequireContractCaller {
         address: Expr,
@@ -1481,6 +1491,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             validate_map_size_path(plan, *slot, keys.len())?;
             vec![1, path_field_count(plan, *slot, keys)?, 1, 5, 1, 4]
         }
+        Instruction::ReceiveShieldedToMap { .. } => RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS.to_vec(),
 
         Instruction::MerkleTreeIsFull {
             slot, keys, depth, ..
@@ -1663,6 +1674,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
     Ok(match instruction {
         Instruction::AddImmediate { .. } | Instruction::SubImmediate { .. } => 2,
         Instruction::ClaimContractCall { .. } => 24,
+        Instruction::ReceiveShieldedToMap { .. } => {
+            bail!("shielded receive must be unguarded")
+        }
         Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
             impact_field_counts(instruction, plan)?.into_iter().sum()
         }
@@ -1765,6 +1779,8 @@ fn map_key_type(plan: &Plan, slot: u32) -> Result<ScalarType> {
 }
 
 const MINT_FIELD_COUNTS: [usize; 16] = [1, 4, 6, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1];
+const RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS: [usize; 16] =
+    [1, 4, 6, 2, 1, 1, 4, 6, 1, 6, 5, 11, 1, 2, 1, 1];
 
 fn token_accumulation_fields(key_push: usize) -> [usize; 16] {
     [1, 4, key_push, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1]
@@ -1904,6 +1920,9 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         return Ok(());
     }
     if let Some(schema) = fields.get("composite") {
+        if is_shielded_coin_record_schema(schema) {
+            return Ok(());
+        }
         checked_record_schema(schema)?;
         return Ok(());
     }
@@ -1918,6 +1937,75 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         .ok_or_else(|| anyhow!("invalid state tree map schema"))?;
     ledger_key_type(&parts[0])?;
     validate_tree_schema(&parts[1], depth + 1)
+}
+
+fn is_shielded_coin_record_schema(schema: &Json) -> bool {
+    let Some(object) = schema.as_object() else {
+        return false;
+    };
+    if object.len() != 2 || !object.contains_key("id") || !object.contains_key("fields") {
+        return false;
+    }
+    let Some(id) = object.get("id").and_then(Json::as_str) else {
+        return false;
+    };
+    if !valid_record_identifier(id, true) {
+        return false;
+    }
+    let Some(fields) = object.get("fields").and_then(Json::as_array) else {
+        return false;
+    };
+    let expected = [
+        ("nonce", "Bytes<32>"),
+        ("color", "Bytes<32>"),
+        (
+            "value",
+            "UIntRange<340282366920938463463374607431768211456>",
+        ),
+        ("mtIndex", "UIntRange<18446744073709551616>"),
+    ];
+    fields.len() == expected.len()
+        && fields.iter().zip(expected).all(|(field, (name, ty))| {
+            field.as_object().is_some_and(|field| {
+                field.len() == 2
+                    && field.get("name").and_then(Json::as_str) == Some(name)
+                    && field.get("type").and_then(Json::as_str) == Some(ty)
+            })
+        })
+}
+
+fn validate_shielded_coin_map(plan: &Plan, slot: u32) -> Result<()> {
+    ensure!(
+        slot < 16,
+        "shielded receive Map slot exceeds the native state limit"
+    );
+    let schema = tree_schema_at_path(plan, slot, 0)?;
+    let object = schema
+        .as_object()
+        .ok_or_else(|| anyhow!("shielded receive requires a tree Map"))?;
+    ensure!(
+        object.len() == 1 && object.contains_key("map"),
+        "shielded receive requires a root tree Map"
+    );
+    let parts = schema
+        .get("map")
+        .and_then(Json::as_array)
+        .filter(|parts| parts.len() == 2)
+        .ok_or_else(|| anyhow!("shielded receive requires a Bytes32-keyed Map"))?;
+    ensure!(
+        ledger_key_type(&parts[0])? == ScalarType::Bytes32,
+        "shielded receive Map key must be Bytes32"
+    );
+    let value = parts[1]
+        .as_object()
+        .filter(|value| value.len() == 1)
+        .and_then(|value| value.get("composite"))
+        .ok_or_else(|| anyhow!("shielded receive Map value must be the coin record"))?;
+    ensure!(
+        is_shielded_coin_record_schema(value),
+        "shielded receive Map must use the fixed coin record schema"
+    );
+    Ok(())
 }
 
 fn validate_tree_scalar_type(ty: &str) -> Result<ScalarType> {
@@ -4353,6 +4441,18 @@ fn probe_instruction(
             env,
             deferred_outputs,
         ),
+        Instruction::ReceiveShieldedToMap {
+            nonce,
+            color,
+            amount,
+            commitment,
+            ..
+        } => probe_expressions(
+            [nonce, color, amount, commitment],
+            plan,
+            env,
+            deferred_outputs,
+        ),
         Instruction::RequireContractCaller { address } => {
             probe_expression(address, plan, env, deferred_outputs)
         }
@@ -6368,6 +6468,88 @@ impl PreparationCursor {
                     recipient,
                 )?
             }
+            Instruction::ReceiveShieldedToMap {
+                slot,
+                nonce,
+                color,
+                amount,
+                commitment,
+            } => {
+                validate_shielded_coin_map(plan, *slot)?;
+                let coin = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce, &env)?,
+                        "shielded coin nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color, &env)?,
+                        "shielded coin color",
+                    )?),
+                    value: unshielded_amount(amount, &env)?,
+                };
+                let recipient = Recipient::Contract(context.address);
+                let source_commitment =
+                    claim_hash_output(evaluate(commitment, &env)?, "shielded receive commitment")?;
+                let coin_commitment = coin.commitment(&recipient);
+                ensure!(
+                    coin_commitment.0 == source_commitment,
+                    "shielded receive commitment mismatch"
+                );
+                context
+                    .qualify(&coin)
+                    .ok_or_else(|| anyhow!("shielded receive commitment is absent from context"))?;
+
+                if has_written {
+                    advance_native_state_prefix(
+                        prefix_context,
+                        &program,
+                        &mut materialized_prefix,
+                        mutation_boundary,
+                        cost,
+                    )?;
+                }
+                let read_context = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                let coin_state = read_state_value(read_context, *slot, &[])?;
+                let StateValue::Map(coins) = &coin_state else {
+                    bail!("shielded receive state is not a Map")
+                };
+                let key = AlignedValue::from(coin.nonce);
+                ensure!(
+                    coins.get(&key).is_none(),
+                    "shielded receive nonce already exists"
+                );
+
+                let path = vec![Key::Value(
+                    AlignedValue::from(u8::try_from(*slot)?)
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid shielded receive Map slot"))?,
+                )];
+                let mut map_ops = onchain_runtime::program_fragments::Map_insert_coin!(
+                    path,
+                    false,
+                    AlignedValue,
+                    ShieldedCoinInfo,
+                    key,
+                    coin,
+                    recipient
+                );
+                map_ops[2] = Op::Dup { n: 5 };
+                let insert_final = map_ops[9].clone();
+                program.extend(
+                    onchain_runtime::program_fragments::kernel_claim_zswap_coin_receive!(
+                        (),
+                        (),
+                        coin_commitment
+                    ),
+                );
+                program.extend(map_ops.into_iter().take(9));
+                has_written = true;
+                insert_final
+            }
             Instruction::ReadTokenBalance {
                 destination,
                 color,
@@ -6642,6 +6824,7 @@ impl PreparationCursor {
                 | Instruction::ListPopFront { .. }
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
+                | Instruction::ReceiveShieldedToMap { .. }
         ) {
             mutation_boundary = program.len();
         }

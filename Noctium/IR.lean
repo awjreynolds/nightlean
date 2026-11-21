@@ -354,6 +354,20 @@ def LedgerValueType.recordFields (environment : Types.CompositeEnv)
       throw "mixed ledger record layout does not match its flat field declaration"
     pure fields
 
+def LedgerValueType.shieldedCoinRecordFields (environment : Types.CompositeEnv)
+    (type : Types.CompositeType) : Except String (List (String × Ty)) := do
+  let .structure id := type | throw "shielded coin map value must be a named flat record"
+  let some declaration := environment.structures.find? (·.id == id)
+    | throw "shielded coin map record declaration is missing"
+  let shape := declaration.fields.map fun field => (field.name, field.type)
+  unless shape == [
+      ("nonce", .scalar (.bytes 32)), ("color", .scalar (.bytes 32)),
+      ("value", .scalar (.uint (2 ^ 128 - 1))),
+      ("mtIndex", .scalar (.uint (2 ^ 64 - 1)))] do
+    throw "shielded coin map record must be flat nonce: Bytes32, color: Bytes32, value: UInt128, mtIndex: UInt64"
+  pure [("nonce", .bytes 32), ("color", .bytes 32),
+    ("value", .uint (2 ^ 128 - 1)), ("mtIndex", .uint (2 ^ 64 - 1))]
+
 /-- Describe a List element as its typed scalar value or as the fields of its
 existing checked record representation. -/
 def LedgerValueType.listElementFields (environment : Types.CompositeEnv)
@@ -559,6 +573,11 @@ inductive Effect where
   Helper and witness-statement authoring APIs do not expose this effect yet. -/
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Expr .native)
   | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
+  /-- Receive an already-funded shielded coin into a typed Bytes32-keyed tree map.
+  The backend computes its commitment from the disclosed coin data and the
+  contract address read from ledger context. -/
+  | receiveShieldedToMap (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
       (isUnshielded : Expr .bool)
@@ -970,7 +989,9 @@ def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except 
     validateLedgerMapKeyType keyTy
     keyTy.validate caps
   | .composite environment type => do
-    let fields ← LedgerValueType.recordFields environment type
+    let fields ← match LedgerValueType.recordFields environment type with
+      | .ok fields => pure fields
+      | .error _ => LedgerValueType.shieldedCoinRecordFields environment type
     for (_, ty) in fields do
       ty.validate caps
     pure ()
@@ -1057,6 +1078,7 @@ private def Constructor.validate (caps : Capabilities) (states : List StateDecl)
 
 private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
+    .receiveShieldedToMap state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
     .emptyMapPath state .. | .setInsert state .. | .removePath state .. |
@@ -1231,6 +1253,20 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .mintShielded domain amount | .mintUnshielded domain amount => do
         domain.validate caps env
         amount.validate caps env
+        pure []
+      | .receiveShieldedToMap state nonce color amount selfAddress => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown shielded coin map '{state}'"
+        let .tree (.map keyTy (.composite compositeEnv recordType)) := declaration.kind
+          | throw s!"shielded coin receive requires a root Bytes32-keyed tree Map '{state}'"
+        unless keyTy == .bytes 32 do
+          throw "shielded coin map key must be Bytes32"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        selfAddress.validate caps env
         pure []
       | .incUnshieldedInputs color amount isUnshielded
       | .incUnshieldedOutputs color amount isUnshielded => do

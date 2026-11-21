@@ -290,6 +290,11 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("address", nativeExpressionJson address),
       ("entryPointHash", nativeExpressionJson entryPointHash),
       ("commitment", nativeExpressionJson commitment)]
+  | .receiveShieldedToMap slot nonce color amount commitment => Json.mkObj [
+      ("op", toJson ("receiveShieldedToMap" : String)), ("slot", toJson slot),
+      ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
+      ("amount", nativeExpressionJson amount),
+      ("commitment", nativeExpressionJson commitment)]
   | .mintShielded domain amount => Json.mkObj [
       ("op", toJson ("mintShielded" : String)), ("domain", nativeExpressionJson domain),
       ("amount", nativeExpressionJson amount)]
@@ -360,6 +365,10 @@ private def effectJson : Effect → Json
       ("address", expressionJson address),
       ("entryPointHash", expressionJson entryPointHash),
       ("commitment", expressionJson commitment)]
+  | .receiveShieldedToMap state nonce color amount selfAddress => Json.mkObj [
+      ("op", toJson ("receiveShieldedToMap" : String)), ("state", toJson state),
+      ("nonce", expressionJson nonce), ("color", expressionJson color),
+      ("amount", expressionJson amount), ("selfAddress", expressionJson selfAddress)]
   | .mintShielded domain amount => Json.mkObj [
       ("op", toJson ("mintShielded" : String)), ("domain", expressionJson domain),
       ("amount", expressionJson amount)]

@@ -1118,6 +1118,8 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       if !(← condition.eval ctx env) then throw "state transition guard failed"
     | .claimContractCall .. =>
       throw "reference evaluator does not execute cross-contract claims"
+    | .receiveShieldedToMap .. =>
+      throw "reference evaluator cannot determine the native shielded receive index"
     | .mintShielded domain amount =>
       next ← mintShielded ctx env next domain amount
     | .mintUnshielded domain amount =>
@@ -1427,6 +1429,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           if !(← condition.eval ctx env) then throw "state transition guard failed"
         | .claimContractCall .. =>
           throw "reference evaluator does not execute cross-contract claims"
+        | .receiveShieldedToMap .. =>
+          throw "reference evaluator cannot determine the native shielded receive index"
         | .mintShielded domain amount =>
           next ← mintShielded ctx env next domain amount
         | .mintUnshielded domain amount =>
