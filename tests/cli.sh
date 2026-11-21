@@ -125,27 +125,81 @@ expect_failure "$cli" compile "$scratch/collision.lean" --output "$scratch/colli
 grep -F 'artifact filenames collide' "$scratch/stdout" > /dev/null
 test ! -e "$scratch/collision-output"
 
-cat > "$scratch/imported.lean" <<'LEAN'
-import examples.PrivateClaim
+mkdir -p "$scratch/imports"
+cat > "$scratch/imports/ImportedCircuitLibrary.lean" <<'LEAN'
 import Noctium.Frontend
 open scoped Noctium
-noctium_circuit localRelation where
+namespace ImportedCircuitLibrary
+noctium_circuit claimRelation where
   public value : Native
   output result : Native := value
 end
+noctium_circuit unusedRelation where
+  public value : Native
+  output result : Native := value
+end
+end ImportedCircuitLibrary
+LEAN
+# Compile the imported source into a separate Lean module, as normal import
+# resolution requires. The Noctium CLI then consumes one registered circuit.
+lake env lean --root="$scratch/imports" -o "$scratch/imports/ImportedCircuitLibrary.olean" \
+  "$scratch/imports/ImportedCircuitLibrary.lean"
+
+cat > "$scratch/imported.lean" <<'LEAN'
+import ImportedCircuitLibrary
+import Noctium.Frontend
+open scoped Noctium
 noctium_contract ImportedCircuitContract where
-  entry claim uses claimRelation where
+  cell total : Native
+  entry claim uses ImportedCircuitLibrary.claimRelation where
+    write total := result
   end
 end
 LEAN
-# Build the fixture only in the temporary directory, leaving the checkout unchanged.
-lake env lean -o "$scratch/PrivateClaim.olean" examples/PrivateClaim.lean
-# The source's import resolves through a temporary package path rather than the source tree.
-mkdir -p "$scratch/imports/examples"
-cp "$scratch/PrivateClaim.olean" "$scratch/imports/examples/PrivateClaim.olean"
-expect_failure env LEAN_PATH="$scratch/imports:${LEAN_PATH:-}" "$cli" compile "$scratch/imported.lean" --output "$scratch/imported-output"
-grep -F 'references imported circuit' "$scratch/stdout" > /dev/null
-test ! -e "$scratch/imported-output"
+env LEAN_PATH="$scratch/imports:$PWD/.lake/build/lib/lean" \
+  "$cli" compile "$scratch/imported.lean" --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --output "$scratch/imported-output"
+test -f "$scratch/imported-output/ImportedCircuitLibrary.claimRelation.zkir"
+test -f "$scratch/imported-output/ImportedCircuitContract.claim.impact.json"
+test ! -e "$scratch/imported-output/ImportedCircuitLibrary.unusedRelation.zkir"
+{
+  cat "$scratch/imports/ImportedCircuitLibrary.lean"
+  sed -n '/^noctium_contract /,$p' "$scratch/imported.lean"
+} > "$scratch/combined.lean"
+"$cli" compile "$scratch/combined.lean" --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --output "$scratch/combined-output"
+cmp "$scratch/imported-output/ImportedCircuitContract.claim.zkir" \
+  "$scratch/combined-output/ImportedCircuitContract.claim.zkir"
+node - "$scratch/imported-output/noctium.json" <<'JS'
+const fs = require('node:fs');
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+if (manifest.circuits.length !== 1 ||
+    manifest.circuits[0].name !== 'ImportedCircuitLibrary.claimRelation') {
+  throw new Error('compiler did not emit only the explicitly selected imported circuit');
+}
+const [contract] = manifest.contracts;
+if (contract.name !== 'ImportedCircuitContract' ||
+    contract.entrypoints[0].circuit !== 'ImportedCircuitLibrary.claimRelation') {
+  throw new Error('imported circuit identity changed in the compiled contract');
+}
+if (contract.entrypoints[0].nativeCircuitQualified !== false || manifest.deployable !== false) {
+  throw new Error('imported source proof provenance was overstated');
+}
+JS
+
+cat > "$scratch/unresolved-imported.lean" <<'LEAN'
+import ImportedCircuitLibrary
+import Noctium.Frontend
+open scoped Noctium
+noctium_contract UnresolvedImportedCircuitContract where
+  entry claim uses ImportedCircuitLibrary.missingRelation where
+  end
+end
+LEAN
+expect_failure env LEAN_PATH="$scratch/imports:$PWD/.lake/build/lib/lean" \
+  "$cli" compile "$scratch/unresolved-imported.lean" --output "$scratch/unresolved-imported-output"
+grep -F 'entrypoint requires a registered Noctium circuit' "$scratch/stdout" > /dev/null
+test ! -e "$scratch/unresolved-imported-output"
 
 cat > "$scratch/empty.lean" <<'LEAN'
 import Noctium.Frontend
