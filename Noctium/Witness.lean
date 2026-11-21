@@ -31,6 +31,7 @@ private def scalarName : Ty → String
   | .bytes 32 => "Bytes<32>"
   | .bytes length => s!"Bytes<{length}>"
   | .opaqueBytes => "OpaqueBytes"
+  | .opaqueString => "OpaqueString"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
   | .foreign kind => kind.sourceName

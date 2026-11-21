@@ -70,6 +70,10 @@ scalars. Source producer checks reject removed scalar and coordinate equality
 bridges. The source compiler and Rust evaluator also expose `degradeToNative`:
 the first 31 digest bytes interpreted little-endian, matching the pinned native
 `degrade_to_transient` builtin. Hashing and degradation retain private origins.
+`upgradeFromNative` uses the same 31-byte boundary in the other direction. It
+keeps the low bytes of a Native field and appends one zero byte. `toBytes32`
+preserves the full canonical field encoding.
+[Matched conversion fixture](../../tests/HashDomainConversions.lean)
 This slice generates no keys, proofs or deployment. It does not extend the
 claim-specific or generic scalar preservation theorems to curve operations.
 

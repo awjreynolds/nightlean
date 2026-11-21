@@ -60,6 +60,7 @@ jobs:
           lake env lean tests/Issue70DerivedCrypto.lean
           lake env lean tests/NativeInverse.lean
           lake env lean tests/NativeByteConversions.lean
+          lake env lean tests/HashDomainConversions.lean
           lake env lean tests/NativeBytePacking.lean
           lake env lean tests/NativeByteIndexing.lean
           lake env lean tests/NativeByteReverse.lean
@@ -131,6 +132,7 @@ jobs:
           lake env lean tests/ShieldedImmediateRelay.lean
           lake env lean tests/QualifiedCoinCell.lean
           lake env lean tests/QualifiedCoinSet.lean
+          lake env lean tests/QualifiedCoinList.lean
           lake env lean tests/NativeTaggedSettlement.lean
           lake env lean tests/NativeUnshieldedSend.lean
           lake env lean tests/NativeUnshieldedMintRecipient.lean
@@ -159,6 +161,8 @@ jobs:
           lake env lean tests/NativeCopy.lean
           lake env lean tests/NativeOpaqueReturns.lean
           lake env lean tests/OpaqueByteMap.lean
+          lake env lean tests/OpaqueStringMap.lean
+          lake env lean tests/ConstructorMetadata.lean
           lake env lean tests/Issue43ConditionalWrites.lean
           lake env lean tests/Issue43EmptyActivity.lean
           lake env lean tests/Issue43MapMembership.lean
@@ -191,7 +195,7 @@ jobs:
               --no-default-features --features zkir-321 --test effect_blocks
       - name: Check source proof registration
         run: |
-          lake build Noctium.Verification
+          lake build Noctium.Verification Noctium.Verification.ScalarNormalizationSoundness
           lake env lean tests/Verification.lean
       - name: Check readable private state source and disclosure
         run: |

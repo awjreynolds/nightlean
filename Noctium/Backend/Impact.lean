@@ -31,6 +31,7 @@ inductive Aligned where
   | bytes32 (value : Expr (.bytes 32))
   | bytes (length : Nat) (value : Expr (.bytes length))
   | compress (value : Expr .opaqueBytes)
+  | compressString (value : Expr .opaqueString)
   | nativeFields (values : List Scalar)
   | counter (value : Expr (.uint (2 ^ 64 - 1)))
   deriving Repr
@@ -66,6 +67,7 @@ private def ledgerFieldPayloads : LedgerFieldExpr → List Scalar
   | .mk (.bytes length) value =>
       (List.range (alignedByteChunkCount length)).map (.bytesField value)
   | .mk .opaqueBytes value => [.opaqueBytesProjection value]
+  | .mk .opaqueString value => [.opaqueStringProjection value]
   | .mk .jubjubScalar value => [.jubjubScalarToNative value]
   | .mk .jubjubPoint value => [.jubjubCoordinate value 0, .jubjubCoordinate value 1]
   | .mk (.foreign kind) value => foreignNativeFields kind value
@@ -90,6 +92,7 @@ private def refLedgerFieldExpr (name : String) (ty : Ty) : LedgerFieldExpr :=
   | .uint maximum => .mk (.uint maximum) (.ref name)
   | .bytes length => .mk (.bytes length) (.ref name)
   | .opaqueBytes => .mk .opaqueBytes (.ref name)
+  | .opaqueString => .mk .opaqueString (.ref name)
   | .jubjubScalar => .mk .jubjubScalar (.ref name)
   | .jubjubPoint => .mk .jubjubPoint (.ref name)
   | .foreign kind => .mk (.foreign kind) (.ref name)
@@ -144,6 +147,9 @@ inductive Op where
   | merkleTreeResetHistoryAt (slot depth : Nat) (keys : List Aligned)
   | listHead (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List LedgerFieldExpr)
   | listPushFront (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List LedgerFieldExpr)
+  | listPushFrontCoin (slot : Nat) (keys : List Aligned) (schema : Lean.Json)
+      (nonce color : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 128 - 1)))
+      (commitment : Expr (.bytes 32))
   | listPopFront (slot : Nat) (keys : List Aligned)
   | listReset (slot : Nat) (keys : List Aligned)
   | mapRemove (slot : Nat) (keys : List Aligned)
@@ -219,6 +225,7 @@ def Aligned.fields : Aligned → List Scalar
   | .bytes length value => [.native 1, .native length] ++
       (List.range (alignedByteChunkCount length)).map (.bytesField value)
   | .compress value => [.native 1, .native (Field.modulus - 1), .opaqueBytesProjection value]
+  | .compressString value => [.native 1, .native (Field.modulus - 1), .opaqueStringProjection value]
   | .nativeFields values => nativeFieldSequence values
   | .counter value => [.native 1, .native 8, .cast .native value]
 
@@ -322,6 +329,43 @@ private def receiveShieldedFieldGroups (slot : Nat) (nonce color : Expr (.bytes 
 
 private def listIndexFields (index : Nat) : List Scalar :=
   [.native 0x50, .native 1, .native 1, .native index]
+
+private def shieldedCoinInfoFields (nonce color : Expr (.bytes 32))
+    (amount : Expr (.uint (2 ^ 128 - 1))) : List Scalar :=
+  [.native 3, .native 32, .native 32, .native 16,
+    .bytesField nonce 0, .bytesField nonce 1,
+    .bytesField color 0, .bytesField color 1, .cast .native amount]
+
+/-- Ledger 9 list prepend with a transaction-local qualified index. The new
+node precedes the zero key so cached Ins pops key and node in VM order. -/
+private def listPushFrontCoinFieldGroups (slot : Nat) (keys : List Aligned)
+    (nonce color : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 128 - 1)))
+    (commitment : Expr (.bytes 32)) : List (List Scalar) :=
+  let pushU8 (value : Nat) : List Scalar :=
+    [.native 0x10, .native 1, .native 1, .native 1, .native value]
+  [ [.native (0x70 + keys.length), .native 1, .native 1, .native slot] ++
+      keys.flatMap Aligned.fields
+  , [.native 0x30]
+  , listIndexFields 2
+  , [.native 0x0e, .native 1]
+  , [.native 0x11, .native 51, .native 0, .native 0, .native 0]
+  , pushU8 0
+  , [.native (0x30 + 7 + keys.length * 2)]
+  , [.native 0x10, .native 1] ++ (Aligned.bytes32 commitment).fields
+  , [.native 0x61, .native 1, .native 1, .native 1, .native (Field.modulus - 1)]
+  , [.native 0x10, .native 1] ++ shieldedCoinInfoFields nonce color amount
+  , [.native 0x40]
+  , [.native 0x17, .native 91]
+  , [.native 0xa1]
+  , [.native 0x40]
+  , pushU8 2
+  , [.native 0x40]
+  , [.native 0xa1]
+  , [.native 0x40]
+  , pushU8 1
+  , [.native 0x40]
+  , [.native (0xa0 + keys.length + 2)]
+  ]
 
 private def mapIsEmptyFieldGroups (slot : Nat) (keys : List Aligned)
     (destination : String) : List (List Scalar) :=
@@ -640,6 +684,8 @@ def Op.fields : Op → List Scalar
       [.native 0x40, .native 0x10, .native 1, .native 1, .native 1, .native 2] ++
       [.native 0x40, .native 0x91, .native 0x40, .native 0x10, .native 1,
         .native 1, .native 1, .native 1, .native 0x40, .native (0x90 + keys.length + 2)]
+  | .listPushFrontCoin slot keys _ nonce color amount commitment =>
+      (listPushFrontCoinFieldGroups slot keys nonce color amount commitment).flatten
   | .listPopFront slot keys =>
       indexPathFields slot true keys ++ [.native 0x30] ++ listIndexFields 2 ++
       [.native 0x0f, .native 1, .native 0x0b] ++ listIndexFields 1 ++
@@ -751,6 +797,8 @@ def Op.fieldGroups : Op → List (List Scalar)
         [.native 0x0e, .native 1], listRecordNodePushFields values, [.native 0x40],
         listU8CellPushFields 2, [.native 0x40], [.native 0x91], [.native 0x40],
         listU8CellPushFields 1, [.native 0x40], [.native (0x90 + keys.length + 2)]]
+  | .listPushFrontCoin slot keys _ nonce color amount commitment =>
+      listPushFrontCoinFieldGroups slot keys nonce color amount commitment
   | .listPopFront slot keys =>
       [indexPathFields slot true keys, [.native 0x30], listIndexFields 2,
         [.native 0x0f, .native 1], [.native 0x0b], listIndexFields 1,
@@ -836,6 +884,8 @@ def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
   | .bytes _, _ | _, none => none
   | .opaqueBytes, some guard => some (.eq (.opaqueBytesProjection (.ref read.name))
       (.select guard (.opaqueBytesProjection (.ref read.name)) (.native 0)))
+  | .opaqueString, some guard => some (.eq (.opaqueStringProjection (.ref read.name))
+      (.select guard (.opaqueStringProjection (.ref read.name)) (.native 0)))
   | .jubjubScalar, some guard => some (.eq
       (.jubjubScalarToNative (.ref read.name))
       (.select guard (.jubjubScalarToNative (.ref read.name)) (.native 0)))
@@ -931,7 +981,7 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
     (plan.reads.drop publicCount).flatMap fun read =>
       read.scalarReads.flatMap fun scalarRead =>
         (match scalarRead.ty with
-          | .bytes _ | .opaqueBytes | .jubjubPoint => [(scalarRead.name, scalarRead.ty)]
+          | .bytes _ | .opaqueBytes | .opaqueString | .jubjubPoint => [(scalarRead.name, scalarRead.ty)]
           | _ => []) ++ scalarRead.bindings
   for field in plan.fields do field.validate expressionCapabilities env
   for guard in plan.guards do guard.validate expressionCapabilities env
@@ -958,6 +1008,7 @@ private def nativeValue : (ty : Ty) → Expr ty → Except String Scalar
   | .uint _, value => pure (.cast .native value)
   | .bytes _, _ => throw "Bytes32 requires byte alignment, not scalar conversion"
   | .opaqueBytes, _ => throw "OpaqueBytes require Compress alignment, not scalar conversion"
+  | .opaqueString, _ => throw "OpaqueString requires Compress alignment, not scalar conversion"
   | .jubjubScalar, _ | .jubjubPoint, _ | .foreign _, _ => throw "opaque values require explicit encoding projections"
 
 private def nativeAligned : (ty : Ty) → Expr ty → Except String Aligned
@@ -967,6 +1018,7 @@ private def nativeAligned : (ty : Ty) → Expr ty → Except String Aligned
   | .bytes 32, value => pure (.bytes32 value)
   | .bytes length, value => pure (.bytes length value)
   | .opaqueBytes, value => pure (.compress value)
+  | .opaqueString, value => pure (.compressString value)
   | .foreign kind, value => pure (.foreignKey kind value)
   | .jubjubScalar, _ | .jubjubPoint, _ => throw "opaque values require explicit encoding projections"
 
@@ -977,6 +1029,7 @@ private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
   | .uint maximum => pure (.cast .native (.ref name : Expr (.uint maximum)))
   | .bytes _ => throw "Bytes32 is read through byte alignment"
   | .opaqueBytes => pure (.opaqueBytesProjection (.ref name))
+  | .opaqueString => pure (.opaqueStringProjection (.ref name))
   | .jubjubScalar | .jubjubPoint | .foreign _ => throw "opaque inputs use reserved Native projections"
 
 private def pushKey : Aligned → Op
@@ -1005,6 +1058,7 @@ private def storageWriteValue : (ty : Ty) → Expr ty → Except String Op
   | .bytes 32, value => pure (.push (.bytes32 value) true)
   | .bytes length, value => pure (.push (.bytes length value) true)
   | .opaqueBytes, value => pure (.push (.compress value) true)
+  | .opaqueString, value => pure (.push (.compressString value) true)
   | ty, value => do
     pure (.push (.field (← nativeValue ty value)) true)
 
@@ -1019,6 +1073,9 @@ private def storageReadValue (ty : Ty) (name : String) : Except String Op := do
   | .opaqueBytes =>
     let value : Expr .opaqueBytes := .ref name
     pure (.popeq (.compress value))
+  | .opaqueString =>
+    let value : Expr .opaqueString := .ref name
+    pure (.popeq (.compressString value))
   | .foreign kind =>
     let value : Expr (.foreign kind) := .ref name
     pure (.popeqFields (Lean.Json.str kind.sourceName)
@@ -1123,6 +1180,19 @@ private def resolveListState (state : List StateDecl) (name : String)
   let some declaration := state.find? (·.name == name) | throw s!"unknown List state '{name}'"
   let .tree schema := declaration.kind | throw s!"state '{name}' is not a recursive tree"
   schema.listPath keys
+
+private def pushFrontCoinOp (state : List StateDecl) (name : String)
+    (nonce color : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 128 - 1)))
+    (selfAddress : Expr (.bytes 32)) : Except String Op := do
+  let slot ← stateSlot state name
+  if slot > 255 then throw "qualified shielded coin List index exceeds native u8 range"
+  let (environment, recordType, fields) ← resolveListState state name []
+  let expectedFields ← LedgerValueType.shieldedCoinRecordFields environment recordType
+  unless fields == expectedFields do
+    throw "qualified shielded coin List must use the exact shielded coin record"
+  let schema ← listElementOperationSchema environment recordType
+  let commitment := shieldedCoinDigest "midnight:zswap-cc[v1]" 0 nonce color amount selfAddress
+  pure (.listPushFrontCoin slot [] schema nonce color amount commitment)
 
 private def mapSizeOp (state : List StateDecl) (name destination : String)
     (keys : List PathKey) : Except String Op := do
@@ -1260,6 +1330,7 @@ mutual
 private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ | .foreignBase _ _ | .foreignScalar _ _ | .foreignPoint _ _ => []
   | .opaqueBytesProjection value => expressionNames value
+  | .opaqueStringProjection value => expressionNames value
   | .foreignEncodedField value _ | .foreignUnary _ value | .foreignToBytes value
   | .foreignFromBytes _ value => expressionNames value
   | .foreignBinary _ left right => expressionNames left ++ expressionNames right
@@ -1470,6 +1541,9 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let commitment := shieldedCoinDigest "midnight:zswap-cc[v1]" 0 nonce color amount selfAddress
     pure {plan with operations := plan.operations ++ [
       .writeShieldedCoinCell slot nonce color amount commitment]}
+  | .pushFrontCoin stateName nonce color amount selfAddress => do
+    let operation ← pushFrontCoinOp state stateName nonce color amount selfAddress
+    pure {plan with operations := plan.operations ++ [operation]}
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>
     pure {plan with operations := plan.operations ++ [
       spendShieldedOp nonce color amount recipient selfAddress]}
@@ -1994,6 +2068,11 @@ private def publicInputStep (input : Input) (plan : Plan) : Except String Plan :
     pure {plan with
       operations := plan.operations ++ [.push value, .popeq value]
       reads := plan.reads ++ [{name := input.name, ty := .opaqueBytes}]}
+  | .opaqueString => do
+    let value := Aligned.compressString (.ref input.name)
+    pure {plan with
+      operations := plan.operations ++ [.push value, .popeq value]
+      reads := plan.reads ++ [{name := input.name, ty := .opaqueString}]}
   | .native | .bool | .uint _ => do
     let value := Aligned.field (← nativeRead input.ty input.name)
     pure { plan with
@@ -2118,6 +2197,9 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let commitment := shieldedCoinDigest "midnight:zswap-cc[v1]" 0 nonce color amount selfAddress
     plan := {plan with operations := plan.operations ++ [
       .writeShieldedCoinCell slot nonce color amount commitment]}
+  | .pushFrontCoin stateName nonce color amount selfAddress => do
+    let operation ← pushFrontCoinOp state stateName nonce color amount selfAddress
+    plan := {plan with operations := plan.operations ++ [operation]}
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>
     plan := {plan with operations := plan.operations ++ [
       spendShieldedOp nonce color amount recipient selfAddress]}
@@ -2455,6 +2537,13 @@ def Aligned.toJson (ctx : EvalContext) (env : EvalEnv) (value : Aligned) : Excep
       let values ← expression.eval ctx env
       pure (Lean.Json.arr #[Lean.Json.arr (values.toArray.map Lean.toJson)],
         Lean.Json.mkObj [("tag", Lean.toJson ("compress" : String))])
+    | .compressString expression => do
+      let text ← expression.eval ctx env
+      let bytes := text.toUTF8.data.toList.map UInt8.toNat
+      unless bytes.length ≤ maxOpaqueStringBytes && (bytes.isEmpty || bytes.getLast! != 0) do
+        throw "opaque string is not in canonical UTF-8 Compress form"
+      pure (Lean.Json.arr #[Lean.Json.arr (bytes.toArray.map Lean.toJson)],
+        Lean.Json.mkObj [("tag", Lean.toJson ("compress" : String))])
     | .nativeFields _ => throw "grouped Native fields serialize through pushFields/popeqFields"
     | .counter expression => do
       let value ← expression.eval ctx env
@@ -2554,6 +2643,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .receiveShieldedToMap .. => throw "shielded coin receive uses its dedicated native-plan operation JSON"
   | .insertShieldedCoinSet .. => throw "qualified shielded coin Set insertion uses its dedicated native-plan operation JSON"
   | .writeShieldedCoinCell .. => throw "shielded coin Cell write uses its dedicated native-plan operation JSON"
+  | .listPushFrontCoin .. => throw "qualified shielded coin List push uses its dedicated native-plan operation JSON"
   | .spendShieldedFromMap .. => throw "shielded coin spend uses its dedicated native-plan operation JSON"
   | .sendShieldedFromMap .. => throw "shielded coin send uses its dedicated native-plan operation JSON"
   | .relayShieldedImmediate .. => throw "shielded coin relay uses its dedicated native-plan operation JSON"

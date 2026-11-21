@@ -62,6 +62,7 @@ pub enum Value {
     },
     Bytes(Vec<u8>),
     OpaqueBytes(Vec<u8>),
+    OpaqueString(String),
     JubjubScalar(EmbeddedFr),
     JubjubPoint(EmbeddedGroupAffine),
     #[cfg(feature = "zkir-321")]
@@ -136,11 +137,23 @@ fn aligned_opaque_bytes(value: &Value) -> Result<AlignedValue> {
     let Value::OpaqueBytes(bytes) = value else {
         bail!("expected opaque bytes value")
     };
+    aligned_compressed_atom(ValueAtom(bytes.clone()))
+}
+
+fn aligned_opaque_string(value: &Value) -> Result<AlignedValue> {
+    value.validate()?;
+    let Value::OpaqueString(text) = value else {
+        bail!("expected opaque string value")
+    };
+    aligned_compressed_atom(scalars::opaque_string_atom(text)?)
+}
+
+fn aligned_compressed_atom(atom: ValueAtom) -> Result<AlignedValue> {
     AlignedValue::new(
-        FabValue(vec![ValueAtom(bytes.clone())]),
+        FabValue(vec![atom]),
         Alignment::singleton(AlignmentAtom::Compress),
     )
-    .ok_or_else(|| anyhow!("invalid opaque byte alignment"))
+    .ok_or_else(|| anyhow!("invalid opaque compressed alignment"))
 }
 
 fn claim_hash_output(value: Value, label: &str) -> Result<HashOutput> {
@@ -219,7 +232,14 @@ fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
         return aligned_bytes(value);
     }
     match alignment {
-        "compress" => aligned_opaque_bytes(value),
+        "compress" => match value {
+            Value::OpaqueBytes(bytes) => {
+                value.validate()?;
+                aligned_compressed_atom(ValueAtom(bytes.clone()))
+            }
+            Value::OpaqueString(_) => aligned_opaque_string(value),
+            _ => bail!("Compress alignment requires an opaque byte or string value"),
+        },
         "field" => match value {
             #[cfg(feature = "zkir-321")]
             Value::Foreign(value) => Ok(aligned_fields(&value.encode()?)),
@@ -1382,6 +1402,16 @@ pub enum Instruction {
         schema: Json,
         expressions: Vec<Expr>,
     },
+    #[serde(rename = "listPushFrontCoin", rename_all = "camelCase")]
+    ListPushFrontCoin {
+        slot: u32,
+        keys: Vec<PathPart>,
+        schema: Json,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        commitment: Expr,
+    },
     #[serde(rename = "listPopFront")]
     ListPopFront {
         slot: u32,
@@ -1620,7 +1650,8 @@ pub(crate) fn ledger_key_type(value: &Json) -> Result<ScalarType> {
     )?;
     reject_jubjub_map_key(&ty)?;
     ensure!(
-        !matches!(&ty, ScalarType::Bytes(_) | ScalarType::OpaqueBytes),
+        !matches!(&ty, ScalarType::Bytes(_) | ScalarType::OpaqueBytes)
+            && ty != ScalarType::OpaqueString,
         "only fixed-width byte map keys are supported"
     );
     Ok(ty)
@@ -1743,6 +1774,9 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::ReceiveShieldedToMap { .. } => RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS.to_vec(),
         Instruction::WriteShieldedCoinCell { .. } => WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS.to_vec(),
+        Instruction::ListPushFrontCoin { .. } => {
+            bail!("qualified coin List push must be unguarded")
+        }
         Instruction::InsertShieldedCoinSet { slot, .. } => {
             validate_shielded_coin_set(plan, *slot)?;
             INSERT_SHIELDED_COIN_SET_FIELD_COUNTS.to_vec()
@@ -1940,6 +1974,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::WriteShieldedCoinCell { .. } => {
             bail!("shielded coin Cell write must be unguarded")
         }
+        Instruction::ListPushFrontCoin { .. } => {
+            bail!("qualified coin List push must be unguarded")
+        }
         Instruction::InsertShieldedCoinSet { .. } => {
             bail!("shielded coin Set insertion must be unguarded")
         }
@@ -2116,22 +2153,44 @@ fn validate_scalar_storage_type(
         scalar_storage_type_at_path(plan, slot, depth)? == *ty,
         "typed ledger type differs from state schema"
     );
+    if *ty == ScalarType::OpaqueString {
+        ensure!(
+            depth == 1,
+            "OpaqueString is only supported as a root Map value"
+        );
+        let tree = plan
+            .state
+            .get(slot as usize)
+            .and_then(|state| state.kind.get("tree"))
+            .ok_or_else(|| anyhow!("OpaqueString requires a root tree Map"))?;
+        let map = tree
+            .get("map")
+            .and_then(Json::as_array)
+            .filter(|parts| parts.len() == 2)
+            .ok_or_else(|| anyhow!("OpaqueString requires a root tree Map"))?;
+        ensure!(
+            map[0].as_str() == Some("Bytes<32>")
+                && map[1] == serde_json::json!({"scalar":"OpaqueString"}),
+            "OpaqueString requires a Bytes32-keyed Map leaf"
+        );
+    }
     Ok(())
 }
 
-fn opaque_byte_storage_path(
+fn opaque_compressed_storage_path(
     plan: &Plan,
     operation_index: usize,
     guard: Option<&Expr>,
+    ty: &ScalarType,
 ) -> Result<(u32, usize)> {
     let key_operation = operation_index
         .checked_sub(1)
         .and_then(|index| plan.operations.get(index))
-        .ok_or_else(|| anyhow!("opaque byte write has no indexed key push"))?;
+        .ok_or_else(|| anyhow!("opaque write has no indexed key push"))?;
     let (key_operation, key_guard) = unguarded_operation(key_operation);
     ensure!(
         key_guard == guard,
-        "opaque byte key push guard differs from its write"
+        "opaque key push guard differs from its write"
     );
     let Instruction::Push {
         storage: false,
@@ -2139,21 +2198,21 @@ fn opaque_byte_storage_path(
         alignment: key_alignment,
     } = key_operation
     else {
-        bail!("opaque byte write requires an adjacent non-storage key push")
+        bail!("opaque write requires an adjacent non-storage key push")
     };
     ensure!(
         key_alignment == "bytes32",
-        "opaque byte map key push must use Bytes32 alignment"
+        "opaque map key push must use Bytes32 alignment"
     );
 
     let path_operation = operation_index
         .checked_sub(2)
         .and_then(|index| plan.operations.get(index))
-        .ok_or_else(|| anyhow!("opaque byte write has no adjacent indexed path"))?;
+        .ok_or_else(|| anyhow!("opaque write has no adjacent indexed path"))?;
     let (path_operation, path_guard) = unguarded_operation(path_operation);
     ensure!(
         path_guard == guard,
-        "opaque byte indexed path guard differs from its write"
+        "opaque indexed path guard differs from its write"
     );
     let Instruction::IndexPath {
         slot,
@@ -2161,27 +2220,27 @@ fn opaque_byte_storage_path(
         keys,
     } = path_operation
     else {
-        bail!("opaque byte write requires an adjacent indexed storage path")
+        bail!("opaque write requires an adjacent indexed storage path")
     };
     ensure!(
         keys.is_empty(),
-        "opaque byte write requires a direct Map root path"
+        "opaque write requires a direct Map root path"
     );
     let key_types = map_path_key_types(plan, *slot, 1)?;
     ensure!(
         key_types.len() == 1 && key_types[0] == ScalarType::Bytes32,
-        "opaque byte Map key must be Bytes32"
+        "opaque Map key must be Bytes32"
     );
     let insert_operation = operation_index
         .checked_add(1)
         .and_then(|index| plan.operations.get(index))
-        .ok_or_else(|| anyhow!("opaque byte write has no adjacent Map insertion"))?;
+        .ok_or_else(|| anyhow!("opaque write has no adjacent Map insertion"))?;
     let (insert_operation, insert_guard) = unguarded_operation(insert_operation);
     ensure!(
-        insert_guard == guard
-            && matches!(insert_operation, Instruction::Insert { n: 2 }),
-        "opaque byte Map value push must be followed by Insert(2)"
+        insert_guard == guard && matches!(insert_operation, Instruction::Insert { n: 2 }),
+        "opaque Map value push must be followed by Insert(2)"
     );
+    validate_scalar_storage_type(plan, *slot, 1, ty)?;
     Ok((*slot, 1))
 }
 
@@ -2253,7 +2312,10 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
             .ok_or_else(|| anyhow!("invalid list element schema"))?;
         ensure!(parts.len() == 1, "invalid list element schema");
         if let Some(ty) = parts.get("scalar").and_then(Json::as_str) {
-            validate_tree_scalar_type(ty)?;
+            ensure!(
+                validate_tree_scalar_type(ty)? != ScalarType::OpaqueString,
+                "OpaqueString is only supported as a Bytes32-keyed Map value"
+            );
             return Ok(());
         }
         checked_record_schema(
@@ -2264,7 +2326,10 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         return Ok(());
     }
     if let Some(ty) = fields.get("scalar").and_then(Json::as_str) {
-        validate_tree_scalar_type(ty)?;
+        ensure!(
+            validate_tree_scalar_type(ty)? != ScalarType::OpaqueString || depth == 1,
+            "OpaqueString is only supported as a Bytes32-keyed Map value"
+        );
         return Ok(());
     }
     if let Some(schema) = fields.get("composite") {
@@ -2295,7 +2360,13 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         .and_then(Json::as_array)
         .filter(|parts| parts.len() == 2)
         .ok_or_else(|| anyhow!("invalid state tree map schema"))?;
-    ledger_key_type(&parts[0])?;
+    let key_type = ledger_key_type(&parts[0])?;
+    if parts[1].get("scalar").and_then(Json::as_str) == Some("OpaqueString") {
+        ensure!(
+            depth == 0 && key_type == ScalarType::Bytes32,
+            "OpaqueString is only supported as a Bytes32-keyed root Map value"
+        );
+    }
     validate_tree_schema(&parts[1], depth + 1)
 }
 
@@ -2383,6 +2454,39 @@ fn validate_shielded_coin_cell(plan: &Plan, slot: u32) -> Result<()> {
         is_shielded_coin_record_schema(record),
         "shielded coin Cell must use the fixed qualified coin record schema"
     );
+    Ok(())
+}
+
+fn validate_shielded_coin_list(
+    plan: &Plan,
+    slot: u32,
+    keys: &[PathPart],
+    operation_schema: &Json,
+) -> Result<()> {
+    ensure!(
+        slot < 16 && (slot as usize) < plan.state.len(),
+        "qualified coin List slot exceeds the native state limit"
+    );
+    ensure!(keys.is_empty(), "qualified coin List must be at the root");
+    ensure!(
+        !plan.state[slot as usize].sealed,
+        "qualified coin List is sealed"
+    );
+    let schema = list_element_schema_at_path(plan, slot, 0)?;
+    let record = schema
+        .as_object()
+        .filter(|object| object.len() == 1)
+        .and_then(|object| object.get("composite"))
+        .ok_or_else(|| anyhow!("qualified coin List must contain coin records"))?;
+    ensure!(
+        is_shielded_coin_record_schema(record),
+        "qualified coin List must use the fixed coin record schema"
+    );
+    ensure!(
+        operation_schema == record,
+        "qualified coin List operation differs from state schema"
+    );
+    checked_record_schema(operation_schema)?;
     Ok(())
 }
 
@@ -2711,6 +2815,7 @@ fn mutates_contract_state(operation: &Instruction) -> bool {
             | Instruction::Insert { .. }
             | Instruction::MapRemove { .. }
             | Instruction::ListPushFront { .. }
+            | Instruction::ListPushFrontCoin { .. }
             | Instruction::ListPopFront { .. }
             | Instruction::ListReset { .. }
             | Instruction::MerkleTreeInsertHash { .. }
@@ -3056,6 +3161,15 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
             Instruction::RelayShieldedImmediate { recipient, .. } => {
                 ensure!(guard.is_none(), "immediate shielded relay must be unguarded");
                 validate_relay_shielded_immediate_layout(plan, index, recipient)?;
+            }
+            Instruction::ListPushFrontCoin {
+                slot,
+                keys,
+                schema,
+                ..
+            } => {
+                ensure!(guard.is_none(), "qualified coin List push must be unguarded");
+                validate_shielded_coin_list(plan, *slot, keys, schema)?;
             }
             Instruction::ListHead {
                 slot,
@@ -3535,6 +3649,7 @@ fn inactive_read_value(ty: &str) -> Result<Value> {
         ScalarType::Bytes32 => Value::Bytes(vec![0; 32]),
         ScalarType::Bytes(length) => Value::Bytes(vec![0; length]),
         ScalarType::OpaqueBytes => Value::OpaqueBytes(Vec::new()),
+        ScalarType::OpaqueString => Value::OpaqueString(String::new()),
         ScalarType::JubjubScalar => Value::JubjubScalar(jubjub::scalar("0")?),
         ScalarType::JubjubPoint => {
             Value::JubjubPoint(jubjub::point(Fr::from(0u64), Fr::from(1u64))?)
@@ -3637,6 +3752,27 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
                 })
                 .collect::<Result<Vec<_>>>()?;
             let value = Value::OpaqueBytes(bytes);
+            value.validate()?;
+            Ok(value)
+        }
+        ScalarType::OpaqueString => {
+            let object = json
+                .as_object()
+                .ok_or_else(|| anyhow!("expected opaque string object"))?;
+            ensure!(
+                object.len() == 2
+                    && object.get("kind").and_then(Json::as_str) == Some("opaqueString"),
+                "invalid opaque string object"
+            );
+            let text = object
+                .get("value")
+                .and_then(Json::as_str)
+                .ok_or_else(|| anyhow!("expected opaque UTF-8 string value"))?;
+            ensure!(
+                text.len() <= scalars::MAX_OPAQUE_STRING_LENGTH,
+                "opaque string exceeds byte limit"
+            );
+            let value = Value::OpaqueString(text.to_owned());
             value.validate()?;
             Ok(value)
         }
@@ -4324,17 +4460,23 @@ fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<
         "state cell encoding mismatch"
     );
     let parsed = ScalarType::parse(ty)?;
-    let decoded = if parsed == ScalarType::OpaqueBytes {
+    let decoded = if matches!(parsed, ScalarType::OpaqueBytes | ScalarType::OpaqueString) {
         ensure!(
             alignment == "compress",
-            "opaque byte read requires Compress alignment"
+            "opaque read requires Compress alignment"
         );
         ensure!(
             value.alignment == Alignment::singleton(AlignmentAtom::Compress),
-            "opaque byte state cell alignment mismatch"
+            "opaque state cell alignment mismatch"
         );
-        ensure!(value.value.0.len() == 1, "invalid opaque byte atom count");
-        let decoded = Value::OpaqueBytes(value.value.0[0].0.clone());
+        ensure!(value.value.0.len() == 1, "invalid opaque atom count");
+        let atom = &value.value.0[0];
+        let decoded = if parsed == ScalarType::OpaqueBytes {
+            Value::OpaqueBytes(atom.0.clone())
+        } else {
+            scalars::validate_opaque_string_atom(atom)?;
+            Value::OpaqueString(String::from_utf8(atom.0.clone())?)
+        };
         decoded.validate()?;
         decoded
     } else if let Some(length) = parsed.bytes_length() {
@@ -4373,7 +4515,10 @@ fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<
                 ensure!(fields.len() == 1, "expected scalar state cell");
                 input_value(ty, &Json::String(field_decimal(fields[0])))?
             }
-            ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes => {
+            ScalarType::Bytes32
+            | ScalarType::Bytes(_)
+            | ScalarType::OpaqueBytes
+            | ScalarType::OpaqueString => {
                 unreachable!("decoded above")
             }
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
@@ -4391,6 +4536,8 @@ fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<
     };
     let encoded = if parsed == ScalarType::OpaqueBytes {
         aligned_opaque_bytes(&decoded)?
+    } else if parsed == ScalarType::OpaqueString {
+        aligned_opaque_string(&decoded)?
     } else if parsed.bytes_length().is_some() {
         aligned_bytes(&decoded)?
     } else if typed_scalar {
@@ -4822,6 +4969,9 @@ fn aligned_call_values<'a>(values: impl Iterator<Item = &'a Value>) -> Result<Al
             Value::Bytes(_) => aligned_bytes(value)?.value_only_field_repr(&mut fields),
             Value::OpaqueBytes(_) => {
                 aligned_opaque_bytes(value)?.value_only_field_repr(&mut fields)
+            }
+            Value::OpaqueString(_) => {
+                aligned_opaque_string(value)?.value_only_field_repr(&mut fields)
             }
             Value::JubjubScalar(value) => fields.push(jubjub::scalar_native(*value)?),
             Value::JubjubPoint(value) => fields.extend(jubjub::coordinates(*value)?),
@@ -5283,6 +5433,13 @@ fn probe_instruction(
             ..
         }
         | Instruction::WriteShieldedCoinCell {
+            nonce,
+            color,
+            amount,
+            commitment,
+            ..
+        }
+        | Instruction::ListPushFrontCoin {
             nonce,
             color,
             amount,
@@ -6157,6 +6314,16 @@ impl PreparationCursor {
                             "inactive read result differs from the source read schema"
                         );
                         let read_type = ScalarType::parse(&read.ty)?;
+                        if read_type == ScalarType::OpaqueString {
+                            ensure!(
+                                alignment == "compress",
+                                "OpaqueString read requires Compress alignment"
+                            );
+                            let (slot, keys) = previous_index
+                                .as_ref()
+                                .ok_or_else(|| anyhow!("OpaqueString read has no Map path"))?;
+                            validate_scalar_storage_type(plan, *slot, keys.len(), &read_type)?;
+                        }
                         if let Some(length) = byte_alignment_length(alignment)? {
                             ensure!(
                                 read_type.bytes_length() == Some(length),
@@ -6165,8 +6332,11 @@ impl PreparationCursor {
                             validate_byte_read_projections(read, &read_type)?;
                         } else if alignment == "compress" {
                             ensure!(
-                                read_type == ScalarType::OpaqueBytes,
-                                "inactive opaque byte read alignment mismatch"
+                                matches!(
+                                    read_type,
+                                    ScalarType::OpaqueBytes | ScalarType::OpaqueString
+                                ),
+                                "inactive opaque read alignment mismatch"
                             );
                         } else {
                             ensure!(
@@ -6432,14 +6602,9 @@ impl PreparationCursor {
                 alignment,
             } => {
                 let value = evaluate(expression, &env)?;
-                if *storage && matches!(&value, Value::OpaqueBytes(_)) {
-                    let (slot, depth) = opaque_byte_storage_path(plan, index, instruction_guard)?;
-                    validate_scalar_storage_type(
-                        plan,
-                        slot,
-                        depth,
-                        &ScalarType::OpaqueBytes,
-                    )?;
+                if *storage && matches!(&value, Value::OpaqueBytes(_) | Value::OpaqueString(_)) {
+                    let ty = value.scalar_type();
+                    opaque_compressed_storage_path(plan, index, instruction_guard, &ty)?;
                 }
                 #[cfg(feature = "zkir-321")]
                 ensure!(
@@ -6568,7 +6733,10 @@ impl PreparationCursor {
                             }
                             if is_typed_scalar(&read_type)
                                 || read_type.bytes_length().is_some()
-                                || read_type == ScalarType::OpaqueBytes
+                                || matches!(
+                                    read_type,
+                                    ScalarType::OpaqueBytes | ScalarType::OpaqueString
+                                )
                             {
                                 validate_scalar_storage_type(plan, *slot, keys.len(), &read_type)?;
                             }
@@ -7564,6 +7732,119 @@ impl PreparationCursor {
                 has_written = true;
                 insert
             }
+            Instruction::ListPushFrontCoin {
+                slot,
+                keys,
+                schema,
+                nonce,
+                color,
+                amount,
+                commitment,
+            } => {
+                validate_shielded_coin_list(plan, *slot, keys, schema)?;
+                let coin = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce, &env)?,
+                        "qualified coin List nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color, &env)?,
+                        "qualified coin List color",
+                    )?),
+                    value: unshielded_amount(amount, &env)?,
+                };
+                let recipient = Recipient::Contract(context.address);
+                let expected_commitment = claim_hash_output(
+                    evaluate(commitment, &env)?,
+                    "qualified coin List commitment",
+                )?;
+                let coin_commitment = coin.commitment(&recipient);
+                ensure!(
+                    coin_commitment.0 == expected_commitment,
+                    "qualified coin List commitment mismatch"
+                );
+                let qualified = context.qualify(&coin).ok_or_else(|| {
+                    anyhow!(
+                        "qualified coin List commitment is absent from the current transaction"
+                    )
+                })?;
+                ensure!(
+                    context.call_context.com_indices.get(&coin_commitment)
+                        == Some(&qualified.mt_index),
+                    "qualified coin List transaction index mismatch"
+                );
+
+                if has_written {
+                    advance_native_state_prefix(
+                        prefix_context,
+                        &program,
+                        &mut materialized_prefix,
+                        mutation_boundary,
+                        cost,
+                    )?;
+                }
+                let current = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                native_list_value(
+                    current,
+                    *slot,
+                    &[],
+                    list_element_schema_at_path(plan, *slot, 0)?,
+                )?;
+                let path = vec![Key::Value(
+                    AlignedValue::from(u8::try_from(*slot)?)
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid qualified coin List slot"))?,
+                )];
+                let path_length = path.len();
+                let mut operations = Vec::from(
+                    onchain_runtime::program_fragments::List_push_front_coin!(
+                        path,
+                        false,
+                        QualifiedInfo,
+                        coin,
+                        recipient
+                    ),
+                );
+                ensure!(
+                    matches!(
+                        operations.get(4),
+                        Some(Op::Push {
+                            storage: false,
+                            value: StateValue::Cell(_),
+                        })
+                    ) && matches!(
+                        operations.get(5),
+                        Some(Op::Push {
+                            storage: true,
+                            value: StateValue::Array(node),
+                        }) if node.len() == 3
+                    ),
+                    "qualified coin List fragment initial pushes changed"
+                );
+                // The Compact fragment pushes the empty node before its index key.
+                operations.swap(4, 5);
+                let Some(Op::Dup { n }) = operations.get_mut(6) else {
+                    bail!("qualified coin List fragment has no context lookup duplicate")
+                };
+                ensure!(
+                    *n == u8::try_from(4 + 2 * path_length)?,
+                    "qualified coin List fragment duplicate depth changed"
+                );
+                // The pinned depth selects effects. The commitment lookup needs context.
+                *n = n
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow!("qualified coin List duplicate depth overflow"))?;
+                let insert = operations
+                    .pop()
+                    .ok_or_else(|| anyhow!("qualified coin List operation is empty"))?;
+                program.extend(operations);
+                has_written = true;
+                insert
+            }
             Instruction::InsertShieldedCoinSet {
                 slot,
                 nonce,
@@ -8221,6 +8502,7 @@ impl PreparationCursor {
                 | Instruction::MerkleTreeReset { .. }
                 | Instruction::MerkleTreeResetHistory { .. }
                 | Instruction::ListPushFront { .. }
+                | Instruction::ListPushFrontCoin { .. }
                 | Instruction::ListPopFront { .. }
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
@@ -8349,6 +8631,8 @@ impl PreparationCursor {
                     private_transcript.extend(bytes.iter().map(|byte| Fr::from(*byte as u64)))
                 }
                 Value::OpaqueBytes(_) => aligned_opaque_bytes(&env[&input.name])?
+                    .value_only_field_repr(&mut private_transcript),
+                Value::OpaqueString(_) => aligned_opaque_string(&env[&input.name])?
                     .value_only_field_repr(&mut private_transcript),
                 Value::JubjubScalar(value) => {
                     private_transcript.push(jubjub::scalar_native(*value)?)

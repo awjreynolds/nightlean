@@ -58,7 +58,8 @@ private def shieldedNonceDomain (change : Bool) : Expr .native :=
   let domain := shieldedNonceDomainTag change
   .fromBytes (.bytesLiteral domain.utf8ByteSize (domain.toUTF8.data.toList.map UInt8.toNat))
 
-private def upgradeShieldedNonce (value : Expr .native) : Expr (.bytes 32) :=
+/-- Keep a transient digest's low 31 bytes and zero the high byte for persistent hashing. -/
+def upgradeFromNative (value : Expr .native) : Expr (.bytes 32) :=
   .concatBytes (.sliceBytes (.toBytes32 value) 0 31) (.bytesLiteral 1 [0])
 
 private def degradeShieldedNonce (value : Expr (.bytes 32)) : Expr .native :=
@@ -66,7 +67,7 @@ private def degradeShieldedNonce (value : Expr (.bytes 32)) : Expr .native :=
 
 private def evolveShieldedNonce (change : Bool) (nonce : Expr (.bytes 32)) :
     Expr (.bytes 32) :=
-  upgradeShieldedNonce
+  upgradeFromNative
     (.transientHash [shieldedNonceDomain change, degradeShieldedNonce nonce])
 
 /-- Derive the recipient nonce for a shielded send. -/

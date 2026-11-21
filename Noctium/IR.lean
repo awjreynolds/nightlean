@@ -5,6 +5,10 @@ namespace Noctium
 
 def maxBytesLength : Nat := Types.defaultLimits.maxVectorLength
 
+/-- Variable UTF-8 strings use the native Compress codec's byte limit, not the
+fixed-vector limit used by `Bytes`. Keep this aligned with the host scalar codec. -/
+def maxOpaqueStringBytes : Nat := 1_048_576
+
 def balanceMaximum : Nat := 2 ^ 128 - 1
 
 inductive Visibility where
@@ -34,6 +38,8 @@ inductive Expr : Ty → Type where
   /-- The one Native projection used for FAB `Compress` alignment. The raw byte
   sequence stays in the host plan and is never reconstructed from this field. -/
   | opaqueBytesProjection (value : Expr .opaqueBytes) : Expr .native
+  /-- The one Native projection used for FAB `Compress` alignment of UTF-8 text. -/
+  | opaqueStringProjection (value : Expr .opaqueString) : Expr .native
   /-- A fixed-length, right-zero-padded source byte string. -/
   | bytesLiteral (length : Nat) (values : List Nat) : Expr (.bytes length)
   /-- Reverse a fixed-length source byte string without changing its type. -/
@@ -221,6 +227,7 @@ def Input.nativeIdentifiers (input : Input) : List String :=
   | .jubjubPoint => [s!"%input_{input.name}_x", s!"%input_{input.name}_y"]
   | .foreign _ => ["%input_" ++ input.name]
   | .opaqueBytes => ["%input_" ++ input.name]
+  | .opaqueString => ["%input_" ++ input.name]
   | _ => ["%input_" ++ input.name]
 
 /-- Committed byte arguments use FAB high-to-low chunks, as returns do. -/
@@ -263,6 +270,7 @@ def Expr.nativeCallFields : Expr ty → List (Expr .native) :=
   | .foreign kind => fun value =>
     (List.range kind.encodedFieldCount).map fun index => .foreignEncodedField value index
   | .opaqueBytes => fun value => [.opaqueBytesProjection value]
+  | .opaqueString => fun value => [.opaqueStringProjection value]
 
 def Output.nativeReturnFields (output : Output) : Except String (List (Expr .native)) :=
   pure (output.value.nativeCallFields)
@@ -458,7 +466,9 @@ def LedgerValueType.listElementFields (environment : Types.CompositeEnv)
     (type : Types.CompositeType) : Except String (List (String × Ty)) :=
   match type with
   | .scalar ty => pure [("value", ty)]
-  | _ => LedgerValueType.recordFields environment type
+  | _ => match LedgerValueType.recordFields environment type with
+    | .ok fields => pure fields
+    | .error _ => LedgerValueType.shieldedCoinRecordFields environment type
 
 def LedgerValueType.listPath (schema : LedgerValueType) (keys : List PathKey) :
     Except String (Types.CompositeEnv × Types.CompositeType × List (String × Ty)) := do
@@ -671,6 +681,10 @@ inductive Effect where
   current transaction. The runtime obtains its Ledger index from context. -/
   | writeShieldedCoinCell (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
+  /-- Push a transaction-booked self-recipient shielded coin to a root List.
+  The backend obtains the coin's current transaction index from ledger context. -/
+  | pushFrontCoin (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
   /-- Spend the exact coin record read from a Bytes32-keyed tree Map entry.
   The backend derives native nullifier and output-commitment claims. -/
   | spendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
@@ -840,7 +854,7 @@ def Ty.validate (caps : Capabilities) (ty : Ty) : Except String Unit := do
   | .bytes length =>
     unless length ≤ maxBytesLength do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
-  | .opaqueBytes => pure ()
+  | .opaqueBytes | .opaqueString => pure ()
   | .jubjubScalar | .jubjubPoint =>
     unless caps.jubjub do throw "target lacks qualified Jubjub support"
   | .foreign _ =>
@@ -873,6 +887,7 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
       if length == 32 then throw "Bytes32 byte index is out of range"
       else throw "byte index is out of range"
   | .opaqueBytesProjection value => value.validate caps env
+  | .opaqueStringProjection value => value.validate caps env
   | .bytesLiteral length values => do
     unless length ≤ maxBytesLength do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
@@ -1048,7 +1063,8 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     | _ => throw "inverse supports only Native and JubjubScalar"
     value.validate caps env
   | .cast target (source := source) value => do
-    if target.isBytes || source.isBytes || target.isOpaqueBytes || source.isOpaqueBytes then
+    if target.isBytes || source.isBytes || target.isOpaqueBytes || source.isOpaqueBytes ||
+        target.isOpaqueString || source.isOpaqueString then
       throw "byte strings do not support scalar casts"
     if target.isJubjub || source.isJubjub || target.isForeign || source.isForeign then
       throw "curve values do not support scalar casts"
@@ -1062,13 +1078,13 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     body.validate caps env
   | .copyValue value | .disclose _ value => value.validate caps env
   | .eq (ty := operandTy) a b => do
-    if operandTy.isBytes || operandTy.isOpaqueBytes then
+    if operandTy.isBytes || operandTy.isOpaqueBytes || operandTy.isOpaqueString then
       throw "byte string equality is not supported by this source surface"
     if !caps.equality then throw "target lacks equality"
     a.validate caps env
     b.validate caps env
   | .select c a b => do
-    if ty.isJubjub || ty.isOpaqueBytes || (ty.isBytes && !caps.bytes32Conversions) then
+    if ty.isJubjub || ty.isOpaqueBytes || ty.isOpaqueString || (ty.isBytes && !caps.bytes32Conversions) then
       throw "byte string and Jubjub selection is not supported by this source surface"
     if ty.isForeign && !caps.foreignValues then
       throw "target lacks typed foreign-curve value support"
@@ -1115,35 +1131,43 @@ private def validateLedgerMapKeyType (keyTy : Ty) : Except String Unit := do
   | .bytes length => unless length == 32 do throw "only Bytes32 is supported as a ledger map key"
   | _ => pure ()
 
-def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except String Unit
-  | .counter => pure ()
-  | .merkleTree depth _ => do
-    unless 2 ≤ depth && depth ≤ 32 do
-      throw "MerkleTree depth must be between 2 and 32"
-  | .scalar ty => ty.validate caps
-  | .map keyTy value => do
-    validateLedgerMapKeyType keyTy
-    keyTy.validate caps
-    value.validate caps
-  | .set keyTy => do
-    validateLedgerMapKeyType keyTy
-    keyTy.validate caps
-  | .shieldedCoinSet environment type => do
-    let fields ← LedgerValueType.shieldedCoinRecordFields environment type
-    for (_, ty) in fields do
-      ty.validate caps
-  | .composite environment type => do
-    let fields ← match LedgerValueType.recordFields environment type with
-      | .ok fields => pure fields
-      | .error _ => LedgerValueType.shieldedCoinRecordFields environment type
-    for (_, ty) in fields do
-      ty.validate caps
-    pure ()
-  | .list environment type => do
-    let fields ← LedgerValueType.listElementFields environment type
-    for (_, ty) in fields do
-      ty.validate caps
-    pure ()
+private def validateStateScalar (caps : Capabilities) (ty : Ty) : Except String Unit := do
+  if ty.isOpaqueString then
+    throw "OpaqueString is only supported as a root Bytes32 tree Map value"
+  ty.validate caps
+
+def LedgerValueType.validate (caps : Capabilities) (schema : LedgerValueType) : Except String Unit :=
+  match schema with
+  | .map (.bytes 32) (.scalar .opaqueString) => Ty.validate caps .opaqueString
+  | _ => nested schema
+where
+  nested : LedgerValueType → Except String Unit
+    | .counter => pure ()
+    | .merkleTree depth _ => do
+      unless 2 ≤ depth && depth ≤ 32 do
+        throw "MerkleTree depth must be between 2 and 32"
+    | .scalar ty => validateStateScalar caps ty
+    | .map keyTy value => do
+      validateLedgerMapKeyType keyTy
+      validateStateScalar caps keyTy
+      nested value
+    | .set keyTy => do
+      validateLedgerMapKeyType keyTy
+      validateStateScalar caps keyTy
+    | .shieldedCoinSet environment type => do
+      let fields ← LedgerValueType.shieldedCoinRecordFields environment type
+      for (_, ty) in fields do
+        validateStateScalar caps ty
+    | .composite environment type => do
+      let fields ← match LedgerValueType.recordFields environment type with
+        | .ok fields => pure fields
+        | .error _ => LedgerValueType.shieldedCoinRecordFields environment type
+      for (_, ty) in fields do
+        validateStateScalar caps ty
+    | .list environment type => do
+      let fields ← LedgerValueType.listElementFields environment type
+      for (_, ty) in fields do
+        validateStateScalar caps ty
 
 private def resolveTreeState (decls : List StateDecl) (state : String)
     (keys : List PathKey) : Except String LedgerValueType := do
@@ -1224,7 +1248,7 @@ private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
     .receiveShieldedToMap state .. | .insertShieldedCoinSet state .. |
     .sendShieldedFromMap state .. |
-    .writeShieldedCoinCell state .. |
+    .writeShieldedCoinCell state .. | .pushFrontCoin state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
     .emptyMapPath state .. | .setInsert state .. | .removePath state .. |
@@ -1251,6 +1275,8 @@ def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Uni
     match input.ty.validate caps with
     | .error message => throw {span := input.span, message}
     | .ok _ => pure ()
+    if input.ty == .opaqueString && input.visibility != .public then
+      throw {span := input.span, message := "OpaqueString inputs currently require public visibility"}
   if !uniqueNames (c.inputs.flatMap Input.nativeIdentifiers) then
     throw {span := c.span, message := "input names collide after native byte expansion"}
   let projections := c.inputs.flatMap Input.publicProjectionIdentifiers
@@ -1313,7 +1339,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
-      match ty.validate caps with
+      match validateStateScalar caps ty with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
   e.circuit.validate caps
@@ -1420,6 +1446,18 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           | throw s!"unknown qualified shielded coin Cell '{state}'"
         let .tree (.composite compositeEnv recordType) := declaration.kind
           | throw s!"qualified shielded coin write requires a root composite Cell '{state}'"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        selfAddress.validate caps env
+        pure []
+      | .pushFrontCoin state nonce color amount selfAddress => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown qualified shielded coin List '{state}'"
+        let .tree (.list compositeEnv recordType) := declaration.kind
+          | throw s!"qualified shielded coin push requires a root List '{state}'"
         discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
         nonce.validate caps env
         color.validate caps env
@@ -1846,7 +1884,7 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
-      match ty.validate caps with
+      match validateStateScalar caps ty with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
     if let .tree schema := decl.kind then

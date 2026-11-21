@@ -10,6 +10,7 @@ abbrev Ty.Denote : Ty → Type
   | .uint _ => Nat
   | .bytes _ => List Nat
   | .opaqueBytes => List Nat
+  | .opaqueString => String
   | .jubjubScalar => Nat
   | .jubjubPoint => Nat × Nat
   | .foreign kind => kind.Denote
@@ -20,6 +21,7 @@ inductive Value where
   | uint (maximum value : Nat)
   | bytes (length : Nat) (value : List Nat)
   | opaqueBytes (value : List Nat)
+  | opaqueString (value : String)
   | jubjubScalar (value : Nat)
   | jubjubPoint (x y : Nat)
   | foreignBase (curve : Foreign.Curve) (value : Nat)
@@ -36,6 +38,9 @@ def Value.as : (ty : Ty) → Value → Option ty.Denote
   | .opaqueBytes, .opaqueBytes values =>
     if values.length ≤ maxBytesLength && values.all (· ≤ 255) &&
         (values.isEmpty || values.getLast! != 0) then some values else none
+  | .opaqueString, .opaqueString text =>
+    if text.utf8ByteSize ≤ maxOpaqueStringBytes &&
+        (text.toUTF8.data.isEmpty || text.toUTF8.data.back! != 0) then some text else none
   | .jubjubScalar, .jubjubScalar scalar => some scalar
   | .jubjubPoint, .jubjubPoint x y => some (x, y)
   | .foreign (.base curve), .foreignBase found value =>
@@ -52,6 +57,7 @@ def Value.pack : (ty : Ty) → ty.Denote → Value
   | .uint maximum, n => .uint maximum n
   | .bytes length, values => .bytes length values
   | .opaqueBytes, values => .opaqueBytes values
+  | .opaqueString, text => .opaqueString text
   | .jubjubScalar, scalar => .jubjubScalar scalar
   | .jubjubPoint, (x, y) => .jubjubPoint x y
   | .foreign (.base curve), value => .foreignBase curve value
@@ -219,6 +225,7 @@ private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .uint _, a, b => a == b
   | .bytes _, a, b => a == b
   | .opaqueBytes, a, b => a == b
+  | .opaqueString, a, b => a == b
   | .jubjubScalar, a, b => a == b
   | .jubjubPoint, a, b => a == b
   | .foreign _, a, b => a == b
@@ -231,6 +238,8 @@ private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   | .bytes length => v.length == length && v.all (· ≤ 255)
   | .opaqueBytes => v.length ≤ maxBytesLength && v.all (· ≤ 255) &&
       (v.isEmpty || v.getLast! != 0)
+  | .opaqueString => v.utf8ByteSize ≤ maxOpaqueStringBytes &&
+      (v.toUTF8.data.isEmpty || v.toUTF8.data.back! != 0)
   | .jubjubScalar => v < Jubjub.scalarOrder
   | .jubjubPoint => v.1 < ctx.modulus && v.2 < ctx.modulus &&
       (ctx.jubjub.pointValid v).isOk
@@ -242,6 +251,7 @@ private def defaultDenote : (ty : Ty) → ty.Denote
   | .uint _ => 0
   | .bytes length => List.replicate length 0
   | .opaqueBytes => []
+  | .opaqueString => ""
   | .jubjubScalar => 0
   | .jubjubPoint => (0, 1)
   | .foreign (.base _) | .foreign (.scalar _) => 0
@@ -264,6 +274,8 @@ theorem canonical_eq (ctx : EvalContext) (ty : Ty) (value : ty.Denote) :
       | .bytes length => value.length == length && value.all (· ≤ 255)
       | .opaqueBytes => value.length ≤ maxBytesLength && value.all (· ≤ 255) &&
           (value.isEmpty || value.getLast! != 0)
+      | .opaqueString => value.utf8ByteSize ≤ maxOpaqueStringBytes &&
+          (value.toUTF8.data.isEmpty || value.toUTF8.data.back! != 0)
       | .jubjubScalar => value < Jubjub.scalarOrder
       | .jubjubPoint => value.1 < ctx.modulus && value.2 < ctx.modulus &&
           (ctx.jubjub.pointValid value).isOk
@@ -274,6 +286,7 @@ private def scalarNumber : (ty : Ty) → ty.Denote → Except String Nat
   | .bool, b => pure (if b then 1 else 0)
   | .bytes _, _ => .error "byte strings do not support scalar conversion"
   | .opaqueBytes, _ => .error "opaque byte strings do not support scalar conversion"
+  | .opaqueString, _ => .error "opaque strings do not support scalar conversion"
   | .jubjubScalar, _ => .error "Jubjub scalars do not support scalar conversion"
   | .jubjubPoint, _ => .error "Jubjub points do not support scalar conversion"
   | .foreign _, _ => .error "foreign values do not support scalar conversion"
@@ -287,6 +300,7 @@ private def scalarCast (ctx : EvalContext) (target : Ty) (number : Nat) : Except
     else .error "scalar conversion exceeds unsigned bound"
   | .bytes _ => .error "byte strings do not support scalar conversion"
   | .opaqueBytes => .error "opaque byte strings do not support scalar conversion"
+  | .opaqueString => .error "opaque strings do not support scalar conversion"
   | .jubjubScalar | .jubjubPoint => .error "Jubjub values do not support scalar conversion"
   | .foreign _ => .error "foreign values do not support scalar conversion"
 
@@ -552,6 +566,14 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     unless bytes.length ≤ maxBytesLength && bytes.all (· ≤ 255) &&
         (bytes.isEmpty || bytes.getLast! != 0) do
       throw "opaque byte input is not in canonical Compress form"
+    let projected ← ctx.opaqueBytesCompress bytes
+    if projected < ctx.modulus then pure projected
+    else throw "FAB Compress oracle returned a noncanonical field"
+  | .opaqueStringProjection value => do
+    let text ← value.eval ctx env
+    let bytes := text.toUTF8.data.toList.map UInt8.toNat
+    unless bytes.length ≤ maxOpaqueStringBytes && (bytes.isEmpty || bytes.getLast! != 0) do
+      throw "opaque string is not in canonical UTF-8 Compress form"
     let projected ← ctx.opaqueBytesCompress bytes
     if projected < ctx.modulus then pure projected
     else throw "FAB Compress oracle returned a noncanonical field"
@@ -1222,6 +1244,8 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       throw "reference evaluator cannot determine the booked shielded coin index"
     | .writeShieldedCoinCell .. =>
       throw "reference evaluator cannot determine the booked shielded coin index"
+    | .pushFrontCoin .. =>
+      throw "reference evaluator cannot determine the booked shielded coin index"
     | .spendShieldedFromMap .. =>
       throw "reference evaluator cannot determine the native shielded spend commitment"
     | .sendShieldedFromMap .. =>
@@ -1543,6 +1567,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           throw "reference evaluator cannot determine the booked shielded coin index"
         | .writeShieldedCoinCell .. =>
           throw "reference evaluator cannot determine the booked shielded coin index"
+        | .pushFrontCoin .. =>
+          throw "reference evaluator cannot determine the booked shielded coin index"
         | .spendShieldedFromMap .. =>
           throw "reference evaluator cannot determine the native shielded spend commitment"
         | .sendShieldedFromMap .. =>
@@ -1754,6 +1780,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             | .uint _ => 0
             | .bytes length => List.replicate length 0
             | .opaqueBytes => []
+            | .opaqueString => ""
             | .jubjubScalar => 0
             | .jubjubPoint => (0, 1)
             | .foreign (.base _) | .foreign (.scalar _) => 0
@@ -1766,6 +1793,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             | .uint _ => 0
             | .bytes length => List.replicate length 0
             | .opaqueBytes => []
+            | .opaqueString => ""
             | .jubjubScalar => 0
             | .jubjubPoint => (0, 1)
             | .foreign (.base _) | .foreign (.scalar _) => 0
@@ -1785,7 +1813,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .mintUnshielded .. | .incUnshieldedInputs .. | .incUnshieldedOutputs .. |
             .claimUnshieldedCoinSpend .. | .emitEvent .. |
             .insertPath .. | .writePath .. |
-            .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
+            .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. | .pushFrontCoin .. |
             .listPopFront .. | .listReset .. | .setInsert .. | .removePath .. => pure ()
         | .readPath _ destination _ ty =>
           let zero : ty.Denote := match ty with
@@ -1794,6 +1822,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             | .uint _ => 0
             | .bytes length => List.replicate length 0
             | .opaqueBytes => []
+            | .opaqueString => ""
             | .jubjubScalar => 0
             | .jubjubPoint => (0, 1)
             | .foreign (.base _) | .foreign (.scalar _) => 0

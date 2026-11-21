@@ -42,6 +42,7 @@ def origins (env : Environment) : Expr ty → Except String Origins
   | .native _ | .bool _ | .uint _ _ => pure []
   | .bytesField value _ | .bytesAt value _ => origins env value
   | .opaqueBytesProjection value => origins env value
+  | .opaqueStringProjection value => origins env value
   | .bytesLiteral _ _ => pure []
   | .reverseBytes value | .sliceBytes value .. => origins env value
   | .concatBytes left right => do
@@ -252,6 +253,11 @@ def describeEffect : Effect → LedgerEffectDescriptor
   | .writeShieldedCoinCell _ nonce color amount selfAddress =>
     let sink := "public qualified shielded coin Cell write"
     .publicEffect "writeShieldedCoinCell" .stateWrite .publicActivity sink
+      [.selector "nonce" sink nonce, .selector "color" sink color,
+       .payload "amount" sink amount, .selector "contractAddress" sink selfAddress] []
+  | .pushFrontCoin _ nonce color amount selfAddress =>
+    let sink := "public qualified shielded coin List write"
+    .publicEffect "pushFrontCoin" .stateWrite .publicActivity sink
       [.selector "nonce" sink nonce, .selector "color" sink color,
        .payload "amount" sink amount, .selector "contractAddress" sink selfAddress] []
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>

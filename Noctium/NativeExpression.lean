@@ -11,6 +11,7 @@ def typeName : Ty → String
   | .uint maximum => s!"UIntRange<{maximum + 1}>"
   | .bytes byteLength => s!"Bytes<{byteLength}>"
   | .opaqueBytes => "OpaqueBytes"
+  | .opaqueString => "OpaqueString"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
   | .foreign kind => kind.sourceName
@@ -55,6 +56,7 @@ private def nativeExpressionJson : Expr ty → Json
   | .bytesField value index => Json.mkObj [("tag", toJson ("bytesField" : String)),
       ("value", nativeExpressionJson value), ("index", toJson index)]
   | .opaqueBytesProjection value => nativeExpressionJson value
+  | .opaqueStringProjection value => nativeExpressionJson value
   | .bytesAt value index => Json.mkObj [("tag", toJson ("byteAt" : String)),
       ("value", nativeExpressionJson value), ("index", toJson index)]
   | .bytesLiteral length values => Json.mkObj [("tag", toJson ("bytesLiteral" : String)),

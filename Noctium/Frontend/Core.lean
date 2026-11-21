@@ -189,6 +189,7 @@ scoped syntax "UIntRange" num : nltype
 scoped syntax "Bytes32" : nltype
 scoped syntax "Bytes" num : nltype
 scoped syntax "OpaqueBytes" : nltype
+scoped syntax "OpaqueString" : nltype
 scoped syntax "JubjubScalar" : nltype
 scoped syntax "JubjubPoint" : nltype
 scoped syntax "Secp256k1Base" : nltype
@@ -263,6 +264,7 @@ scoped syntax "serialize(" nlexpr "," num ")" : nlexpr
 scoped syntax "deserialize(" nltype "," nlexpr ")" : nlexpr
 scoped syntax "byteAt(" nlexpr "," num ")" : nlexpr
 scoped syntax "degradeToNative(" nlexpr ")" : nlexpr
+scoped syntax "upgradeFromNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarFromNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarToNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubMulGenerator(" nlexpr ")" : nlexpr
@@ -308,10 +310,8 @@ scoped syntax (name := circuitCommand) "noctium_circuit" ident "where" nlcstmt* 
 declare_syntax_cat nlstate
 scoped syntax "cell" ident ":" nltype : nlstate
 scoped syntax "sealed" "cell" ident ":" nltype : nlstate
-scoped syntax "sealed" "cell" ident ":" "OpaqueString" : nlstate
 declare_syntax_cat nlconstructorparam
 scoped syntax ident ":" nltype : nlconstructorparam
-scoped syntax ident ":" "OpaqueString" : nlconstructorparam
 declare_syntax_cat nlconstructorinit
 scoped syntax "initialize" ident ":=" nlexpr : nlconstructorinit
 scoped syntax "initialize" ident ":=" str : nlconstructorinit
@@ -365,6 +365,7 @@ scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "receiveShieldedToMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "insertShieldedCoinSet" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "writeShieldedCoinCell" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "pushFrontCoin" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "sendShieldedFromMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "relayShieldedImmediate" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
@@ -504,6 +505,7 @@ private def readTy (stx : TSyntax `nltype) : CommandElabM Ty :=
       throwErrorAt length s!"byte string length exceeds the maximum of {Noctium.maxBytesLength}"
     pure (.bytes length.getNat)
   | `(nltype| OpaqueBytes) => pure .opaqueBytes
+  | `(nltype| OpaqueString) => pure .opaqueString
   | `(nltype| JubjubScalar) => pure .jubjubScalar
   | `(nltype| JubjubPoint) => pure .jubjubPoint
   | `(nltype| Secp256k1Base) => pure (.foreign (.base .secp256k1))
@@ -523,6 +525,7 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .uint maximum => `(Noctium.Ty.uint $(⟨Syntax.mkNumLit (toString maximum)⟩))
   | .bytes len => `(Noctium.Ty.bytes $(⟨Syntax.mkNumLit (toString len)⟩))
   | .opaqueBytes => `(Noctium.Ty.opaqueBytes)
+  | .opaqueString => `(Noctium.Ty.opaqueString)
   | .jubjubScalar => `(Noctium.Ty.jubjubScalar)
   | .jubjubPoint => `(Noctium.Ty.jubjubPoint)
   | .foreign (.base .secp256k1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256k1))
@@ -805,6 +808,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| toBytes32($value)) => hasPartialScalar value
   | `(nlexpr| byteAt($value, $_:num)) => hasPartialScalar value
   | `(nlexpr| degradeToNative($value)) => hasPartialScalar value
+  | `(nlexpr| upgradeFromNative($value)) => hasPartialScalar value
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
   | `(nlexpr| jubjubMulGenerator($value))
@@ -866,6 +870,8 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let (source, value) ← expression env value
     if target.isOpaqueBytes || source.isOpaqueBytes then
       throwErrorAt stx "OpaqueBytes do not support scalar casts"
+    if target.isOpaqueString || source.isOpaqueString then
+      throwErrorAt stx "OpaqueString does not support scalar casts"
     if target.isJubjub || source.isJubjub || target.isForeign || source.isForeign then
       throwErrorAt stx "curve values require explicit typed conversions"
     pure (target, ← `(Noctium.Expr.cast $(← tyTerm target) $value))
@@ -877,6 +883,7 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     | .uint maximum => pure (target, ← `(Noctium.Expr.uint $(natTerm maximum) 0))
     | .bytes _ => throwErrorAt stx "byte strings have no scalar default expression"
     | .opaqueBytes => throwErrorAt stx "OpaqueBytes have no generic default expression"
+    | .opaqueString => throwErrorAt stx "OpaqueString has no generic default expression"
     | .jubjubScalar | .jubjubPoint => throwErrorAt stx "Jubjub values have no generic default expression"
     | .foreign _ => throwErrorAt stx "foreign values have no generic default expression"
   | `(nlexpr| disclose($value)) =>
@@ -1116,6 +1123,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| copyValue($value)) => do
     let (ty, value) ← expression env value
     pure (ty, ← `(Noctium.Expr.copyValue $value))
+  | `(nlexpr| upgradeFromNative($value)) => do
+    let value ← expected env value .native
+    pure (.bytes 32, ← `(Noctium.Wire.upgradeFromNative $value))
   | `(nlexpr| reverseBytes($value)) => do
     let (valueTy, value) ← expression env value
     let .bytes _ := valueTy
@@ -2530,6 +2540,36 @@ private def elaborateEffect (schema : List (String × StateKind))
         terms := state.terms.push writeTerm
         spans := state.spans.push span
         guards := state.guards.push noGuard}
+    | `(nlupdate| pushFrontCoin($storage:ident, $nonce:nlexpr,
+        $color:nlexpr, $amount:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "pushFrontCoin must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "pushFrontCoin must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .«list» environment recordType := treeSchema
+        | throwErrorAt storage "pushFrontCoin requires a root qualified coin List"
+      match LedgerValueType.shieldedCoinRecordFields environment recordType with
+      | .ok _ => pure ()
+      | .error message => throwErrorAt storage message
+      let nonce ← checkedExpression state.env nonce (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let addressName := s!"noctium_coin_list_address_{state.terms.size}"
+      unless state.env.all (fun binding => binding.1 != addressName) do
+        throwErrorAt update "reserved pushFrontCoin binding collides with an existing read"
+      let addressTerm ← `(Noctium.Effect.readContractAddress $(stringTerm addressName))
+      state := {state with terms := state.terms.push addressTerm}
+      state ← bindReadName state addressName addressName (.bytes 32)
+      let selfAddress ← `(@Noctium.Expr.ref (Noctium.Ty.bytes 32) $(stringTerm addressName))
+      let pushTerm ← `(Noctium.Effect.pushFrontCoin
+        $(stringTerm storage.getId.toString) $nonce $color $amount $selfAddress)
+      let noGuard ← `(none)
+      state := {state with
+        terms := state.terms.push pushTerm
+        spans := state.spans.push span
+        guards := state.guards.push noGuard}
     | `(nlupdate| receiveShieldedToMap($storage:ident, $nonce:nlexpr,
         $color:nlexpr, $amount:nlexpr)) => do
       unless depth == 0 do
@@ -2859,13 +2899,15 @@ private def elaborateEffect (schema : List (String × StateKind))
       | some (.tree _) => do
         let treeSchema ← treeStateSchema schema storage
         let (path, selected) ← lowerTreePath state.env treeSchema [key]
-        unless selected == .scalar .opaqueBytes do
-          throwErrorAt storage "single-key tree insertion currently supports only OpaqueBytes leaves"
-        let loweredValue ← checkedExpression state.env value .opaqueBytes
+        let valueTy ← match selected with
+          | .scalar .opaqueBytes => pure .opaqueBytes
+          | .scalar .opaqueString => pure .opaqueString
+          | _ => throwErrorAt storage "single-key tree insertion supports only OpaqueBytes or OpaqueString leaves"
+        let loweredValue ← checkedExpression state.env value valueTy
         let keys ← pathKeysTerm path
         `(Noctium.Effect.insertPath $(stringTerm storage.getId.toString) $keys
-          Noctium.Ty.opaqueBytes $loweredValue)
-      | _ => throwErrorAt storage "insert requires a declared state map or OpaqueBytes tree"
+          $(← tyTerm valueTy) $loweredValue)
+      | _ => throwErrorAt storage "insert requires a declared state map or opaque-value tree"
     state := {state with terms := state.terms.push term}
   | `(nleffect| insert $storage:ident [$owner:nlexpr] := emptyMap) => do
     let schema ← treeStateSchema schema storage
@@ -3126,14 +3168,14 @@ private def elaborateConstructor (source : TSyntax `nlstate)
   let mut parameterNames : List String := []
   for parameter in parameters.getElems.toList do
     let (name, parameterType, typeTerm) ← match parameter with
-      | `(nlconstructorparam| $id:ident : OpaqueString) => do
-        let name := id.getId.toString
-        pure (name, ConstructorType.opaqueString, ← `(Noctium.ConstructorType.opaqueString))
       | `(nlconstructorparam| $id:ident : $sourceTy:nltype) => do
         let name := id.getId.toString
         let ty ← readTy sourceTy
-        pure (name, ConstructorType.scalar ty,
-          ← `(Noctium.ConstructorType.scalar $(← tyTerm ty)))
+        if ty == .opaqueString then
+          pure (name, ConstructorType.opaqueString, ← `(Noctium.ConstructorType.opaqueString))
+        else
+          pure (name, ConstructorType.scalar ty,
+            ← `(Noctium.ConstructorType.scalar $(← tyTerm ty)))
       | _ => throwErrorAt parameter "unsupported constructor parameter"
     if parameterNames.contains name then throwErrorAt parameter s!"duplicate constructor parameter '{name}'"
     parameterNames := name :: parameterNames
@@ -3290,11 +3332,12 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
           let valueSchema := LedgerValueType.composite environment compositeType
           let valueTerm ← `(Noctium.LedgerValueType.composite $environmentTerm $compositeTypeTerm)
           pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
-        | `(nlstate| sealed cell $id:ident : OpaqueString) =>
-          pure (id, StateKind.opaqueString, ← `(Noctium.StateKind.opaqueString))
         | `(nlstate| sealed cell $id:ident : $ty:nltype) => do
           let t ← readTy ty
-          pure (id, StateKind.cell t, ← `(Noctium.StateKind.cell $(← tyTerm t)))
+          if t == .opaqueString then
+            pure (id, StateKind.opaqueString, ← `(Noctium.StateKind.opaqueString))
+          else
+            pure (id, StateKind.cell t, ← `(Noctium.StateKind.cell $(← tyTerm t)))
         | `(nlstate| cell $id:ident : $ty:nltype) => do
           let t ← readTy ty
           pure (id, StateKind.cell t, ← `(Noctium.StateKind.cell $(← tyTerm t)))
@@ -3356,8 +3399,8 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
         | `(nlstate| tree $id:ident : $key:nltype => $value:nltype) => do
           let keyTy ← readTy key
           let valueTy ← readTy value
-          unless keyTy == .bytes 32 && valueTy == .opaqueBytes do
-            throwErrorAt state "single-key scalar trees currently support only Bytes32 => OpaqueBytes"
+          unless keyTy == .bytes 32 && (valueTy == .opaqueBytes || valueTy == .opaqueString) do
+            throwErrorAt state "single-key scalar trees currently support only Bytes32 => OpaqueBytes or OpaqueString"
           let valueSchema := LedgerValueType.map keyTy (.scalar valueTy)
           let valueTerm ← `(Noctium.LedgerValueType.map $(← tyTerm keyTy)
             (Noctium.LedgerValueType.scalar $(← tyTerm valueTy)))
@@ -3444,13 +3487,13 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
         | _ => throwErrorAt state "unsupported Noctium state declaration"
       if schema.any (fun p => p.1 == id.getId.toString) then throwErrorAt id "duplicate Noctium state"
       schema := schema ++ [(id.getId.toString, kind)]
-      concreteSchema := concreteSchema ++ [{name := id.getId.toString, kind := kind, «sealed» := state.raw[0].getAtomVal == "sealed"}]
-      if state.raw[0].getAtomVal == "sealed" then
-        stateTerms := stateTerms.push (← `(Noctium.StateDecl.mk $(stringTerm id.getId.toString)
-          $term Bool.true $(← spanTerm state)))
-      else
-        stateTerms := stateTerms.push (← `(Noctium.StateDecl.mk $(stringTerm id.getId.toString)
-          $term Bool.false $(← spanTerm state)))
+      let isSealed : _root_.Bool := match state with
+        | `(nlstate| sealed cell $_:ident : $_:nltype) => Bool.true
+        | _ => Bool.false
+      concreteSchema := concreteSchema ++ [{name := id.getId.toString, kind := kind, «sealed» := isSealed}]
+      let sealedTerm ← if isSealed then `(Bool.true) else `(Bool.false)
+      stateTerms := stateTerms.push (← `(Noctium.StateDecl.mk $(stringTerm id.getId.toString)
+        $term $sealedTerm $(← spanTerm state)))
     let constructorTerm ← match constructorSyntax? with
       | none => `(none)
       | some ctor => elaborateConstructor ctor schema
