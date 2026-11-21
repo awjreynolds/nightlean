@@ -5,8 +5,8 @@ open Helpers
 universe u
 
 /-- All term positions in source order. A branch contributes its condition and
-both source arms in lexical order; this is an inventory, not a claim that both
-arms execute. The compiler preserves the branch and its lazy host schedule. -/
+both source arms. A loop contributes its body once. This is a lexical inventory.
+The actual host schedule depends on execution. -/
 def expressionSchedule : List Statement → List Term
   | [] => []
   | .bind _ _ value :: rest => value :: expressionSchedule rest
@@ -19,6 +19,8 @@ def expressionSchedule : List Statement → List Term
   | .readMap _ _ _ _ key :: rest | .readMember _ _ _ _ key :: rest =>
       key :: expressionSchedule rest
   | .writeMap _ _ _ key value :: rest => key :: value :: expressionSchedule rest
+  | .forRange _ _ _ body :: rest => expressionSchedule body ++ expressionSchedule rest
+  | .emitEvent _ payload :: rest => payload :: expressionSchedule rest
   | .branch condition yes no :: rest =>
       condition :: expressionSchedule yes ++ expressionSchedule no ++ expressionSchedule rest
 termination_by body => sizeOf body
@@ -28,11 +30,13 @@ preserves call sites; runtime invocation counts still depend on branch choices. 
 def witnessOccurrences : Term → List (String × String)
   | .witnessCall site name arguments =>
       arguments.flatMap witnessOccurrences ++ [(site, name)]
-  | .binary _ left right | .eq left right | .poseidon2 _ left right
+  | .binary _ left right | .boolAnd left right | .boolOr left right | .boolXor left right
+  | .eq left right | .poseidon2 _ left right
   | .andThen left right | .orElse left right | .index left right =>
       witnessOccurrences left ++ witnessOccurrences right
-  | .cast _ value | .disclose _ value | .effect _ _ value
-  | .at _ value | .project value _ | .bytesAt value _ => witnessOccurrences value
+  | .curve _ arguments | .bytes _ arguments => arguments.flatMap witnessOccurrences
+  | .cast _ value | .disclose _ value | .effect _ _ value | .bytesAt value _
+  | .at _ value | .project value _ => witnessOccurrences value
   | .select condition yes no | .ite condition yes no =>
       witnessOccurrences condition ++ witnessOccurrences yes ++ witnessOccurrences no
   | .call _ arguments | .composite _ arguments => arguments.flatMap witnessOccurrences
@@ -45,6 +49,7 @@ def scheduledWitnessOccurrences (body : List Statement) : List (String × String
 def statementWeight : List Statement → Nat
   | [] => 0
   | .branch _ yes no :: rest => 1 + statementWeight yes + statementWeight no + statementWeight rest
+  | .forRange _ _ _ body :: rest => 1 + statementWeight body + statementWeight rest
   | _ :: rest => 1 + statementWeight rest
 termination_by body => sizeOf body
 
@@ -88,6 +93,15 @@ theorem eraseStages_preserves_expressionSchedule (body : List Statement) :
           have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
           simpa [eraseStages, expressionSchedule] using hr
         | writeMap state keyTy valueTy key value =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [eraseStages, expressionSchedule] using hr
+        | forRange index start stop loopBody =>
+          have hb := ih (statementWeight loopBody)
+            (by rw [← sizeEq]; simp [statementWeight]; omega) loopBody rfl
+          have hr := ih (statementWeight rest)
+            (by rw [← sizeEq]; simp [statementWeight]; omega) rest rfl
+          simp [eraseStages, expressionSchedule, hb, hr]
+        | emitEvent kind payload =>
           have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
           simpa [eraseStages, expressionSchedule] using hr
         | branch condition yes no =>
@@ -168,6 +182,8 @@ def stageObservations : List Statement → List Observation
       .evaluate key :: stageObservations rest
   | .writeMap _ _ _ key value :: rest =>
       .evaluate key :: .evaluate value :: stageObservations rest
+  | .forRange _ _ _ body :: rest => stageObservations body ++ stageObservations rest
+  | .emitEvent _ payload :: rest => .evaluate payload :: stageObservations rest
   | .branch condition yes no :: rest =>
       .evaluate condition :: stageObservations yes ++ stageObservations no ++ stageObservations rest
 termination_by body => sizeOf body
@@ -221,6 +237,16 @@ theorem stageObservations_preserve_evaluations (body : List Statement) :
         | writeMap state keyTy valueTy key value =>
           have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
           simpa [stageObservations, evaluatedObservations, expressionSchedule] using hr
+        | forRange index start stop loopBody =>
+          have hb := ih (statementWeight loopBody)
+            (by rw [← sizeEq]; simp [statementWeight]; omega) loopBody rfl
+          have hr := ih (statementWeight rest)
+            (by rw [← sizeEq]; simp [statementWeight]; omega) rest rfl
+          simp only [stageObservations, expressionSchedule]
+          rw [evaluatedObservations_append, hb, hr]
+        | emitEvent kind payload =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [stageObservations, evaluatedObservations, expressionSchedule] using hr
         | branch condition yes no =>
           have hy := ih (statementWeight yes) (by rw [← sizeEq]; simp [statementWeight]; omega) yes rfl
           have hn := ih (statementWeight no) (by rw [← sizeEq]; simp [statementWeight]; omega) no rfl
@@ -255,6 +281,7 @@ def sourceStageEvents : List Statement → List Observation
       .privateWrite capability key type value :: sourceStageEvents rest
   | .branch _ yes no :: rest =>
       sourceStageEvents yes ++ sourceStageEvents no ++ sourceStageEvents rest
+  | .forRange _ _ _ body :: rest => sourceStageEvents body ++ sourceStageEvents rest
   | _ :: rest => sourceStageEvents rest
 termination_by body => sizeOf body
 
@@ -298,6 +325,16 @@ theorem stageObservations_preserve_exact_write_frame (body : List Statement) :
         | writeMap state keyTy valueTy key value =>
             have hr := ih (statementWeight rest) (by rw [← weightEq]; simp [statementWeight]) rest rfl
             simpa [stageObservations, privateWrites, sourceStageEvents] using hr
+        | forRange index start stop loopBody =>
+            have hb := ih (statementWeight loopBody)
+              (by rw [← weightEq]; simp [statementWeight]; omega) loopBody rfl
+            have hr := ih (statementWeight rest)
+              (by rw [← weightEq]; simp [statementWeight]; omega) rest rfl
+            simp only [stageObservations, sourceStageEvents]
+            rw [privateWrites_append, hb, hr]
+        | emitEvent kind payload =>
+            have hr := ih (statementWeight rest) (by rw [← weightEq]; simp [statementWeight]) rest rfl
+            simpa [stageObservations, privateWrites, sourceStageEvents] using hr
         | branch condition yes no =>
             have hy := ih (statementWeight yes) (by rw [← weightEq]; simp [statementWeight]; omega) yes rfl
             have hn := ih (statementWeight no) (by rw [← weightEq]; simp [statementWeight]; omega) no rfl
@@ -322,8 +359,9 @@ theorem circuitErasure_has_no_private_writes (body : List Statement) :
   simp [privateWrites, circuitObservations]
 
 /- The bounded execution model below accepts this AST fragment only. Control
-branches, short-circuit terms, old untyped witnesses, and effect fixtures need
-separate host semantics and never enter the native replay gate. -/
+branches, loops, events, new scalar/curve/byte terms, short-circuit terms, old
+untyped witnesses, and effect fixtures need separate host semantics and never
+enter the native replay gate. -/
 inductive EligibilityNode where
   | term (value : Term)
   | statement (value : Statement)
@@ -335,7 +373,7 @@ private def eligibilityChildren : EligibilityNode → Option (List EligibilityNo
     | .readCell .. | .writeCell .. | .readMap .. | .readMember .. | .writeMap .. => none
     | .return none => some []
     | .return (some value) => some [.term value]
-    | .branch .. => none
+    | .branch .. | .forRange .. | .emitEvent .. => none
   | .term term => match term with
     | .unit | .native _ | .bool _ | .uint _ _ | .ref _ => some []
     | .binary _ left right | .eq left right | .poseidon2 _ left right | .index left right =>
@@ -344,7 +382,9 @@ private def eligibilityChildren : EligibilityNode → Option (List EligibilityNo
     | .select condition yes no => some [.term condition, .term yes, .term no]
     | .witnessCall _ _ arguments | .call _ arguments | .composite _ arguments =>
         some (arguments.map EligibilityNode.term)
-    | .ite .. | .andThen .. | .orElse .. | .witness .. | .effect .. | .bytesAt .. => none
+    | .boolAnd .. | .boolOr .. | .boolXor .. | .curve .. | .bytes ..
+    | .bytes32Literal .. | .foreignConstant .. | .ite .. | .andThen ..
+    | .orElse .. | .witness .. | .effect .. | .bytesAt .. => none
 
 def nativeEligibleNodes : Nat → List EligibilityNode → Bool
   | 0, [] => true
@@ -519,6 +559,14 @@ private def runtimeTy : RuntimeValue → Option Ty
   | .scalar (.native _) => some .native
   | .scalar (.bool _) => some .bool
   | .scalar (.uint maximum _) => some (.uint maximum)
+  | .scalar (.bytes length _) => some (.bytes length)
+  | .scalar (.opaqueBytes _) => some .opaqueBytes
+  | .scalar (.opaqueString _) => some .opaqueString
+  | .scalar (.jubjubScalar _) => some .jubjubScalar
+  | .scalar (.jubjubPoint _ _) => some .jubjubPoint
+  | .scalar (.foreignBase curve _) => some (.foreign (.base curve))
+  | .scalar (.foreignScalar curve _) => some (.foreign (.scalar curve))
+  | .scalar (.foreignPoint curve _) => some (.foreign (.point curve))
   | .aggregate .. => none
 
 private def resultTypeOfRuntime : RuntimeValue → ResultType
@@ -526,6 +574,14 @@ private def resultTypeOfRuntime : RuntimeValue → ResultType
   | .scalar (.native _) => .scalar .native
   | .scalar (.bool _) => .scalar .bool
   | .scalar (.uint maximum _) => .scalar (.uint maximum)
+  | .scalar (.bytes length _) => .scalar (.bytes length)
+  | .scalar (.opaqueBytes _) => .scalar .opaqueBytes
+  | .scalar (.opaqueString _) => .scalar .opaqueString
+  | .scalar (.jubjubScalar _) => .scalar .jubjubScalar
+  | .scalar (.jubjubPoint _ _) => .scalar .jubjubPoint
+  | .scalar (.foreignBase curve _) => .scalar (.foreign (.base curve))
+  | .scalar (.foreignScalar curve _) => .scalar (.foreign (.scalar curve))
+  | .scalar (.foreignPoint curve _) => .scalar (.foreign (.point curve))
   | .aggregate type _ _ => .composite type
 
 private def canonicalScalar (context : EvalContext) (value : Noctium.Value) : Bool :=
@@ -534,6 +590,8 @@ private def canonicalScalar (context : EvalContext) (value : Noctium.Value) : Bo
   | .bool _ => true
   | .uint maximum number =>
       maximum ≤ ScalarPolicy.maxUint && number ≤ maximum && number < context.modulus
+  | .bytes .. | .opaqueBytes .. | .opaqueString .. | .jubjubScalar .. | .jubjubPoint ..
+  | .foreignBase .. | .foreignScalar .. | .foreignPoint .. => false
 
 private def runtimeMatches (program : Program) (context : EvalContext)
     (expected : ResultType) (value : RuntimeValue) : Bool := Id.run do
@@ -555,22 +613,27 @@ private def runtimeScalar (value : RuntimeValue) : Except String Noctium.Value :
   | .scalar scalar => pure scalar
   | _ => .error "native witness execution expected a scalar"
 
-private def scalarPolicyValue (value : Noctium.Value) : ScalarPolicy.Value :=
+private def scalarPolicyValue (value : Noctium.Value) : Except String ScalarPolicy.Value :=
   match value with
-  | .native number => ⟨.native, number⟩
-  | .bool boolean => ⟨.bool, if boolean then 1 else 0⟩
-  | .uint maximum number => ⟨.uint maximum, number⟩
+  | .native number => pure ⟨.native, number⟩
+  | .bool boolean => pure ⟨.bool, if boolean then 1 else 0⟩
+  | .uint maximum number => pure ⟨.uint maximum, number⟩
+  | .bytes .. | .opaqueBytes .. | .opaqueString .. | .jubjubScalar .. | .jubjubPoint ..
+  | .foreignBase .. | .foreignScalar .. | .foreignPoint .. =>
+      .error "native witness arithmetic requires a Native, Bool or UInt scalar"
 
 private def runtimeScalarOfPolicy (value : ScalarPolicy.Value) : RuntimeValue :=
   match value.kind with
   | .native => .scalar (.native value.number)
   | .bool => .scalar (.bool (value.number != 0))
   | .uint maximum => .scalar (.uint maximum value.number)
+  | .bytes _ | .opaqueBytes | .jubjubScalar | .jubjubPoint | .foreign _ => .unit
 
 private def castRuntime (context : EvalContext) (target : Ty) (value : RuntimeValue) :
     Except String RuntimeValue := do
   let scalar ← runtimeScalar value
-  let result ← ScalarPolicy.cast (scalarPolicyValue scalar) target.scalarKind
+  let policy ← scalarPolicyValue scalar
+  let result ← ScalarPolicy.cast policy target.scalarKind
   let result := runtimeScalarOfPolicy result
   let .scalar resultValue := result | throw "native witness execution expected a scalar"
   unless canonicalScalar context resultValue do throw "noncanonical scalar conversion"
@@ -675,9 +738,12 @@ private theorem sourceProviderReply_projection (program : Program) (context : Ev
   | ok value =>
       simp [sourceProviderReply, reply, providerReplyState_observable]
 
-private def scalarNumber : Noctium.Value → Nat
-  | .native number | .uint _ number => number
-  | .bool value => if value then 1 else 0
+private def scalarNumber : Noctium.Value → Except String Nat
+  | .native number | .uint _ number => pure number
+  | .bool value => pure (if value then 1 else 0)
+  | .bytes .. | .opaqueBytes .. | .opaqueString .. | .jubjubScalar .. | .jubjubPoint ..
+  | .foreignBase .. | .foreignScalar .. | .foreignPoint .. =>
+      .error "native witness index or composite leaf is not numeric"
 
 private def commonScalarType (left right : Ty) : Except String Ty := do
   if Helpers.subtype (.scalar left) (.scalar right) then pure right
@@ -1214,8 +1280,9 @@ mutual
           let some right := values[1]? | fail "binary right operand missing"
           let left ← liftResult (runtimeScalar left)
           let right ← liftResult (runtimeScalar right)
-          let result ← liftResult (ScalarPolicy.evaluate operation
-            (scalarPolicyValue left) (scalarPolicyValue right))
+          let left ← liftResult (scalarPolicyValue left)
+          let right ← liftResult (scalarPolicyValue right)
+          let result ← liftResult (ScalarPolicy.evaluate operation left right)
           let value := runtimeScalarOfPolicy result
           match value with
           | .scalar scalar =>
@@ -1288,7 +1355,8 @@ mutual
           for (expectedTy, value) in expected.zip values do
             let value ← liftResult (castRuntime context expectedTy value)
             let value ← liftResult (runtimeScalar value)
-            numbers := numbers ++ [scalarNumber value]
+            let number ← liftResult (scalarNumber value)
+            numbers := numbers ++ [number]
           liftResult (makeAggregateRuntime program type numbers)
       | .project value projection => do
           let value ← evalTerm fuel program context grants provider scope environment value
@@ -1304,14 +1372,16 @@ mutual
           let .aggregate type _ leaves := parent | fail "dynamic index base is not an aggregate"
           let .vector length _ := type | fail "dynamic index base is not a fixed vector"
           let index ← liftResult (runtimeScalar selectedIndex)
-          let position := scalarNumber index
+          let position ← liftResult (scalarNumber index)
           if position >= length then fail "aggregate vector index out of bounds"
           else
             let (compiled, _) ← liftResult (aggregateLeaves program type parent)
             let typed ← liftResult ((Types.unflattenChecked compiled leaves).mapError id)
             let selected ← liftResult ((Types.project compiled typed (.vectorIndex position)).mapError id)
             pure (fromSomeTypedValue selected)
-      | .witness _ _ | .ite .. | .andThen .. | .orElse .. | .effect .. | .bytesAt .. =>
+      | .boolAnd .. | .boolOr .. | .boolXor .. | .curve .. | .bytes ..
+      | .bytes32Literal .. | .foreignConstant .. | .witness _ _ | .ite ..
+      | .andThen .. | .orElse .. | .effect .. | .bytesAt .. =>
           fail "source term is outside the bounded native replay semantics"
   termination_by fuel _ _ _ _ _ _ _ => fuel
   decreasing_by all_goals omega
@@ -1363,7 +1433,10 @@ mutual
               fail "ledger state statements are outside the bounded native replay semantics"
           | .readMap .. | .readMember .. | .writeMap .. =>
               fail "ledger state statements are outside the bounded native replay semantics"
-          | .branch .. => fail "structured control is outside the bounded native replay semantics"
+          | .branch .. | .forRange .. =>
+              fail "structured control is outside the bounded native replay semantics"
+          | .emitEvent .. =>
+              fail "event statements are outside the bounded native replay semantics"
   termination_by fuel _ _ _ _ _ _ _ => fuel
   decreasing_by all_goals omega
 end
@@ -1569,8 +1642,12 @@ private theorem recordSafe_poseidonTail (context : EvalContext) (domain : Nat)
                           exact recordSafe_fail _
               | bool _ => exact recordSafe_fail _
               | uint _ _ => exact recordSafe_fail _
+              | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+              | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact recordSafe_fail _
           | bool _ => exact recordSafe_fail _
           | uint _ _ => exact recordSafe_fail _
+          | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+          | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact recordSafe_fail _
 
 private theorem statePreserving_listForIn {α β : Type}
     (values : List α) (initial : β)
@@ -1880,6 +1957,8 @@ private theorem body_recordSafe_step (fuel : Nat)
             | false => exact recordSafe_fail _
           | native _ => exact recordSafe_fail _
           | uint _ _ => exact recordSafe_fail _
+          | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+          | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact recordSafe_fail _
     | «return» term =>
       cases term with
       | none => simp only [evalBody]; exact recordSafe_liftResult _
@@ -1900,6 +1979,12 @@ private theorem body_recordSafe_step (fuel : Nat)
           exact recordSafe_getStageContinue grants capability key value _
             (bodySafe program context grants provider declaration environment rest)
     | branch condition yes no =>
+      simp only [evalBody]
+      exact recordSafe_fail _
+    | forRange index start stop loopBody =>
+      simp only [evalBody]
+      exact recordSafe_fail _
+    | emitEvent kind payload =>
       simp only [evalBody]
       exact recordSafe_fail _
     | readCell state destination ty =>
@@ -2033,6 +2118,12 @@ private theorem evaluator_recordSafe (fuel : Nat) :
                           state_preserving
                       | native _ => exact recordSafe_fail _
                       | uint _ _ => exact recordSafe_fail _
+                      | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+                      | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact recordSafe_fail _
+        | boolAnd _ _ | boolOr _ _ | boolXor _ _ =>
+            simp only [evalTerm]; exact recordSafe_fail _
+        | curve _ _ | bytes _ _ | bytes32Literal _ | foreignConstant _ _ | bytesAt _ _ =>
+            simp only [evalTerm]; exact recordSafe_fail _
         | ite _ _ _ => simp only [evalTerm]; exact recordSafe_fail _
         | andThen _ _ => simp only [evalTerm]; exact recordSafe_fail _
         | orElse _ _ => simp only [evalTerm]; exact recordSafe_fail _
@@ -2510,6 +2601,7 @@ namespace Noctium.Witness.Semantics
 
 open Helpers
 
+deriving instance ReflBEq for Foreign.Curve, Foreign.Kind, Foreign.Point
 deriving instance ReflBEq for Ty, Noctium.Value, Helpers.DeclarationId, Helpers.ResultType, RuntimeValue
 
 private theorem sameRuntimeValues_refl (arguments : List RuntimeValue) :
@@ -2978,8 +3070,9 @@ private def binaryPost (context : EvalContext) (operation : ScalarPolicy.Binary)
   let some right := values[1]? | fail "binary right operand missing"
   let left ← liftResult (runtimeScalar left)
   let right ← liftResult (runtimeScalar right)
-  let result ← liftResult (ScalarPolicy.evaluate operation
-    (scalarPolicyValue left) (scalarPolicyValue right))
+  let left ← liftResult (scalarPolicyValue left)
+  let right ← liftResult (scalarPolicyValue right)
+  let result ← liftResult (ScalarPolicy.evaluate operation left right)
   let value := runtimeScalarOfPolicy result
   match value with
   | .scalar scalar =>
@@ -3345,8 +3438,12 @@ private theorem poseidonPost_frame (context : EvalContext) (domain : Nat)
                   | native rightNumber => exact poseidonFinish_frame context domain leftNumber rightNumber
                   | bool _ => exact statePreserving_fail _
                   | uint _ _ => exact statePreserving_fail _
+                  | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+                  | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact statePreserving_fail _
               | bool _ => exact statePreserving_fail _
               | uint _ _ => exact statePreserving_fail _
+              | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+              | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact statePreserving_fail _
 
 private theorem poseidonPost_resultStable (context : EvalContext) (domain : Nat)
     (values : List RuntimeValue) : ResultStable (poseidonPost context domain values) := by
@@ -3377,8 +3474,12 @@ private theorem poseidonPost_resultStable (context : EvalContext) (domain : Nat)
                   | native rightNumber => exact poseidonFinish_resultStable context domain leftNumber rightNumber
                   | bool _ => exact resultStable_fail _
                   | uint _ _ => exact resultStable_fail _
+                  | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+                  | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact resultStable_fail _
               | bool _ => exact resultStable_fail _
               | uint _ _ => exact resultStable_fail _
+              | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+              | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact resultStable_fail _
 
 private theorem poseidonPost_successSim (context : EvalContext) (domain : Nat)
     (values : List RuntimeValue) : SuccessSim (poseidonPost context domain values) (poseidonPost context domain values) := by
@@ -3477,7 +3578,7 @@ private def indexPost (program : Program) (values : List RuntimeValue) : Machine
   let .aggregate type _ leaves := parent | fail "dynamic index base is not an aggregate"
   let .vector length _ := type | fail "dynamic index base is not a fixed vector"
   let index ← liftResult (runtimeScalar selectedIndex)
-  let position := scalarNumber index
+  let position ← liftResult (scalarNumber index)
   if position >= length then fail "aggregate vector index out of bounds"
   else
     let (compiled, _) ← liftResult (aggregateLeaves program type parent)
@@ -3630,6 +3731,10 @@ private theorem evalTerm_successSim_step (fuel : Nat) (program : Program)
   | poseidon2 domain left right =>
       exact evalTerm_poseidon_successSim_step fuel program context grants sourceProvider replayProvider scope environment
         domain left right (termsSafe scope environment) (termsSim scope environment)
+  | boolAnd _ _ | boolOr _ _ | boolXor _ _ | curve _ _ | bytes _ _ | bytes32Literal _
+  | foreignConstant _ _ | bytesAt _ _ =>
+      simp only [evalTerm]
+      exact successSim_fail _
   | call name arguments => exact callSim scope environment name arguments
   | composite type leaves => exact compositeSim scope environment type leaves
   | project value projection =>
@@ -3823,6 +3928,8 @@ private theorem evalBody_successSim_step (fuel : Nat) (program : Program)
                              · exact bodySafe declaration environment rest
           | native _ => exact recordSafe_fail _
           | uint _ _ => exact recordSafe_fail _
+          | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+          | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact recordSafe_fail _
       · exact termSim declaration.id.scope environment term
       · intro value
         apply successSim_bind
@@ -3834,6 +3941,8 @@ private theorem evalBody_successSim_step (fuel : Nat) (program : Program)
                              · exact bodySafe declaration environment rest
           | native _ => exact recordSafe_fail _
           | uint _ _ => exact recordSafe_fail _
+          | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+          | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact recordSafe_fail _
         · exact successSim_liftResult _
         · intro scalar
           cases scalar with
@@ -3842,6 +3951,8 @@ private theorem evalBody_successSim_step (fuel : Nat) (program : Program)
                              · exact bodySim declaration environment rest
           | native _ => exact successSim_fail _
           | uint _ _ => exact successSim_fail _
+          | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+          | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact successSim_fail _
     | «return» term =>
       cases term with
       | none =>
@@ -3871,6 +3982,12 @@ private theorem evalBody_successSim_step (fuel : Nat) (program : Program)
         exact successSim_sourceStage grants capability key castValue _ _
           (bodySim declaration environment rest)
     | branch condition yes no =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact successSim_fail _
+    | forRange index start stop loopBody =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact successSim_fail _
+    | emitEvent kind payload =>
       simp only [Noctium.Witness.eraseStages, evalBody]
       exact successSim_fail _
     | readCell state destination ty =>
@@ -3918,7 +4035,8 @@ private def compositePost (program : Program) (context : EvalContext)
   for (expectedTy, value) in expected.zip values do
     let value ← liftResult (castRuntime context expectedTy value)
     let value ← liftResult (runtimeScalar value)
-    numbers := numbers ++ [scalarNumber value]
+    let number ← liftResult (scalarNumber value)
+    numbers := numbers ++ [number]
   liftResult (makeAggregateRuntime program type numbers)
 
 private theorem compositePost_frame (program : Program) (context : EvalContext)
@@ -4574,6 +4692,8 @@ private theorem evalBody_failureSim_step (fuel : Nat) (program : Program)
                              · exact bodySafe declaration environment rest
           | native _ => exact recordSafe_fail _
           | uint _ _ => exact recordSafe_fail _
+          | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+          | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact recordSafe_fail _
       · exact termFailure declaration.id.scope environment term
       · exact termSuccess declaration.id.scope environment term
       · intro value
@@ -4586,6 +4706,8 @@ private theorem evalBody_failureSim_step (fuel : Nat) (program : Program)
                              · exact bodySafe declaration environment rest
           | native _ => exact recordSafe_fail _
           | uint _ _ => exact recordSafe_fail _
+          | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+          | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact recordSafe_fail _
         · exact failureSim_liftResult (runtimeScalar value)
         · exact successSim_liftResult (runtimeScalar value)
         · intro scalar
@@ -4595,6 +4717,8 @@ private theorem evalBody_failureSim_step (fuel : Nat) (program : Program)
                              · exact bodyFailure declaration environment rest
           | native _ => exact failureSim_fail _
           | uint _ _ => exact failureSim_fail _
+          | bytes _ _ | opaqueBytes _ | opaqueString _ | jubjubScalar _ | jubjubPoint _ _
+          | foreignBase _ _ | foreignScalar _ _ | foreignPoint _ _ => exact failureSim_fail _
     | «return» term =>
       cases term with
       | none =>
@@ -4704,6 +4828,12 @@ private theorem evalBody_failureSim_step (fuel : Nat) (program : Program)
             simpa [replayShape, replayTermRun, replayContinuationRun,
               machineMMonad, Monad.toBind, Bind.bind]
     | branch condition yes no =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact failureSim_fail _
+    | forRange index start stop loopBody =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact failureSim_fail _
+    | emitEvent kind payload =>
       simp only [Noctium.Witness.eraseStages, evalBody]
       exact failureSim_fail _
     | readCell state destination ty =>
@@ -5409,6 +5539,10 @@ private theorem evalTerm_failureSim_step (fuel : Nat) (program : Program)
         exact failureSim_of_frames (indexPost program values) (indexPost program values)
           (indexPost_frame program values) (indexPost_frame program values) stable
   | effect kind label result =>
+      simp only [evalTerm]
+      exact failureSim_fail "source term is outside the bounded native replay semantics"
+  | boolAnd _ _ | boolOr _ _ | boolXor _ _ | curve _ _ | bytes _ _ | bytes32Literal _
+  | foreignConstant _ _ | bytesAt _ _ =>
       simp only [evalTerm]
       exact failureSim_fail "source term is outside the bounded native replay semantics"
 

@@ -59,7 +59,7 @@ The false calls skip branch-local UInt narrowing despite amount 8 exceeding the 
 
 State-only cases retain their consumed circuit and ledger plan. Witness cases also retain their binding and control plan. No new keys, proofs, deployments or K benchmark accompany this source extension. Native checker and local state assertions are integration evidence, not complete language equivalence or generic compiler preservation.
 
-The optional historical `Noctium.Witness.Semantics` model still has unmatched older Boolean, byte and curve families. Cell/map statements are explicitly outside its bounded replay model. Its repair and broader preservation qualification remain under [semantic preservation](https://github.com/awjreynolds/noctium/issues/21).
+The Lean checks build `Noctium.Witness.Semantics` and exercise its bounded recording and replay model. Cell and Map statements, structured control, and newer Boolean, byte and curve forms stay outside replay admission. Broader preservation qualification remains under [semantic preservation](https://github.com/awjreynolds/noctium/issues/21).
 
 The current compiler build, source export and focused native map case pass. The native case runs in 0.02 seconds after compilation. The shared native build directory occupies 1.1 GiB with the POC build settings.
 

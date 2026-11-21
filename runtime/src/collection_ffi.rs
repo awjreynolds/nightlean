@@ -3,7 +3,10 @@ use crate::{
     Db, ScalarType, StateDecl, Value,
     aggregates::Schema,
     artifacts,
-    merkle::{MerkleTreeSnapshot, merkle_curve_leaf_hash, merkle_fab_leaf_hash, merkle_tree_at},
+    merkle::{
+        MerkleTreeSnapshot, merkle_curve_leaf_hash, merkle_fab_leaf_hash, merkle_tree_at,
+        merkle_tree_at_node, typed_state_path,
+    },
     native_ffi::{self, INTERNAL, INVALID_ARGUMENT, LIMIT, MAX_BYTES, Work},
 };
 use base_crypto::fab::AlignedValue;
@@ -263,47 +266,27 @@ fn merkle_page(tree: &MerkleTreeSnapshot, offset: usize, limit: usize) -> Result
 
 enum CollectionSchema {
     Map {
-        slot: usize,
         key_type: ScalarType,
         key_name: String,
         value_type: ScalarType,
         value_name: String,
     },
     Set {
-        slot: usize,
         key_type: ScalarType,
         key_name: String,
     },
     List {
-        slot: usize,
         element_type: ScalarType,
         element_name: String,
     },
 }
 
-fn collection_schema(plan: &ReadPlan, name: &str) -> Result<Option<CollectionSchema>, i32> {
-    let mut declarations = plan
-        .state
-        .iter()
-        .enumerate()
-        .filter(|(_, declaration)| declaration.name == name);
-    let Some((slot, declaration)) = declarations.next() else {
-        return Ok(None);
-    };
-    if declarations.next().is_some() {
-        return Err(INVALID_ARGUMENT);
-    }
-
-    let schema = declaration.kind.get("tree").unwrap_or(&declaration.kind);
+fn collection_schema(schema: &Json) -> Result<Option<CollectionSchema>, i32> {
     if let Some(set) = schema.get("set") {
         let key_name = set.as_str().ok_or(INVALID_ARGUMENT)?.to_owned();
         let key_type = crate::ledger_key_type(&Json::String(key_name.clone()))
             .map_err(|_| INVALID_ARGUMENT)?;
-        return Ok(Some(CollectionSchema::Set {
-            slot,
-            key_type,
-            key_name,
-        }));
+        return Ok(Some(CollectionSchema::Set { key_type, key_name }));
     }
     if let Some(map) = schema.get("map") {
         let fields = map
@@ -316,7 +299,6 @@ fn collection_schema(plan: &ReadPlan, name: &str) -> Result<Option<CollectionSch
             .map_err(|_| INVALID_ARGUMENT)?;
         let value_type = ScalarType::parse(&value_name).map_err(|_| INVALID_ARGUMENT)?;
         return Ok(Some(CollectionSchema::Map {
-            slot,
             key_type,
             key_name,
             value_type,
@@ -334,7 +316,6 @@ fn collection_schema(plan: &ReadPlan, name: &str) -> Result<Option<CollectionSch
         let element_type =
             crate::validate_tree_scalar_type(&element_name).map_err(|_| INVALID_ARGUMENT)?;
         return Ok(Some(CollectionSchema::List {
-            slot,
             element_type,
             element_name,
         }));
@@ -610,18 +591,12 @@ pub unsafe extern "C" fn noctium_ledger_collection_page(
             return Err(INVALID_ARGUMENT);
         }
 
-        let page = if keys.is_empty() && request.merkle_path.is_none() {
-            match collection_schema(&plan, &request.name)? {
+        let page = if request.merkle_path.is_none() {
+            let (final_schema, selected) =
+                typed_state_path(&plan.state, &state.data, &request.name, &keys)
+                    .map_err(|_| INVALID_ARGUMENT)?;
+            match collection_schema(final_schema)? {
                 Some(schema) => {
-                    let StateValue::Array(root) = state.data.get_ref() else {
-                        return Err(INVALID_ARGUMENT);
-                    };
-                    let slot = match &schema {
-                        CollectionSchema::Map { slot, .. }
-                        | CollectionSchema::Set { slot, .. }
-                        | CollectionSchema::List { slot, .. } => *slot,
-                    };
-                    let selected = root.get(slot).ok_or(INVALID_ARGUMENT)?;
                     let offset = request.offset.ok_or(INVALID_ARGUMENT)?;
                     let limit = request.limit.ok_or(INVALID_ARGUMENT)?;
                     match &schema {
@@ -629,12 +604,12 @@ pub unsafe extern "C" fn noctium_ledger_collection_page(
                             element_type,
                             element_name,
                             ..
-                        } => list_page(selected, element_type, element_name, offset, limit)?,
-                        _ => collection_page(selected, &schema, offset, limit)?,
+                        } => list_page(&selected, element_type, element_name, offset, limit)?,
+                        _ => collection_page(&selected, &schema, offset, limit)?,
                     }
                 }
                 None => {
-                    let tree = merkle_tree_at(&plan.state, &state.data, &request.name, &keys)
+                    let tree = merkle_tree_at_node(final_schema, &selected)
                         .map_err(|_| INVALID_ARGUMENT)?;
                     merkle_page(
                         &tree,
