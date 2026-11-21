@@ -5687,8 +5687,8 @@
       "id": "C-STDLIB-MERGECOINIMMEDIATE",
       "layer": "standard-library",
       "surface": "mergeCoinImmediate",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Native Lean merges one finalized Map coin with one same-operation minted transient of the same color and a checked sum. The Compact reference and native checker agree on both nullifiers, both receive commitments and the merged nonce. A funded Ledger 9.1.0.1 call finalized the 5 + 7 merge and consumed both inputs. Broader chained, batched and other staged coin flows require separate evidence.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5701,7 +5701,12 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ShieldedCoinImmediateMerge.lean",
+        "tests/compact/merge-coin-immediate.mjs",
+        "runtime/src/localnet/shielded_merge.rs",
+        "docs/development/shielded-map-immediate-merge-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {

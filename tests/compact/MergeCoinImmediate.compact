@@ -1,0 +1,34 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger coins: Map<Bytes<32>, QualifiedShieldedCoinInfo>;
+
+export circuit seed(coin: ShieldedCoinInfo): [] {
+  const color = disclose(coin.color);
+  receiveShielded(disclose(coin));
+  coins.insertCoin(
+    color,
+    disclose(coin),
+    right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+  );
+}
+
+export circuit mergeEarlier(
+  color: Bytes<32>,
+  incoming: ShieldedCoinInfo
+): ShieldedCoinInfo {
+  assert(incoming.color == color, "incoming coin color mismatch");
+  const key = disclose(color);
+  assert(coins.member(key), "contract coin missing");
+  const existing = coins.lookup(key);
+
+  // Book the second coin in this operation before passing it to the immediate merge.
+  receiveShielded(disclose(incoming));
+  const merged = mergeCoinImmediate(existing, disclose(incoming));
+  coins.insertCoin(
+    key,
+    disclose(merged),
+    right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+  );
+  return disclose(merged);
+}

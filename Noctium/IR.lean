@@ -736,12 +736,11 @@ inductive Effect where
   The backend derives native nullifier and output-commitment claims. -/
   | spendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (recipient selfAddress : Expr (.bytes 32))
-  /-- Merge two exact contract-owned coin records from a Bytes32-keyed tree Map.
-  The backend binds both nullifiers and the single contract-owned output. -/
+  /-- Merge a finalized Map coin with a finalized or same-operation contract coin. -/
   | mergeShieldedFromMap (state : String)
       (nonceA colorA : Expr (.bytes 32)) (amountA : Expr (.uint (2 ^ 128 - 1)))
       (nonceB colorB : Expr (.bytes 32)) (amountB : Expr (.uint (2 ^ 128 - 1)))
-      (selfAddress : Expr (.bytes 32))
+      (selfAddress : Expr (.bytes 32)) (stagedInput : Bool)
   /-- Split a recorded shielded coin between one recipient output and one
   contract-owned change output. The frontend removes the old map key and then
   reuses receiveShieldedToMap to qualify and insert the change coin. -/
@@ -1616,7 +1615,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         recipient.validate caps env
         selfAddress.validate caps env
         pure []
-      | .mergeShieldedFromMap state nonceA colorA amountA nonceB colorB amountB selfAddress => do
+      | .mergeShieldedFromMap state nonceA colorA amountA nonceB colorB amountB selfAddress _staged => do
         if !caps.stateMaps then throw "target lacks state maps"
         let some declaration := decls.find? (·.name == state)
           | throw s!"unknown shielded coin map '{state}'"

@@ -290,7 +290,7 @@ def describeEffect : Effect → LedgerEffectDescriptor
       [.selector "nonce" sink nonce, .selector "color" sink color,
        .payload "amount" sink amount, .selector "recipient" sink recipient,
        .selector "contractAddress" sink selfAddress] []
-  | .mergeShieldedFromMap _ nonceA colorA amountA nonceB colorB amountB selfAddress =>
+  | .mergeShieldedFromMap _ nonceA colorA amountA nonceB colorB amountB selfAddress _staged =>
     let sink := "public shielded coin merge"
     .publicEffect "mergeShieldedFromMap" .asset .publicActivity sink
       [.selector "nonceA" sink nonceA, .selector "colorA" sink colorA,
