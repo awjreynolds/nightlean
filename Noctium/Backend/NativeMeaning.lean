@@ -109,7 +109,7 @@ private def requireSourceType (ty : Ty) (term : Term) (bounds : List (Term × Na
     | .native => bounds
     | .bool => bounds ++ [(term, 1)]
     | .uint maximum => bounds ++ [(term, maximum)]
-    | .bytes _ | .jubjubScalar | .jubjubPoint | .foreign _ => bounds}
+    | .bytes _ | .opaqueBytes | .jubjubScalar | .jubjubPoint | .foreign _ => bounds}
 
 def packByteTerms : List Term → Term
   | [] => .constant 0
@@ -383,7 +383,7 @@ theorem requireSourceType_eq (ty : Ty) (term : Term) (bounds : List (Term × Nat
         | .native => bounds
         | .bool => bounds ++ [(term, 1)]
         | .uint maximum => bounds ++ [(term, maximum)]
-        | .bytes _ | .jubjubScalar | .jubjubPoint | .foreign _ => bounds} := rfl
+        | .bytes _ | .opaqueBytes | .jubjubScalar | .jubjubPoint | .foreign _ => bounds} := rfl
 
 theorem arithmetic_eq (ty : Ty) (opcode : String) (left right : Normalized) :
     arithmetic ty opcode left right =
@@ -397,6 +397,7 @@ theorem subtraction_eq (ty : Ty) (left right : Normalized) :
 
 def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Normalized
   | .native value => pure {term := .constant value}
+  | .opaqueBytesProjection value => normalize env value
   | .bool value => pure (requireSourceType .bool (.constant (if value then 1 else 0)) [])
   | .uint maximum value => pure (requireSourceType (.uint maximum) (.constant value) [])
   | .foreignUnary op value => do
@@ -730,6 +731,7 @@ def Input.requirements (input : Input) : List InputRequirement :=
   | .jubjubScalar => [jubjubScalarInputRequirement input]
   | .jubjubPoint => input.nativeIdentifiers.map fun identifier =>
       {identifier, visibility := input.visibility, ty := .native}
+  | .opaqueBytes => [{identifier := "%input_" ++ input.name, visibility := input.visibility, ty := .native}]
   | _ => [{identifier := "%input_" ++ input.name, visibility := input.visibility, ty := input.ty}]
 
 def Input.callArgumentRequirements (input : Input) : List InputRequirement :=

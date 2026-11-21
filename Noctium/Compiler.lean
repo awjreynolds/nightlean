@@ -22,6 +22,7 @@ private def expressionJson : Expr ty → Json
       ("maximum", toJson (toString maximum)), ("value", toJson (toString value))])]
   | .bytesField value index => Json.mkObj [("bytesField", Json.mkObj [
       ("value", expressionJson value), ("index", toJson index)])]
+  | .opaqueBytesProjection value => expressionJson value
   | .bytesAt value index => Json.mkObj [("byteAt", Json.mkObj [
       ("value", expressionJson value), ("index", toJson index)])]
   | .bytesLiteral length values => Json.mkObj [("tag", toJson ("bytesLiteral" : String)),
@@ -151,6 +152,8 @@ private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json)
   | .bitExpr expression => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson expression)]
   | .bytes32 expression => [("alignment", toJson ("bytes32" : String)), ("expression", nativeExpressionJson expression)]
   | .bytes length expression => [("alignment", toJson (s!"bytes:{length}")), ("expression", nativeExpressionJson expression)]
+  | .compress expression => [("alignment", toJson ("compress" : String)),
+      ("expression", nativeExpressionJson expression)]
   | .nativeFields expressions => [("alignment", toJson ("nativeFields" : String)),
       ("expressions", toJson (expressions.map nativeExpressionJson))]
   | .counter expression => [("alignment", toJson ("u64" : String)),
@@ -164,6 +167,7 @@ private def alignedExpressionJson (value : Backend.Impact.Aligned) : Json :=
   | .bitExpr expression => nativeExpressionJson expression
   | .bytes32 expression => nativeExpressionJson expression
   | .bytes _ expression => nativeExpressionJson expression
+  | .compress expression => nativeExpressionJson expression
   | .nativeFields expressions => toJson (expressions.map nativeExpressionJson)
   | .counter expression => nativeExpressionJson expression
 

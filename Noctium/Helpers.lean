@@ -1287,6 +1287,7 @@ private def inferPartialTerm (fuel : Nat) (program : Program) (scope : Nat)
         | .bool => pure Ty.bool
         | .uint maximum => pure (Ty.uint maximum)
         | .bytes _ => fail span "byte strings do not support scalar arithmetic"
+        | .opaqueBytes => fail span "OpaqueBytes do not support scalar arithmetic"
         | .jubjubScalar | .jubjubPoint =>
           fail span "Jubjub values require a qualified curve operation"
         | .foreign _ => fail span "foreign values require a qualified curve operation"
@@ -1840,6 +1841,7 @@ private def nativeOfScalar (span : SourceSpan) (value : Scalar) : Except Diagnos
   | ⟨.bool, value⟩ => pure (.cast .native value)
   | ⟨.uint _, value⟩ => pure (.cast .native value)
   | ⟨.bytes _, _⟩ => fail span "byte strings require separate native byte leaves"
+  | ⟨.opaqueBytes, _⟩ => fail span "OpaqueBytes require a Compress projection"
   | ⟨.jubjubScalar, _⟩ | ⟨.jubjubPoint, _⟩ =>
     fail span "Jubjub values require a qualified curve operation"
   | ⟨.foreign _, _⟩ => fail span "foreign values require a qualified curve operation"
@@ -3078,6 +3080,7 @@ private def traceType : TraceValue → ResultType
   | none => .unit
   | some value => .scalar (match value.kind with
     | .native => .native | .bool => .bool | .uint m => .uint m | .bytes length => .bytes length
+    | .opaqueBytes => .opaqueBytes
     | .jubjubScalar => .jubjubScalar | .jubjubPoint => .jubjubPoint
     | .foreign kind => .foreign kind)
 
