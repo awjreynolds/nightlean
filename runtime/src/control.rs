@@ -1356,8 +1356,14 @@ impl Parser<'_> {
                             | (_, ScalarType::JubjubScalar | ScalarType::JubjubPoint) => {
                                 bail!("control arithmetic requires numeric scalar operands")
                             }
-                            (ScalarType::Bytes32 | ScalarType::Bytes(_), _)
-                            | (_, ScalarType::Bytes32 | ScalarType::Bytes(_)) => {
+                            (
+                                ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes,
+                                _,
+                            )
+                            | (
+                                _,
+                                ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes,
+                            ) => {
                                 bail!("control byte arithmetic")
                             }
                             #[cfg(feature = "zkir-321")]
@@ -2349,7 +2355,7 @@ fn validate_relation_inputs(
                 None
             }
             ScalarType::UInt(maximum) => Some(maximum.bits()),
-            ScalarType::Bytes32 | ScalarType::Bytes(_) => None,
+            ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes => None,
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => None,
             #[cfg(feature = "zkir-321")]
             ScalarType::Foreign(_) => None,

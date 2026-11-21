@@ -253,6 +253,7 @@ private def canonicalType : Types.CompositeType → String
   | .scalar .bool => "bool"
   | .scalar (.uint maximum) => s!"uint({maximum})"
   | .scalar (.bytes length) => s!"scalar-bytes({length})"
+  | .scalar .opaqueBytes => "scalar-opaque-bytes"
   | .scalar .jubjubScalar => "scalar-jubjub-scalar"
   | .scalar .jubjubPoint => "scalar-jubjub-point"
   | .scalar (.foreign kind) => s!"scalar-foreign({kind.sourceName})"
@@ -268,6 +269,7 @@ private def canonicalTypeSize : Types.CompositeType → Nat
   | .scalar .bool => 4
   | .scalar (.uint maximum) => 6 + (toString maximum).length
   | .scalar (.bytes length) => 14 + (toString length).length
+  | .scalar .opaqueBytes => 19
   | .scalar .jubjubScalar => 20
   | .scalar .jubjubPoint => 19
   | .scalar (.foreign kind) => 16 + kind.sourceName.utf8ByteSize
@@ -1056,6 +1058,7 @@ inductive SignatureType where
   | native
   | bool
   | uint (maximum : String)
+  | opaqueBytes
   | tuple (items : List SignatureType)
   | structure (id : String)
   | enumeration (id : String)
@@ -1100,6 +1103,7 @@ private def signatureType : Types.CompositeType → SignatureType
   | .scalar .bool => .bool
   | .scalar (.uint maximum) => .uint (toString maximum)
   | .scalar (.bytes length) => .bytes (toString length)
+  | .scalar .opaqueBytes => .opaqueBytes
   | .scalar .jubjubScalar => .jubjubScalar
   | .scalar .jubjubPoint => .jubjubPoint
   | .scalar (.foreign kind) => .foreign kind.sourceName
@@ -1115,6 +1119,7 @@ private def signatureResult : Helpers.ResultType → SignatureType
   | .scalar .bool => .bool
   | .scalar (.uint maximum) => .uint (toString maximum)
   | .scalar (.bytes length) => .bytes (toString length)
+  | .scalar .opaqueBytes => .opaqueBytes
   | .scalar .jubjubScalar => .jubjubScalar
   | .scalar .jubjubPoint => .jubjubPoint
   | .scalar (.foreign kind) => .foreign kind.sourceName
@@ -1210,6 +1215,8 @@ private partial def validateSignatureType (fuel : Nat) (value : SignatureType) :
     | .unit | .native | .bool => pure ()
     | .jubjubScalar | .jubjubPoint =>
       throw "Jubjub helper signatures are not supported by specialization"
+    | .opaqueBytes =>
+      throw "OpaqueBytes helper signatures are not supported by specialization"
     | .foreign sourceName => do
       unless Foreign.kinds.any (fun kind => kind.sourceName == sourceName) do
         throw "unsupported foreign helper signature type"

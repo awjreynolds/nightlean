@@ -15,6 +15,8 @@ private def readInputRequirement (name : String) (ty : Ty) : InputRequirement :=
   | .jubjubScalar =>
     {identifier := "%input_" ++ name, visibility := .«public», ty := .native,
       canonicalJubjubScalar := true}
+  | .opaqueBytes =>
+    {identifier := "%input_" ++ name, visibility := .«public», ty := .native}
   | _ => {identifier := "%input_" ++ name, visibility := .«public», ty}
 
 private def inputAliases (inputs : List InputRequirement) : AliasEnvironment :=
