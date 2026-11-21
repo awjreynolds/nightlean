@@ -56,3 +56,17 @@ private def mixedFabCommitmentsEntry : Entrypoint :=
 #guard match Backend.Zkir.lowerEntrypoint MixedFabCommitments.state mixedFabCommitmentsEntry with
   | .ok _ => Bool.true
   | .error _ => Bool.false
+
+#guard
+  Backend.Native.persistentHashFabTerm ["field", "field"]
+    [.input "left", .input "right"] ==
+      Backend.Native.persistentHashNativeVectorTerm [.input "left", .input "right"] &&
+  Backend.Native.persistentHashFabTerm ["bytes:32"]
+    [.input "high", .input "low"] ==
+      Backend.Native.persistentHash32Term (.input "high") (.input "low") &&
+  Backend.Native.persistentHashFabTerm ["bytes:32", "bytes:32"]
+    [.input "high0", .input "low0", .input "high1", .input "low1"] ==
+      Backend.Native.persistentHashVector32Term
+        [(.input "high0", .input "low0"), (.input "high1", .input "low1")] &&
+  Backend.Native.persistentHashFabTerm ["bytes:1"] [.input "byte"] ==
+    Backend.Native.fixedByteHashTerm "persistent_hash" 1 [.input "byte"]
