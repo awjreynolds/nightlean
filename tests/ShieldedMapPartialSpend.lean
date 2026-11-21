@@ -68,15 +68,20 @@ private def sendsRecordedCoin (effect : Effect) : _root_.Bool :=
       isReference address "noctium_send_address_2"
   | _ => _root_.Bool.false
 
+private def receivesUsingSendAddress (effect : Effect) : _root_.Bool :=
+  match effect with
+  | .receiveShieldedToMap state _ _ _ address =>
+      state == "pot" && isReference address "noctium_send_address_2"
+  | _ => _root_.Bool.false
+
 #guard partialSpendEntry.name == "spend"
-#guard partialSpendEntry.effects.length == 9
-#guard partialSpendEntry.effectGuards.length == 9 &&
+#guard partialSpendEntry.effects.length == 8
+#guard partialSpendEntry.effectGuards.length == 8 &&
   partialSpendEntry.effectGuards.all Option.isNone
 #guard match partialSpendEntry.effects with
   | [.readCompositePath "pot" _ [nonceKey] _ fields, .require _,
       .readContractAddress _, send, .removePath "pot" [removeKey],
-      .memberPath "pot" _ [_], .require _, .readContractAddress _,
-      .receiveShieldedToMap "pot" ..] =>
+      .memberPath "pot" _ [_], .require _, receive] =>
         isDisclosedPathReference nonceKey "nonce" &&
         isDisclosedPathReference removeKey "nonce" &&
         fields.map Prod.snd == [Ty.bytes 32, Ty.bytes 32,
@@ -86,7 +91,7 @@ private def sendsRecordedCoin (effect : Effect) : _root_.Bool :=
           "noctium_send_coin_0_color",
           "noctium_send_coin_0_value",
           "noctium_send_coin_0_mtIndex"] &&
-        sendsRecordedCoin send
+        sendsRecordedCoin send && receivesUsingSendAddress receive
   | _ => _root_.Bool.false
 #guard (Disclosure.entrypoint partialSpendEntry).isOk
 #guard (partialSpendEntry.validate Capabilities.source ShieldedMapPartialSpend.state).isOk
@@ -99,6 +104,10 @@ private def sendsRecordedCoin (effect : Effect) : _root_.Bool :=
         | _ => _root_.Bool.false) with
       | [.sendShieldedFromMap .., .mapRemove slot _, .receiveShieldedToMap receiveSlot ..] =>
           slot == receiveSlot &&
+          (plan.operations.filter (fun operation =>
+            match operation with
+            | .readContractAddress _ => _root_.Bool.true
+            | _ => _root_.Bool.false)).length == 1 &&
           (plan.operations.find? (fun operation =>
             match operation with
             | .sendShieldedFromMap .. => _root_.Bool.true

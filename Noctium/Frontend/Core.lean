@@ -2512,22 +2512,15 @@ private def elaborateEffect (schema : List (String × StateKind))
         (Noctium.Expr.ref $(stringTerm changeMemberName)) (Noctium.Expr.bool Bool.false))
       let absentTerm ← `(Noctium.Effect.require $absentCondition)
       state := {state with terms := state.terms.push absentTerm}
-      let changeAddressName := s!"noctium_send_change_address_{state.terms.size}"
-      unless state.env.all (fun binding => binding.1 != changeAddressName) do
-        throwErrorAt update "reserved change address binding collides with an existing read"
-      let changeAddressTerm ← `(Noctium.Effect.readContractAddress $(stringTerm changeAddressName))
-      state := {state with terms := state.terms.push changeAddressTerm}
-      state ← bindReadName state changeAddressName changeAddressName (.bytes 32)
-      let changeSelfAddress ← `(@Noctium.Expr.ref (Noctium.Ty.bytes 32) $(stringTerm changeAddressName))
       let receiveTerm ← `(Noctium.Effect.receiveShieldedToMap
-        $(stringTerm storage.getId.toString) $changeNonce $color $changeAmount $changeSelfAddress)
+        $(stringTerm storage.getId.toString) $changeNonce $color $changeAmount $sendSelfAddress)
       let noGuard ← `(none)
       state := {state with
         terms := state.terms.push receiveTerm
         spans := state.spans.push span |>.push span |>.push span |>.push span
-          |>.push span |>.push span |>.push span |>.push span
+          |>.push span |>.push span |>.push span
         guards := state.guards.push noGuard |>.push noGuard |>.push noGuard |>.push noGuard
-          |>.push noGuard |>.push noGuard |>.push noGuard |>.push noGuard}
+          |>.push noGuard |>.push noGuard |>.push noGuard}
     | `(nlupdate| mintUnshielded($domain:nlexpr, $amount:nlexpr)) => do
       let domain ← checkedExpression state.env domain (.bytes 32)
       let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
