@@ -339,6 +339,7 @@ impl DevelopmentFunding<'_> {
 mod tests {
     use super::*;
     use crate::{
+        Plan,
         artifacts::{self, ContractBundleSet, Role},
         client::{ChainAdapter, FinalizedReceipt, NetworkPolicy, Submission},
         funding::{CONTRACT_SEGMENT, FeePolicy, SealedTransaction, UnsealedTransaction},
@@ -435,13 +436,25 @@ mod tests {
             let dust_parameters = cache.parameters(dust.k()).await?;
             let parameters = cache.parameters(circuit.k()).await?;
             let ttl = node.sync()?.block.tblock.to_secs() + 1800;
+            let zero_bytes = json!({"kind":"bytes", "values": vec![0; 32]});
+            let state_config = serde_json::to_vec(&json!({"state": {
+                "pot": [],
+                "held": {
+                    "nonce": zero_bytes.clone(),
+                    "color": zero_bytes,
+                    "value": "0",
+                    "mtIndex": "0"
+                },
+                "registry": []
+            }}))?;
             let target = WitnessContractTarget::from_state_config(
                 ContractBundleSet::new(vec![bundle])?,
-                br#"{"state":{"pot":[]}}"#,
+                &state_config,
                 ttl,
                 &mut OsRng,
             )?;
             let operation = target.operation("tip", &parameters, ttl)?;
+            let plan: Plan = serde_json::from_slice(operation.bundle()?.file(Role::Plan)?)?;
             let make_funding = || {
                 DevelopmentFunding::new(
                     &node,
@@ -488,7 +501,7 @@ mod tests {
             let domain = HashOutput([3; 32]);
             let coin = Info::new(&mut OsRng, 5, address.custom_shielded_token_type(domain));
             let snapshot = node.sync()?;
-            let index = snapshot.state.zswap.first_free;
+            let expected_index = snapshot.state.zswap.first_free;
             let commitment = coin.commitment(&Recipient::Contract(address));
             let inputs = || {
                 BTreeMap::from([
@@ -548,22 +561,68 @@ mod tests {
                 )
                 .await?;
             let receipt = finalize(&node, &bound).await?;
-            let state: ContractState<Db> = native_decode(&receipt.contract_state)?;
+            let finalized = node.sync()?;
+            let finalized_output = finalized
+                .state
+                .zswap
+                .coin_coms
+                .index(expected_index)
+                .context("finalized minted output leaf missing")?;
+            ensure!(
+                finalized_output.0 == commitment.0
+                    && finalized_output.1.as_deref() == Some(&address),
+                "finalized Zswap leaf does not match the contract-owned mint"
+            );
+            let finalized_index = expected_index;
+            let finalized_contract = node.finalized_contract_state(target.contract_address())?;
+            ensure!(
+                finalized_contract.bytes == receipt.contract_state,
+                "finalized contract state differs from the call receipt"
+            );
+            let state: ContractState<Db> = native_decode(&finalized_contract.bytes)?;
             let StateValue::Array(slots) = state.data.get_ref() else {
                 anyhow::bail!("expected native state array");
             };
-            let Some(StateValue::Map(coins)) = slots.get(0) else {
-                anyhow::bail!("expected coin Map in slot 0");
+            let slot = |name: &str| {
+                plan.state
+                    .iter()
+                    .position(|declaration| declaration.name == name)
+                    .with_context(|| format!("{name} state slot missing from plan"))
             };
+            let map_slot = slot("pot")?;
+            let cell_slot = slot("held")?;
+            let set_slot = slot("registry")?;
+            let Some(StateValue::Map(coins)) = slots.get(map_slot) else {
+                anyhow::bail!("expected coin Map");
+            };
+            let qualified = AlignedValue::from(coin.qualify(finalized_index));
+            ensure!(
+                qualified.alignment.fits(&qualified.value),
+                "qualified coin does not fit the Set key alignment"
+            );
             ensure!(
                 coins.get(&AlignedValue::from(coin.nonce)).as_deref()
                     == Some(&StateValue::Cell(Sp::new(AlignedValue::from(
-                        coin.qualify(index)
+                        coin.qualify(finalized_index)
                     )))),
                 "finalized Map does not contain the Ledger-assigned qualified coin"
             );
+            let Some(StateValue::Cell(stored_cell)) = slots.get(cell_slot) else {
+                anyhow::bail!("expected qualified coin Cell");
+            };
             ensure!(
-                node.sync()?
+                &**stored_cell == &qualified,
+                "finalized Cell does not contain the Ledger-assigned qualified coin"
+            );
+            let Some(StateValue::Map(coin_set)) = slots.get(set_slot) else {
+                anyhow::bail!("expected qualified coin Set");
+            };
+            ensure!(
+                matches!(coin_set.get(&qualified), Some(marker) if matches!(*marker, StateValue::Null)),
+                "finalized Set does not contain the Ledger-assigned qualified coin"
+            );
+            ensure!(
+                finalized
                     .state
                     .zswap
                     .coin_coms_set
@@ -580,8 +639,11 @@ mod tests {
                     "nonce": hex::encode(coin.nonce.0.0),
                     "color": hex::encode(coin.type_.0.0),
                     "value": coin.value.to_string(),
-                    "mtIndex": index,
-                    "stateSha256": artifacts::digest(&receipt.contract_state),
+                    "mtIndex": finalized_index,
+                    "mapCoinMatchesFinalizedOutput": true,
+                    "cellCoinMatchesFinalizedOutput": true,
+                    "setCoinMatchesFinalizedOutput": true,
+                    "stateSha256": artifacts::digest(&finalized_contract.bytes),
                     "k": circuit.k(),
                     "rejected": ["missingOffer", "mismatchedOffer"]
                 })

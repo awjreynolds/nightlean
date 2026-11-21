@@ -31,8 +31,13 @@ duplicate insertion, and missing or wrong-recipient bookings. The
 [List fixture](../../runtime/tests/qualified_coin_list.rs) checks prepending
 index 42 ahead of index 17 and the same booking boundary. The List lowering
 pushes the node before its key so the cached insert receives the correct operands.
-These checks use a native query context. Finalized collection execution and
-broader recipient cases remain open.
+These checks use a native query context.
+
+A funded Ledger 9 run stored one self-minted coin in a Map, root Cell and
+root Set in the same call. The test compares each complete record, including
+the assigned index, with the finalized contract-owned output. Finalized List
+execution and broader recipient cases remain open.
+[Localnet receipt](shielded-coin-collections-localnet-receipt.json)
 
 The [pinned VM opcode source](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/onchain-vm/src/ops.rs)
 defines opcode names and immediate encoding. The pinned runtime exports the
