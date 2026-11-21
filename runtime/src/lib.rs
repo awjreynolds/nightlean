@@ -1265,6 +1265,21 @@ pub enum Instruction {
         #[serde(rename = "outputCommitment")]
         output_commitment: Expr,
     },
+    #[serde(rename = "sendShieldedFromMap", rename_all = "camelCase")]
+    SendShieldedFromMap {
+        nonce: Expr,
+        color: Expr,
+        #[serde(rename = "inputAmount")]
+        input_amount: Expr,
+        #[serde(rename = "sendAmount")]
+        send_amount: Expr,
+        recipient: Expr,
+        nullifier: Expr,
+        #[serde(rename = "outputCommitment")]
+        output_commitment: Expr,
+        #[serde(rename = "changeCommitment")]
+        change_commitment: Expr,
+    },
     #[serde(rename = "requireContractCaller")]
     RequireContractCaller {
         address: Expr,
@@ -1505,6 +1520,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::ReceiveShieldedToMap { .. } => RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS.to_vec(),
         Instruction::SpendShieldedFromMap { .. } => SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
+        Instruction::SendShieldedFromMap { .. } => SEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
 
         Instruction::MerkleTreeIsFull {
             slot, keys, depth, ..
@@ -1693,6 +1709,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::SpendShieldedFromMap { .. } => {
             bail!("shielded spend must be unguarded")
         }
+        Instruction::SendShieldedFromMap { .. } => {
+            bail!("shielded send must be unguarded")
+        }
         Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
             impact_field_counts(instruction, plan)?.into_iter().sum()
         }
@@ -1798,6 +1817,8 @@ const MINT_FIELD_COUNTS: [usize; 16] = [1, 4, 6, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1
 const RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS: [usize; 16] =
     [1, 4, 6, 2, 1, 1, 4, 6, 1, 6, 5, 11, 1, 2, 1, 1];
 const SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 12] = [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
+const SEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 18] =
+    [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
 
 fn token_accumulation_fields(key_push: usize) -> [usize; 16] {
     [1, 4, key_push, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1]
@@ -2332,6 +2353,37 @@ fn mutates_contract_state(operation: &Instruction) -> bool {
     )
 }
 
+fn is_shielded_send_read_only(operation: &Instruction) -> bool {
+    let (operation, _) = unguarded_operation(operation);
+    matches!(
+        operation,
+        Instruction::Dup
+            | Instruction::Checkpoint
+            | Instruction::Index {
+                push_path: false,
+                ..
+            }
+            | Instruction::IndexPath {
+                push_path: false,
+                ..
+            }
+            | Instruction::Push { storage: false, .. }
+            | Instruction::Popeq { .. }
+            | Instruction::PopeqFields { .. }
+            | Instruction::Member
+            | Instruction::ListLength { .. }
+            | Instruction::MapSize { .. }
+            | Instruction::MapIsEmpty { .. }
+            | Instruction::ListHead { .. }
+            | Instruction::MerkleTreeIsFull { .. }
+            | Instruction::MerkleTreeCheckRoot { .. }
+            | Instruction::ReadCaller { .. }
+            | Instruction::ReadTokenBalance { .. }
+            | Instruction::BlockTimeCompare { .. }
+            | Instruction::CounterLessThan { .. }
+    )
+}
+
 fn validate_shielded_spend_layout(
     plan: &Plan,
     operation_index: usize,
@@ -2436,6 +2488,60 @@ fn validate_shielded_spend_layout(
     Ok((*slot, read_keys[0].clone()))
 }
 
+fn validate_shielded_send_layout(
+    plan: &Plan,
+    operation_index: usize,
+    nonce: &Expr,
+    color: &Expr,
+    input_amount: &Expr,
+    change_commitment: &Expr,
+) -> Result<(u32, PathPart, usize)> {
+    let (slot, read_key) =
+        validate_shielded_spend_layout(plan, operation_index, nonce, color, input_amount)?;
+    let removal_index = operation_index + 1;
+    let mut receive_index = None;
+    for index in removal_index + 1..plan.operations.len() {
+        let operation = &plan.operations[index];
+        let (candidate, guard) = unguarded_operation(operation);
+        if matches!(candidate, Instruction::ReceiveShieldedToMap { .. }) {
+            ensure!(guard.is_none(), "shielded change receive must be unguarded");
+            receive_index = Some(index);
+            break;
+        }
+        ensure!(
+            !mutates_contract_state(operation) && is_shielded_send_read_only(operation),
+            "shielded change receive must be the next state mutation after removal"
+        );
+    }
+    let receive_index =
+        receive_index.ok_or_else(|| anyhow!("shielded send must be followed by change receive"))?;
+    let receive_operation = &plan.operations[receive_index];
+    let (receive_operation, receive_guard) = unguarded_operation(receive_operation);
+    ensure!(
+        receive_guard.is_none(),
+        "shielded change receive must be unguarded"
+    );
+    let Instruction::ReceiveShieldedToMap {
+        slot: receive_slot,
+        color: receive_color,
+        commitment: receive_commitment,
+        ..
+    } = receive_operation
+    else {
+        bail!("shielded send must be followed by change receive")
+    };
+    ensure!(
+        *receive_slot == slot,
+        "shielded change receive uses a different Map"
+    );
+    validate_shielded_coin_map(plan, *receive_slot)?;
+    ensure!(
+        receive_color == color && receive_commitment == change_commitment,
+        "shielded change receive differs from the send output"
+    );
+    Ok((slot, read_key, receive_index))
+}
+
 fn is_record_schema(schema: &Json) -> bool {
     schema.get("schemaVersion").is_some()
         || schema
@@ -2521,6 +2627,23 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
             } => {
                 ensure!(guard.is_none(), "shielded spend must be unguarded");
                 validate_shielded_spend_layout(plan, index, nonce, color, amount)?;
+            }
+            Instruction::SendShieldedFromMap {
+                nonce,
+                color,
+                input_amount,
+                change_commitment,
+                ..
+            } => {
+                ensure!(guard.is_none(), "shielded send must be unguarded");
+                validate_shielded_send_layout(
+                    plan,
+                    index,
+                    nonce,
+                    color,
+                    input_amount,
+                    change_commitment,
+                )?;
             }
             Instruction::ListHead {
                 slot,
@@ -4719,6 +4842,30 @@ fn probe_instruction(
             env,
             deferred_outputs,
         ),
+        Instruction::SendShieldedFromMap {
+            nonce,
+            color,
+            input_amount,
+            send_amount,
+            recipient,
+            nullifier,
+            output_commitment,
+            change_commitment,
+        } => probe_expressions(
+            [
+                nonce,
+                color,
+                input_amount,
+                send_amount,
+                recipient,
+                nullifier,
+                output_commitment,
+                change_commitment,
+            ],
+            plan,
+            env,
+            deferred_outputs,
+        ),
         Instruction::RequireContractCaller { address } => {
             probe_expression(address, plan, env, deferred_outputs)
         }
@@ -6883,6 +7030,137 @@ impl PreparationCursor {
                 program.extend(spend_ops[..5].iter().cloned());
                 spend_ops[5].clone()
             }
+            Instruction::SendShieldedFromMap {
+                nonce,
+                color,
+                input_amount,
+                send_amount,
+                recipient,
+                nullifier,
+                output_commitment,
+                change_commitment,
+            } => {
+                let (_, read_key, receive_index) = validate_shielded_send_layout(
+                    plan,
+                    index,
+                    nonce,
+                    color,
+                    input_amount,
+                    change_commitment,
+                )?;
+                let coin = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce, &env)?,
+                        "shielded send coin nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color, &env)?,
+                        "shielded send coin color",
+                    )?),
+                    value: unshielded_amount(input_amount, &env)?,
+                };
+                let key = claim_hash_output(
+                    evaluate(&read_key.expression, &env)?,
+                    "shielded send Map key",
+                )?;
+                ensure!(
+                    coin.nonce.0 == key,
+                    "shielded send coin nonce differs from its Map key"
+                );
+                let send_amount = unshielded_amount(send_amount, &env)?;
+                ensure!(
+                    send_amount > 0 && send_amount < coin.value,
+                    "shielded send amount must leave positive contract change"
+                );
+
+                let coin_nullifier = coin.nullifier(&SenderEvidence::Contract(context.address));
+                let source_nullifier =
+                    claim_hash_output(evaluate(nullifier, &env)?, "shielded send nullifier")?;
+                ensure!(
+                    coin_nullifier.0 == source_nullifier,
+                    "shielded send nullifier mismatch"
+                );
+
+                let recipient =
+                    claim_hash_output(evaluate(recipient, &env)?, "shielded send recipient")?;
+                let send_coin =
+                    coin.evolve_from(b"midnight:kernel:nonce_evolve", send_amount, coin.type_);
+                let send_commitment = send_coin.commitment(&Recipient::User(PublicKey(recipient)));
+                let source_commitment = claim_hash_output(
+                    evaluate(output_commitment, &env)?,
+                    "shielded send output commitment",
+                )?;
+                ensure!(
+                    send_commitment.0 == source_commitment,
+                    "shielded send output commitment mismatch"
+                );
+
+                let change_amount = coin.value - send_amount;
+                let change_coin =
+                    coin.evolve_from(b"midnight:kernel:nonce_evolve/2", change_amount, coin.type_);
+                let source_change_commitment = claim_hash_output(
+                    evaluate(change_commitment, &env)?,
+                    "shielded change output commitment",
+                )?;
+                let change_commitment =
+                    change_coin.commitment(&Recipient::Contract(context.address));
+                ensure!(
+                    change_commitment.0 == source_change_commitment,
+                    "shielded change output commitment mismatch"
+                );
+
+                let receive = plan
+                    .operations
+                    .get(receive_index)
+                    .ok_or_else(|| anyhow!("shielded send change receive is missing"))?;
+                let (receive, receive_guard) = unguarded_operation(receive);
+                ensure!(
+                    receive_guard.is_none(),
+                    "shielded change receive must be unguarded"
+                );
+                let Instruction::ReceiveShieldedToMap {
+                    nonce,
+                    color,
+                    amount,
+                    commitment,
+                    ..
+                } = receive
+                else {
+                    bail!("shielded send change receive is missing")
+                };
+                ensure!(
+                    claim_hash_output(evaluate(nonce, &env)?, "shielded change nonce")?
+                        == change_coin.nonce.0
+                        && claim_hash_output(evaluate(color, &env)?, "shielded change color")?
+                            == change_coin.type_.0
+                        && unshielded_amount(amount, &env)? == change_amount
+                        && claim_hash_output(
+                            evaluate(commitment, &env)?,
+                            "shielded change receive commitment",
+                        )? == source_change_commitment,
+                    "shielded change receive differs from the derived change coin"
+                );
+
+                let nullifier_ops = onchain_runtime::program_fragments::kernel_claim_zswap_nullifier!(
+                    (),
+                    (),
+                    coin_nullifier
+                );
+                let send_ops = onchain_runtime::program_fragments::kernel_claim_zswap_coin_spend!(
+                    (),
+                    (),
+                    send_commitment
+                );
+                let change_ops = onchain_runtime::program_fragments::kernel_claim_zswap_coin_spend!(
+                    (),
+                    (),
+                    change_commitment
+                );
+                program.extend(nullifier_ops);
+                program.extend(send_ops);
+                program.extend(change_ops[..5].iter().cloned());
+                change_ops[5].clone()
+            }
             Instruction::ReadTokenBalance {
                 destination,
                 color,
@@ -7556,14 +7834,14 @@ mod shielded_spend_tests {
         })
     }
 
-    fn spend_plan() -> Plan {
+    fn spend_plan_json() -> Json {
         let schema = coin_schema();
         let address_projections = byte_projection_bindings("selfAddress", 32)
             .unwrap()
             .into_iter()
             .map(|(name, ty)| json!({"name":name, "type":ty}))
             .collect::<Vec<_>>();
-        let mut plan: Plan = serde_json::from_value(json!({
+        json!({
             "schemaVersion":1,
             "entrypoint":"spend",
             "circuit":{
@@ -7609,8 +7887,52 @@ mod shielded_spend_tests {
                     ]},
                 {"name":"selfAddress", "type":"Bytes<32>", "projections":address_projections}
             ]
-        }))
-        .unwrap();
+        })
+    }
+
+    fn spend_plan() -> Plan {
+        let mut plan: Plan = serde_json::from_value(spend_plan_json()).unwrap();
+        plan.target = Some(profile::NAME.into());
+        plan.target_profile = Some(profile::target_json());
+        plan
+    }
+
+    fn send_plan() -> Plan {
+        let mut value = spend_plan_json();
+        value["entrypoint"] = json!("send");
+        value["circuit"]["inputs"]
+            .as_array_mut()
+            .unwrap()
+            .extend([
+                json!({"name":"sendAmount", "type":"UIntRange<340282366920938463463374607431768211456>", "visibility":"private"}),
+                json!({"name":"changeNonce", "type":"Bytes<32>", "visibility":"private"}),
+                json!({"name":"changeAmount", "type":"UIntRange<340282366920938463463374607431768211456>", "visibility":"private"}),
+                json!({"name":"changeCommitment", "type":"Bytes<32>", "visibility":"private"})
+            ]);
+        value["operations"][4] = json!({
+            "op":"sendShieldedFromMap",
+            "nonce":reference("coin_nonce"),
+            "color":reference("coin_color"),
+            "inputAmount":reference("coin_value"),
+            "sendAmount":reference("sendAmount"),
+            "recipient":reference("recipient"),
+            "nullifier":reference("sourceNullifier"),
+            "outputCommitment":reference("sourceCommitment"),
+            "changeCommitment":reference("changeCommitment")
+        });
+        value["operations"].as_array_mut().unwrap().push(json!({
+            "op":"receiveShieldedToMap",
+            "slot":0,
+            "nonce":reference("changeNonce"),
+            "color":reference("coin_color"),
+            "amount":reference("changeAmount"),
+            "commitment":reference("changeCommitment")
+        }));
+        value["operations"]
+            .as_array_mut()
+            .unwrap()
+            .insert(6, json!({"op":"checkpoint"}));
+        let mut plan: Plan = serde_json::from_value(value).unwrap();
         plan.target = Some(profile::NAME.into());
         plan.target_profile = Some(profile::target_json());
         plan
@@ -7625,15 +7947,48 @@ mod shielded_spend_tests {
         ])
     }
 
+    fn send_inputs(
+        nullifier: [u8; 32],
+        send_commitment: [u8; 32],
+        send_amount: u128,
+        change_nonce: [u8; 32],
+        change_amount: u128,
+        change_commitment: [u8; 32],
+    ) -> BTreeMap<String, Json> {
+        let mut inputs = spend_inputs(nullifier, send_commitment);
+        inputs.insert("sendAmount".into(), json!(send_amount.to_string()));
+        inputs.insert("changeNonce".into(), bytes_json(&change_nonce));
+        inputs.insert("changeAmount".into(), json!(change_amount.to_string()));
+        inputs.insert("changeCommitment".into(), bytes_json(&change_commitment));
+        inputs
+    }
+
     fn context(key_nonce: [u8; 32], record_nonce: [u8; 32]) -> QueryContext<Db> {
-        let coin_schema = checked_record_schema(&coin_schema()).unwrap();
+        context_with_amount(key_nonce, record_nonce, 5)
+    }
+
+    fn context_with_amount(
+        key_nonce: [u8; 32],
+        record_nonce: [u8; 32],
+        amount: u128,
+    ) -> QueryContext<Db> {
+        context_with_schema(&coin_schema(), key_nonce, record_nonce, amount)
+    }
+
+    fn context_with_schema(
+        schema: &Json,
+        key_nonce: [u8; 32],
+        record_nonce: [u8; 32],
+        amount: u128,
+    ) -> QueryContext<Db> {
+        let coin_schema = checked_record_schema(schema).unwrap();
         let record = aligned_record_value(
             &coin_schema,
             &[
                 Value::Bytes(record_nonce.to_vec()),
                 Value::Bytes(COLOR.to_vec()),
                 Value::UInt {
-                    number: 5u8.into(),
+                    number: amount.into(),
                     maximum: u128::MAX.into(),
                 },
                 Value::UInt {
@@ -7652,6 +8007,47 @@ mod shielded_spend_tests {
             vec![StateValue::Map(coins)].into(),
         ));
         QueryContext::new(state, ContractAddress(HashOutput(ADDRESS)))
+    }
+
+    fn context_with_send_outputs(
+        key_nonce: [u8; 32],
+        record_nonce: [u8; 32],
+        amount: u128,
+        send_commitment: Commitment,
+        send_index: u64,
+        change_commitment: Commitment,
+        change_index: u64,
+    ) -> QueryContext<Db> {
+        context_with_schema_send_outputs(
+            &coin_schema(),
+            key_nonce,
+            record_nonce,
+            amount,
+            send_commitment,
+            send_index,
+            change_commitment,
+            change_index,
+        )
+    }
+
+    fn context_with_schema_send_outputs(
+        schema: &Json,
+        key_nonce: [u8; 32],
+        record_nonce: [u8; 32],
+        amount: u128,
+        send_commitment: Commitment,
+        send_index: u64,
+        change_commitment: Commitment,
+        change_index: u64,
+    ) -> QueryContext<Db> {
+        let mut context = context_with_schema(schema, key_nonce, record_nonce, amount);
+        context.call_context.com_indices =
+            context
+                .call_context
+                .com_indices
+                .insert(send_commitment, send_index)
+                .insert(change_commitment, change_index);
+        context
     }
 
     fn expected_coin_effects() -> (Nullifier, Commitment) {
@@ -7680,6 +8076,65 @@ mod shielded_spend_tests {
             ))
         );
         (nullifier, output)
+    }
+
+    fn expected_split_effects() -> (
+        Nullifier,
+        ShieldedCoinInfo,
+        Commitment,
+        ShieldedCoinInfo,
+        Commitment,
+    ) {
+        let coin = ShieldedCoinInfo {
+            nonce: Nonce(HashOutput(NONCE)),
+            type_: ShieldedTokenType(HashOutput(COLOR)),
+            value: 5,
+        };
+        let nullifier = coin.nullifier(&SenderEvidence::Contract(ContractAddress(HashOutput(
+            ADDRESS,
+        ))));
+        let send_coin = coin.evolve_from(b"midnight:kernel:nonce_evolve", 2, coin.type_);
+        let send_commitment =
+            send_coin.commitment(&Recipient::User(PublicKey(HashOutput(RECIPIENT))));
+        let change_coin = coin.evolve_from(b"midnight:kernel:nonce_evolve/2", 3, coin.type_);
+        let change_commitment =
+            change_coin.commitment(&Recipient::Contract(ContractAddress(HashOutput(ADDRESS))));
+        assert_eq!(
+            nullifier.0,
+            HashOutput(hash_from_hex(
+                "d119520f9cd70fb3b835e7421773629b1991e38d642ff9b6b69eb9ed1bf86c24"
+            ))
+        );
+        assert_eq!(
+            send_commitment.0,
+            HashOutput(hash_from_hex(
+                "ed1aadafa7d1883bc63e45853fc4b51f21fb99c6ae68c8de9a256cbc3ac299c7"
+            ))
+        );
+        assert_eq!(
+            change_commitment.0,
+            HashOutput(hash_from_hex(
+                "ac1f3bb1ec93068af7810556a541cd2fbd3eb3e8e1c4336a7e5a72ee403405c2"
+            ))
+        );
+        assert_eq!(
+            change_coin.nonce.0,
+            HashOutput(hash_from_hex(
+                "0283a70d7732a940d63ebf3957495f2549236d165e604aa67a59d7eb746f4b00"
+            ))
+        );
+
+        let equal_send = coin.evolve_from(b"midnight:kernel:nonce_evolve", 2, coin.type_);
+        let equal_change = coin.evolve_from(b"midnight:kernel:nonce_evolve/2", 2, coin.type_);
+        assert_ne!(equal_send.nonce, equal_change.nonce);
+
+        (
+            nullifier,
+            send_coin,
+            send_commitment,
+            change_coin,
+            change_commitment,
+        )
     }
 
     #[test]
@@ -7784,5 +8239,281 @@ mod shielded_spend_tests {
             parameters,
         )
         .is_err());
+    }
+
+    #[test]
+    fn shielded_send_matches_compact_split_claims_and_replaces_the_exact_row_with_change() {
+        let (nullifier, send_coin, send_commitment, change_coin, change_commitment) =
+            expected_split_effects();
+        let plan = send_plan();
+        let inputs = send_inputs(
+            nullifier.0.0,
+            send_commitment.0.0,
+            2,
+            change_coin.nonce.0.0,
+            3,
+            change_commitment.0.0,
+        );
+        let execution = prepare_with_context(
+            &plan,
+            &inputs,
+            context_with_send_outputs(
+                NONCE,
+                NONCE,
+                5,
+                send_commitment,
+                7,
+                change_commitment,
+                8,
+            ),
+            &ledger::structure::INITIAL_PARAMETERS,
+        )
+        .unwrap();
+
+        let nullifier_ops =
+            onchain_runtime::program_fragments::kernel_claim_zswap_nullifier!((), (), nullifier);
+        let send_ops = onchain_runtime::program_fragments::kernel_claim_zswap_coin_spend!(
+            (),
+            (),
+            send_commitment
+        );
+        let change_ops = onchain_runtime::program_fragments::kernel_claim_zswap_coin_spend!(
+            (),
+            (),
+            change_commitment
+        );
+        let mut expected_program: Program = nullifier_ops.into();
+        expected_program.extend(send_ops);
+        expected_program.extend(change_ops);
+        assert!(
+            execution
+                .program
+                .windows(expected_program.len())
+                .any(|operations| operations == expected_program)
+        );
+        assert_eq!(execution.after.effects.claimed_nullifiers.size(), 1);
+        assert!(
+            execution
+                .after
+                .effects
+                .claimed_nullifiers
+                .member(&nullifier)
+        );
+        assert_eq!(execution.after.effects.claimed_shielded_spends.size(), 2);
+        assert!(
+            execution
+                .after
+                .effects
+                .claimed_shielded_spends
+                .member(&send_commitment)
+        );
+        assert!(
+            execution
+                .after
+                .effects
+                .claimed_shielded_spends
+                .member(&change_commitment)
+        );
+        assert!(
+            execution
+                .after
+                .effects
+                .claimed_shielded_receives
+                .iter()
+                .any(|entry| **entry == change_commitment)
+        );
+
+        let spent_key = aligned_bytes(&Value::Bytes(NONCE.to_vec())).unwrap();
+        assert!(read_state_value(&execution.after, 0, &[spent_key]).is_err());
+        let change_key = AlignedValue::from(change_coin.nonce);
+        let StateValue::Array(slots) = execution.after.state.get_ref() else {
+            panic!("expected native state array")
+        };
+        let StateValue::Map(coins) = slots.get(0).unwrap() else {
+            panic!("expected shielded coin Map")
+        };
+        assert_eq!(
+            coins.get(&change_key).as_deref(),
+            Some(&StateValue::Cell(Sp::new(AlignedValue::from(
+                change_coin.qualify(8)
+            ))))
+        );
+        assert_eq!(send_coin.value, 2);
+        assert_eq!(change_coin.value, 3);
+
+        if std::env::var_os("NOCTIUM_CHECK_SHIELDED_SEND_ARTIFACT").is_some() {
+            let artifact_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../build/experiments/214/lean-partial-spend-shared-address");
+            let compiled_plan: Plan = serde_json::from_slice(
+                &std::fs::read(artifact_dir.join("ShieldedMapPartialSpend.spend.impact.json"))
+                    .unwrap(),
+            )
+            .unwrap();
+            let circuit_bytes =
+                std::fs::read(artifact_dir.join("ShieldedMapPartialSpend.spend.zkir")).unwrap();
+            let circuit = IrSource::load(circuit_bytes.as_slice()).unwrap();
+            let compiled_inputs = BTreeMap::from([
+                ("nonce".into(), bytes_json(&NONCE)),
+                ("sendAmount".into(), json!("2")),
+                ("recipient".into(), bytes_json(&RECIPIENT)),
+            ]);
+            let mut schema = coin_schema();
+            schema["id"] = json!("ShieldedMapPartialSpend.Coin");
+            let compiled_execution = prepare_with_context(
+                &compiled_plan,
+                &compiled_inputs,
+                context_with_schema_send_outputs(
+                    &schema,
+                    NONCE,
+                    NONCE,
+                    5,
+                    send_commitment,
+                    7,
+                    change_commitment,
+                    8,
+                ),
+                &ledger::structure::INITIAL_PARAMETERS,
+            )
+            .unwrap();
+            let checked_schedule = compiled_execution
+                .preimage
+                .check(&circuit)
+                .unwrap_or_else(|error| panic!("compiled send preimage check failed: {error:#}"));
+            assert_eq!(checked_schedule, compiled_execution.activity_schedule);
+            super::check(&compiled_execution, &circuit).unwrap();
+        }
+
+        assert!(
+            prepare_with_context(
+                &plan,
+                &inputs,
+                execution.after,
+                &ledger::structure::INITIAL_PARAMETERS,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn shielded_send_rejects_changed_claims_amounts_and_receive_booking() {
+        let (nullifier, _, send_commitment, change_coin, change_commitment) =
+            expected_split_effects();
+        let plan = send_plan();
+        let inputs = send_inputs(
+            nullifier.0.0,
+            send_commitment.0.0,
+            2,
+            change_coin.nonce.0.0,
+            3,
+            change_commitment.0.0,
+        );
+        let parameters = &ledger::structure::INITIAL_PARAMETERS;
+
+        for name in ["sourceNullifier", "sourceCommitment", "changeCommitment"] {
+            let mut wrong = inputs.clone();
+            wrong.insert(name.into(), bytes_json(&[0; 32]));
+            assert!(
+                prepare_with_context(
+                    &plan,
+                    &wrong,
+                    context_with_send_outputs(
+                        NONCE,
+                        NONCE,
+                        5,
+                        send_commitment,
+                        7,
+                        change_commitment,
+                        8,
+                    ),
+                    parameters,
+                )
+                .is_err()
+            );
+        }
+
+        for amount in [0, 5, 6] {
+            let mut wrong = inputs.clone();
+            wrong.insert("sendAmount".into(), json!(amount.to_string()));
+            assert!(
+                prepare_with_context(
+                    &plan,
+                    &wrong,
+                    context_with_send_outputs(
+                        NONCE,
+                        NONCE,
+                        5,
+                        send_commitment,
+                        7,
+                        change_commitment,
+                        8,
+                    ),
+                    parameters,
+                )
+                .is_err()
+            );
+        }
+
+        let mut wrong_nonce = inputs.clone();
+        wrong_nonce.insert("changeNonce".into(), bytes_json(&[9; 32]));
+        assert!(
+            prepare_with_context(
+                &plan,
+                &wrong_nonce,
+                context_with_send_outputs(
+                    NONCE,
+                    NONCE,
+                    5,
+                    send_commitment,
+                    7,
+                    change_commitment,
+                    8,
+                ),
+                parameters,
+            )
+            .is_err()
+        );
+        assert!(prepare_with_context(&plan, &inputs, context(NONCE, NONCE), parameters,).is_err());
+    }
+
+    #[test]
+    fn shielded_send_layout_allows_the_compiled_change_membership_reads() {
+        let mut plan = send_plan();
+        let read_only = [
+            json!({"op":"indexPath", "slot":0, "pushPath":false, "keys":[]}),
+            json!({
+                "op":"push", "storage":false, "alignment":"bytes32",
+                "expression":reference("changeNonce")
+            }),
+            json!({"op":"member"}),
+            json!({
+                "op":"popeq", "alignment":"bit", "expression":reference("changeMember")
+            }),
+        ]
+        .into_iter()
+        .map(serde_json::from_value::<Instruction>)
+        .collect::<std::result::Result<Vec<Instruction>, _>>()
+        .unwrap();
+        plan.operations.splice(6..7, read_only);
+        let Instruction::SendShieldedFromMap {
+            nonce,
+            color,
+            input_amount,
+            change_commitment,
+            ..
+        } = &plan.operations[4]
+        else {
+            unreachable!("send plan has a shielded send operation")
+        };
+
+        let (_, _, receive_index) = validate_shielded_send_layout(
+            &plan,
+            4,
+            nonce,
+            color,
+            input_amount,
+            change_commitment,
+        )
+        .unwrap();
+        assert_eq!(receive_index, 10);
     }
 }

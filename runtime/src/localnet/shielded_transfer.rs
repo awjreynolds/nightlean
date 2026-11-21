@@ -3,7 +3,8 @@ use crate::{
     Db,
     client::{BoundTransaction, HostFailure, SigningAdapter, Snapshot},
     proof::{
-        ContractOperationTarget, CurrentStateContext, LocalProver, PreparedProof, TrustedParameters,
+        ContractOperationTarget, ContractStateBinding, CurrentStateContext, LocalProver,
+        PreparedProof, TrustedParameters,
     },
 };
 use base_crypto::{fab::AlignedValue, hash::HashOutput, rng::SplittableRng};
@@ -20,6 +21,13 @@ use std::{collections::BTreeMap, future::pending};
 use transient_crypto::{commitment::PedersenRandomness, encryption, proofs::Proof};
 use zswap::{Input, Offer, Output, prove::ZswapResolver};
 
+struct BookedOutput {
+    commitment: Commitment,
+    index: u64,
+    contract_owned: bool,
+    encrypted: bool,
+}
+
 pub(super) struct BookedTransfer {
     pub(super) offer: Offer<Proof, Db>,
     pub(super) randomness: PedersenRandomness,
@@ -29,8 +37,7 @@ pub(super) struct BookedTransfer {
     input_commitment: Commitment,
     input_nullifier: Nullifier,
     input_root: transient_crypto::merkle_tree::MerkleTreeDigest,
-    output_commitment: Commitment,
-    output_index: u64,
+    outputs: Vec<BookedOutput>,
 }
 
 impl BookedTransfer {
@@ -71,19 +78,29 @@ impl BookedTransfer {
             || leaf_hash != commitment.0
             || owner.as_deref() != Some(&self.address)
             || self.qualified_coin.mt_index >= zswap.first_free
-            || indices.get(&self.output_commitment).as_deref() != Some(&self.output_index)
             || self.offer.inputs.len() != 1
-            || self.offer.outputs.len() != 1
+            || self.offer.outputs.len() != self.outputs.len()
             || !self.offer.transient.is_empty()
             || self.offer.inputs.get(0).is_none_or(|input| {
                 input.nullifier != self.input_nullifier
                     || input.merkle_tree_root != self.input_root
                     || input.contract_address.as_deref() != Some(&self.address)
             })
-            || self.offer.outputs.get(0).is_none_or(|output| {
-                output.coin_com != self.output_commitment
-                    || output.contract_address.is_some()
-                    || output.ciphertext.is_none()
+            || self.outputs.iter().any(|expected| {
+                indices.get(&expected.commitment).as_deref() != Some(&expected.index)
+                    || self
+                        .offer
+                        .outputs
+                        .iter_deref()
+                        .find(|output| output.coin_com == expected.commitment)
+                        .is_none_or(|output| {
+                            let owner_matches = if expected.contract_owned {
+                                output.contract_address.as_deref() == Some(&self.address)
+                            } else {
+                                output.contract_address.is_none()
+                            };
+                            !owner_matches || output.ciphertext.is_some() != expected.encrypted
+                        })
             })
         {
             return Err(HostFailure);
@@ -223,8 +240,12 @@ impl DevelopmentFunding<'_> {
             input_commitment: commitment,
             input_nullifier: nullifier,
             input_root,
-            output_commitment,
-            output_index,
+            outputs: vec![BookedOutput {
+                commitment: output_commitment,
+                index: output_index,
+                contract_owned: false,
+                encrypted: true,
+            }],
         });
         let expected = &self.shielded_transfer.as_ref().ok_or(Error::State)?.offer;
         let bound = BoundTransaction::prepare_shielded_transfer(
@@ -242,6 +263,211 @@ impl DevelopmentFunding<'_> {
             Error::State,
         )?;
         Ok(bound)
+    }
+
+    /// Bind one contract-owned coin to an encrypted user output and contract change.
+    pub async fn bind_shielded_map_split(
+        self,
+        target: &ContractOperationTarget,
+        current: &CurrentStateContext,
+        inputs: BTreeMap<String, Value>,
+        recipient_encryption_key: encryption::PublicKey,
+        parameters: &TrustedParameters,
+        cache: &ProofCache,
+        signer: &impl SigningAdapter,
+        rng: StdRng,
+    ) -> Result<BoundTransaction> {
+        self.bind_shielded_map_split_with_binding(
+            target,
+            current,
+            inputs,
+            recipient_encryption_key,
+            parameters,
+            cache,
+            signer,
+            rng,
+        )
+        .await
+        .map(|(bound, _)| bound)
+    }
+
+    pub(crate) async fn bind_shielded_map_split_with_binding(
+        mut self,
+        target: &ContractOperationTarget,
+        current: &CurrentStateContext,
+        inputs: BTreeMap<String, Value>,
+        recipient_encryption_key: encryption::PublicKey,
+        parameters: &TrustedParameters,
+        cache: &ProofCache,
+        signer: &impl SigningAdapter,
+        mut rng: StdRng,
+    ) -> Result<(BoundTransaction, ContractStateBinding)> {
+        let policy = self.node.policy.clone();
+        check(policy.genesis == DEVELOPMENT_GENESIS, Error::Policy)?;
+        check(inputs.len() == 3, Error::State)?;
+        let nonce = Nonce(read_bytes32(&inputs, "nonce")?);
+        let send_amount = read_uint128(&inputs, "sendAmount")?;
+        let recipient = PublicKey(read_bytes32(&inputs, "recipient")?);
+        let bytes = hex::decode(
+            target
+                .contract_address()
+                .strip_prefix("0x")
+                .unwrap_or(target.contract_address()),
+        )
+        .map_err(|_| Error::State)?;
+        let address = ContractAddress(HashOutput(bytes.try_into().map_err(|_| Error::State)?));
+
+        let snapshot = self.node.sync()?;
+        snapshot.validate(&policy).map_err(|_| Error::Network)?;
+        let current_contract = snapshot.state.contract.get(&address).ok_or(Error::State)?;
+        let current_state = tagged_state_bytes(&current_contract)?;
+        let qualified_coin = map_coin_by_nonce(&current_contract, nonce)?;
+        let info = Info::from(&qualified_coin);
+        check(send_amount > 0 && send_amount < info.value, Error::State)?;
+        let change_amount = info.value.checked_sub(send_amount).ok_or(Error::State)?;
+        let commitment = info.commitment(&Recipient::Contract(address));
+        let nullifier = info.nullifier(&SenderEvidence::Contract(address));
+        let zswap = &snapshot.state.zswap;
+        let capacity = 1u64
+            .checked_shl(u32::from(zswap.coin_coms.height()))
+            .ok_or(Error::State)?;
+        check(
+            qualified_coin.mt_index < capacity
+                && qualified_coin.mt_index < zswap.first_free
+                && zswap.coin_coms_set.contains_key(&commitment)
+                && !zswap.nullifiers.contains_key(&nullifier)
+                && zswap
+                    .past_roots
+                    .contains(&zswap.coin_coms.root().ok_or(Error::State)?),
+            Error::State,
+        )?;
+        let (leaf_hash, owner) = zswap
+            .coin_coms
+            .index(qualified_coin.mt_index)
+            .ok_or(Error::State)?;
+        check(
+            leaf_hash == commitment.0 && owner.as_deref() == Some(&address),
+            Error::State,
+        )?;
+
+        let input = Input::<_, Db>::new_contract_owned(
+            &mut rng,
+            &qualified_coin,
+            Some(GUARANTEED_SEGMENT),
+            address,
+            &zswap.coin_coms,
+        )
+        .map_err(|_| Error::State)?;
+        let user_info = info.evolve_from(
+            b"midnight:kernel:nonce_evolve",
+            send_amount,
+            qualified_coin.type_,
+        );
+        let change_info = info.evolve_from(
+            b"midnight:kernel:nonce_evolve/2",
+            change_amount,
+            qualified_coin.type_,
+        );
+        let user_output = Output::<_, Db>::new(
+            &mut rng,
+            &user_info,
+            Some(GUARANTEED_SEGMENT),
+            &recipient,
+            Some(recipient_encryption_key),
+        )
+        .map_err(|_| Error::State)?;
+        let change_output = Output::<_, Db>::new_contract_owned(
+            &mut rng,
+            &change_info,
+            Some(GUARANTEED_SEGMENT),
+            address,
+        )
+        .map_err(|_| Error::State)?;
+        let input_root = input.merkle_tree_root;
+        let user_commitment = user_output.coin_com;
+        let change_commitment = change_output.coin_com;
+        check(user_commitment != change_commitment, Error::State)?;
+        let offer = Offer::new(vec![input], vec![user_output, change_output], vec![])
+            .ok_or(Error::State)?;
+        let (_, indices) = zswap.try_apply(&offer, None).map_err(|_| Error::State)?;
+        let user_index = *indices.get(&user_commitment).ok_or(Error::State)?;
+        let change_index = *indices.get(&change_commitment).ok_or(Error::State)?;
+
+        let prepared = PreparedProof::from_contract_witness_inputs_with_com_indices(
+            target, current, inputs, indices, &mut rng,
+        )
+        .map_err(|_| Error::Proof)?;
+        let proved = prepared
+            .prove(
+                &LocalProver::new(rng.split()),
+                parameters,
+                1_048_576,
+                pending(),
+            )
+            .await
+            .map_err(|_| Error::Proof)?;
+        let binding = proved.contract_binding().ok_or(Error::State)?;
+        check(
+            binding.current_state_bytes() == Some(current_state.as_slice()),
+            Error::State,
+        )?;
+
+        let mut provider = cache.provider.clone();
+        provider.expected_data = zswap::ZSWAP_EXPECTED_FILES.to_vec();
+        let resolver = ZswapResolver(provider);
+        let randomness = offer.binding_randomness();
+        let (_, offer) = offer
+            .prove(
+                builtin_zkir::LocalProvingProvider {
+                    rng: rng.split(),
+                    resolver: &resolver,
+                    params: &resolver,
+                },
+                GUARANTEED_SEGMENT,
+            )
+            .await
+            .map_err(|_| Error::Proof)?;
+
+        self.shielded_split = Some(BookedTransfer {
+            offer,
+            randomness,
+            address,
+            current_state,
+            qualified_coin,
+            input_commitment: commitment,
+            input_nullifier: nullifier,
+            input_root,
+            outputs: vec![
+                BookedOutput {
+                    commitment: user_commitment,
+                    index: user_index,
+                    contract_owned: false,
+                    encrypted: true,
+                },
+                BookedOutput {
+                    commitment: change_commitment,
+                    index: change_index,
+                    contract_owned: true,
+                    encrypted: false,
+                },
+            ],
+        });
+        let expected = &self.shielded_split.as_ref().ok_or(Error::State)?.offer;
+        let bound = BoundTransaction::prepare_shielded_split(
+            proved.native(),
+            expected,
+            policy,
+            self.node,
+            &self,
+            signer,
+        )
+        .await
+        .map_err(|_| Error::State)?;
+        check(
+            bound.expected_state() == binding.expected_state(),
+            Error::State,
+        )?;
+        Ok((bound, binding.clone()))
     }
 }
 
@@ -262,6 +488,16 @@ fn read_bytes32(inputs: &BTreeMap<String, Value>, name: &str) -> Result<HashOutp
         *output = u8::try_from(value.as_u64().ok_or(Error::State)?).map_err(|_| Error::State)?;
     }
     Ok(HashOutput(bytes))
+}
+
+fn read_uint128(inputs: &BTreeMap<String, Value>, name: &str) -> Result<u128> {
+    let encoded = inputs
+        .get(name)
+        .and_then(Value::as_str)
+        .ok_or(Error::State)?;
+    let value = encoded.parse::<u128>().map_err(|_| Error::State)?;
+    check(value.to_string() == encoded, Error::State)?;
+    Ok(value)
 }
 
 fn tagged_state_bytes(state: &ContractState<Db>) -> Result<Vec<u8>> {
@@ -349,6 +585,16 @@ mod tests {
         ])
     }
 
+    fn partial_spend_inputs(
+        nonce: Nonce,
+        send_amount: u128,
+        recipient: PublicKey,
+    ) -> BTreeMap<String, Value> {
+        let mut inputs = spend_inputs(nonce, recipient);
+        inputs.insert("sendAmount".into(), json!(send_amount.to_string()));
+        inputs
+    }
+
     fn map_contains(state: &ContractState<Db>, nonce: Nonce) -> Result<bool> {
         let StateValue::Array(slots) = state.data.get_ref() else {
             anyhow::bail!("expected state array");
@@ -362,20 +608,35 @@ mod tests {
     #[test]
     #[ignore = "requires generated tip/spend bundles and isolated development node"]
     fn funded_shielded_map_spend_localnet() -> Result<()> {
+        funded_shielded_map_localnet(false)
+    }
+
+    #[test]
+    #[ignore = "requires generated tip/spend bundles and isolated development node"]
+    fn funded_shielded_map_partial_spend_localnet() -> Result<()> {
+        funded_shielded_map_localnet(true)
+    }
+
+    fn funded_shielded_map_localnet(split: bool) -> Result<()> {
         futures::executor::block_on(async {
-            let setting = |name| env::var(name).with_context(|| format!("missing {name}"));
-            let tip_bundle = artifacts::verify(
-                Path::new(&setting("NOCTIUM_TRANSFER_TIP_BUNDLE")?),
-                Some(&setting("NOCTIUM_TRANSFER_TIP_MANIFEST_SHA256")?),
-            )?;
-            let spend_bundle = artifacts::verify(
-                Path::new(&setting("NOCTIUM_TRANSFER_SPEND_BUNDLE")?),
-                Some(&setting("NOCTIUM_TRANSFER_SPEND_MANIFEST_SHA256")?),
-            )?;
+            let setting = |name: String| env::var(&name).with_context(|| format!("missing {name}"));
+            let prefix = if split {
+                "NOCTIUM_PARTIAL_SPEND_"
+            } else {
+                "NOCTIUM_TRANSFER_"
+            };
+            let setting_name = |suffix: &str| format!("{prefix}{suffix}");
+            let tip_bundle_path = setting(setting_name("TIP_BUNDLE"))?;
+            let tip_manifest = setting(setting_name("TIP_MANIFEST_SHA256"))?;
+            let tip_bundle = artifacts::verify(Path::new(&tip_bundle_path), Some(&tip_manifest))?;
+            let spend_bundle_path = setting(setting_name("SPEND_BUNDLE"))?;
+            let spend_manifest = setting(setting_name("SPEND_MANIFEST_SHA256"))?;
+            let spend_bundle =
+                artifacts::verify(Path::new(&spend_bundle_path), Some(&spend_manifest))?;
             let tip_circuit = IrSource::load(tip_bundle.file(Role::Circuit)?)?;
             let spend_circuit = IrSource::load(spend_bundle.file(Role::Circuit)?)?;
             let cache = ProofCache::new(
-                setting("NOCTIUM_TRANSFER_PARAMETER_CACHE")?.into(),
+                setting(setting_name("PARAMETER_CACHE"))?.into(),
                 "https://srs.midnight.network/".parse()?,
             )?;
             let policy = NetworkPolicy {
@@ -386,8 +647,9 @@ mod tests {
                 profile: crate::profile::NAME.into(),
                 max_dust: 10u128.pow(22),
             };
+            let node_url = setting(setting_name("NODE"))?;
             let node = Node::connect(
-                &setting("NOCTIUM_TRANSFER_NODE")?,
+                &node_url,
                 policy.clone(),
                 Duration::from_secs(15),
                 64 * 1024 * 1024,
@@ -556,12 +818,17 @@ mod tests {
             let recipient_encryption_key = keys.enc_public_key();
             let expected_output_index = node.sync()?.state.zswap.first_free;
             let mismatch_signer = make_signer();
-            ensure!(
+            let mismatch_inputs = if split {
+                partial_spend_inputs(Nonce(HashOutput([0x55; 32])), 2, recipient_coin_key)
+            } else {
+                spend_inputs(Nonce(HashOutput([0x55; 32])), recipient_coin_key)
+            };
+            let mismatch = if split {
                 make_funding()
-                    .bind_shielded_map_spend(
+                    .bind_shielded_map_split(
                         &spend,
                         &current,
-                        spend_inputs(Nonce(HashOutput([0x55; 32])), recipient_coin_key),
+                        mismatch_inputs,
                         recipient_encryption_key,
                         &spend_parameters,
                         &cache,
@@ -569,32 +836,97 @@ mod tests {
                         StdRng::from_entropy(),
                     )
                     .await
-                    .is_err(),
-                "mismatched nonce bound a spend"
-            );
+            } else {
+                make_funding()
+                    .bind_shielded_map_spend(
+                        &spend,
+                        &current,
+                        mismatch_inputs,
+                        recipient_encryption_key,
+                        &spend_parameters,
+                        &cache,
+                        &mismatch_signer,
+                        StdRng::from_entropy(),
+                    )
+                    .await
+            };
+            ensure!(mismatch.is_err(), "mismatched nonce bound a spend");
             ensure!(
                 node.finalized_contract_state(target.contract_address())?
                     .bytes
                     == tip_receipt.contract_state,
                 "mismatched nonce changed the contract Map"
             );
+            if split {
+                let full_value_signer = make_signer();
+                ensure!(
+                    make_funding()
+                        .bind_shielded_map_split(
+                            &spend,
+                            &current,
+                            partial_spend_inputs(coin.nonce, 5, recipient_coin_key),
+                            recipient_encryption_key,
+                            &spend_parameters,
+                            &cache,
+                            &full_value_signer,
+                            StdRng::from_entropy(),
+                        )
+                        .await
+                        .is_err(),
+                    "full-value split was accepted"
+                );
+                ensure!(
+                    node.finalized_contract_state(target.contract_address())?
+                        .bytes
+                        == tip_receipt.contract_state,
+                    "invalid split amount changed the contract Map"
+                );
+            }
             let spend_signer = make_signer();
-            let spend_bound = make_funding()
-                .bind_shielded_map_spend(
-                    &spend,
-                    &current,
-                    spend_inputs(coin.nonce, recipient_coin_key),
-                    recipient_encryption_key,
-                    &spend_parameters,
-                    &cache,
-                    &spend_signer,
-                    StdRng::from_entropy(),
-                )
-                .await
-                .context("bind shielded Map spend")?;
+            let (spend_bound, spend_binding) = if split {
+                let (bound, binding) = make_funding()
+                    .bind_shielded_map_split_with_binding(
+                        &spend,
+                        &current,
+                        partial_spend_inputs(coin.nonce, 2, recipient_coin_key),
+                        recipient_encryption_key,
+                        &spend_parameters,
+                        &cache,
+                        &spend_signer,
+                        StdRng::from_entropy(),
+                    )
+                    .await
+                    .context("bind shielded Map split")?;
+                (bound, Some(binding))
+            } else {
+                let bound = make_funding()
+                    .bind_shielded_map_spend(
+                        &spend,
+                        &current,
+                        spend_inputs(coin.nonce, recipient_coin_key),
+                        recipient_encryption_key,
+                        &spend_parameters,
+                        &cache,
+                        &spend_signer,
+                        StdRng::from_entropy(),
+                    )
+                    .await
+                    .context("bind shielded Map spend")?;
+                (bound, None)
+            };
             let spend_receipt = finalize(&node, &spend_bound)
                 .await
                 .context("finalize shielded Map spend")?;
+            if let Some(binding) = spend_binding {
+                current = binding
+                    .admit_committed_state(
+                        &spend_receipt.contract_state,
+                        spend_bound.expected_state(),
+                        &spend_receipt.finalized_hash,
+                        false,
+                    )
+                    .context("restore post-split state")?;
+            }
             let spent_state: ContractState<Db> =
                 super::super::native_decode(&spend_receipt.contract_state)
                     .context("decode spend receipt state")?;
@@ -602,8 +934,47 @@ mod tests {
                 !map_contains(&spent_state, coin.nonce)?,
                 "spent Map entry remains"
             );
-
             let spent_snapshot = node.sync()?;
+            let send_amount = if split { 2 } else { qualified_coin.value };
+            let change_info = split.then(|| {
+                Info::from(&qualified_coin).evolve_from(
+                    b"midnight:kernel:nonce_evolve/2",
+                    qualified_coin.value - send_amount,
+                    qualified_coin.type_,
+                )
+            });
+            let change_commitment = change_info
+                .as_ref()
+                .map(|info| info.commitment(&CoinRecipient::Contract(address)));
+            if let (Some(change_info), Some(change_commitment)) =
+                (&change_info, change_commitment.as_ref())
+            {
+                let change_coin = map_coin_by_nonce(&spent_state, change_info.nonce)
+                    .context("read qualified change coin")?;
+                ensure!(
+                    change_coin.value == qualified_coin.value - send_amount
+                        && change_coin.type_ == qualified_coin.type_
+                        && Some(change_coin.mt_index) == expected_output_index.checked_add(1),
+                    "change coin value, type, or output index mismatch"
+                );
+                let (change_leaf, change_owner) = spent_snapshot
+                    .state
+                    .zswap
+                    .coin_coms
+                    .index(change_coin.mt_index)
+                    .ok_or_else(|| anyhow::anyhow!("contract change leaf missing"))?;
+                ensure!(
+                    change_leaf == change_commitment.0
+                        && change_owner.as_deref() == Some(&address)
+                        && spent_snapshot
+                            .state
+                            .zswap
+                            .coin_coms_set
+                            .contains_key(&change_commitment),
+                    "finalized change commitment or owner mismatch"
+                );
+            }
+
             let input_nullifier =
                 Info::from(&qualified_coin).nullifier(&SenderEvidence::Contract(address));
             ensure!(
@@ -616,7 +987,7 @@ mod tests {
             );
             let output_coin = Info::from(&qualified_coin).evolve_from(
                 b"midnight:kernel:nonce_evolve",
-                qualified_coin.value,
+                send_amount,
                 qualified_coin.type_,
             );
             let output_commitment =
@@ -650,7 +1021,10 @@ mod tests {
                 .guaranteed_coins
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("missing guaranteed offer"))?;
-            ensure!(output.outputs.len() == 1, "unexpected output count");
+            ensure!(
+                output.outputs.len() == if split { 2 } else { 1 },
+                "unexpected output count"
+            );
             let ciphertext = output
                 .outputs
                 .get(0)
@@ -660,14 +1034,34 @@ mod tests {
                 keys.try_decrypt(ciphertext) == Some(output_coin),
                 "recipient could not decrypt the exact output coin"
             );
+            if split {
+                let change_output = output
+                    .outputs
+                    .get(1)
+                    .ok_or_else(|| anyhow::anyhow!("missing contract change output"))?;
+                let expected_change_commitment = change_commitment
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("missing expected change commitment"))?;
+                ensure!(
+                    &change_output.coin_com == expected_change_commitment
+                        && change_output.contract_address.as_deref() == Some(&address)
+                        && change_output.ciphertext.is_none(),
+                    "sealed change output mismatch"
+                );
+            }
 
             let replay_signer = make_signer();
-            ensure!(
+            let replay_inputs = if split {
+                partial_spend_inputs(coin.nonce, 2, recipient_coin_key)
+            } else {
+                spend_inputs(coin.nonce, recipient_coin_key)
+            };
+            let replay = if split {
                 make_funding()
-                    .bind_shielded_map_spend(
+                    .bind_shielded_map_split(
                         &spend,
                         &current,
-                        spend_inputs(coin.nonce, recipient_coin_key),
+                        replay_inputs,
                         recipient_encryption_key,
                         &spend_parameters,
                         &cache,
@@ -675,15 +1069,31 @@ mod tests {
                         StdRng::from_entropy(),
                     )
                     .await
-                    .is_err(),
-                "replayed nonce bound another spend"
-            );
+            } else {
+                make_funding()
+                    .bind_shielded_map_spend(
+                        &spend,
+                        &current,
+                        replay_inputs,
+                        recipient_encryption_key,
+                        &spend_parameters,
+                        &cache,
+                        &replay_signer,
+                        StdRng::from_entropy(),
+                    )
+                    .await
+            };
+            ensure!(replay.is_err(), "replayed nonce bound another spend");
             ensure!(
                 node.finalized_contract_state(target.contract_address())?
                     .bytes
                     == spend_receipt.contract_state,
                 "replayed nonce changed the contract Map"
             );
+            let mut rejected = vec!["mismatchedNonce", "replayedNonce"];
+            if split {
+                rejected.insert(1, "fullValueAmount");
+            }
             println!(
                 "{}",
                 json!({
@@ -696,8 +1106,12 @@ mod tests {
                     "inputNullifier": hex::encode(input_nullifier.0.0),
                     "outputCommitment": hex::encode(output_commitment.0.0),
                     "outputIndex": expected_output_index,
+                    "sendAmount": send_amount,
+                    "changeCommitment": change_commitment.as_ref().map(|value| hex::encode(value.0.0)),
+                    "changeIndex": split.then(|| expected_output_index.checked_add(1)).flatten(),
+                    "changeValue": split.then(|| qualified_coin.value - send_amount),
                     "decryptedOutput": true,
-                    "rejected": ["mismatchedNonce", "replayedNonce"],
+                    "rejected": rejected,
                     "contractStateSha256": artifacts::digest(&spend_receipt.contract_state)
                 })
             );

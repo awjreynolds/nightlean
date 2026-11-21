@@ -5,6 +5,7 @@ import Noctium.Semantics
 import Noctium.Disclosure
 import Noctium.Types.ValueSchema
 import Noctium.NativeExpression
+import Noctium.Wire
 import Lean
 
 namespace Noctium.Backend.Impact
@@ -148,6 +149,9 @@ inductive Op where
       (amount : Expr (.uint (2 ^ 128 - 1))) (commitment : Expr (.bytes 32))
   | spendShieldedFromMap (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (recipient nullifier outputCommitment : Expr (.bytes 32))
+  | sendShieldedFromMap (nonce color : Expr (.bytes 32))
+      (inputAmount sendAmount : Expr (.uint (2 ^ 128 - 1)))
+      (recipient nullifier outputCommitment changeCommitment : Expr (.bytes 32))
   | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
@@ -225,15 +229,21 @@ private def shieldedCoinDigest (domainBytes : String) (tag : Nat) (nonce color :
 
 private def spendShieldedOp (nonce color : Expr (.bytes 32))
     (amount : Expr (.uint (2 ^ 128 - 1))) (recipient selfAddress : Expr (.bytes 32)) : Op :=
-  let domain := "midnight:kernel:nonce_evolve".toList.foldr
-    (fun byte rest => byte.toNat + 256 * rest) 0
-  let evolved : Expr (.bytes 32) :=
-    .concatBytes
-      (.sliceBytes (.toBytes32 (.transientHash [.native domain, .bytesField nonce 1])) 0 31)
-      (.bytesLiteral 1 [0])
+  let evolved := Wire.shieldedOutputNonce nonce
   let nullifier := shieldedCoinDigest "midnight:zswap-cn[v1]" 0 nonce color amount selfAddress
   let output := shieldedCoinDigest "midnight:zswap-cc[v1]" 1 evolved color amount recipient
   .spendShieldedFromMap nonce color amount recipient nullifier output
+
+private def sendShieldedOp (nonce color : Expr (.bytes 32))
+    (inputAmount sendAmount : Expr (.uint (2 ^ 128 - 1)))
+    (recipient selfAddress : Expr (.bytes 32)) : Op :=
+  let nullifier := shieldedCoinDigest "midnight:zswap-cn[v1]" 0 nonce color inputAmount selfAddress
+  let sentNonce := Wire.shieldedOutputNonce nonce
+  let output := shieldedCoinDigest "midnight:zswap-cc[v1]" 1 sentNonce color sendAmount recipient
+  let changeNonce := Wire.shieldedChangeNonce nonce
+  let changeAmount : Expr (.uint (2 ^ 128 - 1)) := .usub inputAmount sendAmount
+  let change := shieldedCoinDigest "midnight:zswap-cc[v1]" 0 changeNonce color changeAmount selfAddress
+  .sendShieldedFromMap nonce color inputAmount sendAmount recipient nullifier output change
 
 private def shieldedClaimFieldGroups (effectSlot : Nat) (digest : Expr (.bytes 32)) :
     List (List Scalar) :=
@@ -607,6 +617,9 @@ def Op.fields : Op → List Scalar
       (receiveShieldedFieldGroups slot nonce color amount commitment).flatten
   | .spendShieldedFromMap _ _ _ _ nullifier output =>
       (shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output).flatten
+  | .sendShieldedFromMap _ _ _ _ _ nullifier output change =>
+      (shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output ++
+        shieldedClaimFieldGroups 2 change).flatten
   | .mintShielded domain amount => (mintFieldGroups 4 domain amount).flatten
   | .mintUnshielded domain amount => (mintFieldGroups 5 domain amount).flatten
   | .incUnshieldedInputs color amount isUnshielded =>
@@ -710,6 +723,9 @@ def Op.fieldGroups : Op → List (List Scalar)
       receiveShieldedFieldGroups slot nonce color amount commitment
   | .spendShieldedFromMap _ _ _ _ nullifier output =>
       shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output
+  | .sendShieldedFromMap _ _ _ _ _ nullifier output change =>
+      shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output ++
+        shieldedClaimFieldGroups 2 change
   | .mintShielded domain amount => mintFieldGroups 4 domain amount
   | .mintUnshielded domain amount => mintFieldGroups 5 domain amount
   | .incUnshieldedInputs color amount isUnshielded =>
@@ -1349,6 +1365,9 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>
     pure {plan with operations := plan.operations ++ [
       spendShieldedOp nonce color amount recipient selfAddress]}
+  | .sendShieldedFromMap _ nonce color inputAmount sendAmount recipient selfAddress =>
+    pure {plan with operations := plan.operations ++ [
+      sendShieldedOp nonce color inputAmount sendAmount recipient selfAddress]}
   | .checkpoint => pure {plan with operations := plan.operations ++ [.checkpoint]}
   | .mintShielded domain amount =>
     pure {plan with operations := plan.operations ++ [.mintShielded domain amount]}
@@ -1973,6 +1992,9 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>
     plan := {plan with operations := plan.operations ++ [
       spendShieldedOp nonce color amount recipient selfAddress]}
+  | .sendShieldedFromMap _ nonce color inputAmount sendAmount recipient selfAddress =>
+    plan := {plan with operations := plan.operations ++ [
+      sendShieldedOp nonce color inputAmount sendAmount recipient selfAddress]}
   | .checkpoint => plan := {plan with operations := plan.operations ++ [.checkpoint]}
   | .mintShielded domain amount =>
     plan := {plan with operations := plan.operations ++ [.mintShielded domain amount]}
@@ -2395,6 +2417,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
   | .receiveShieldedToMap .. => throw "shielded coin receive uses its dedicated native-plan operation JSON"
   | .spendShieldedFromMap .. => throw "shielded coin spend uses its dedicated native-plan operation JSON"
+  | .sendShieldedFromMap .. => throw "shielded coin send uses its dedicated native-plan operation JSON"
   | .mintShielded .. => throw "shielded mint uses its dedicated native-plan operation JSON"
   | .mintUnshielded .. => throw "unshielded mint uses its dedicated native-plan operation JSON"
   | .incUnshieldedInputs .. => throw "unshielded input accumulation uses its dedicated native-plan operation JSON"

@@ -582,6 +582,12 @@ inductive Effect where
   The backend derives native nullifier and output-commitment claims. -/
   | spendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (recipient selfAddress : Expr (.bytes 32))
+  /-- Split a recorded shielded coin between one recipient output and one
+  contract-owned change output. The frontend removes the old map key and then
+  reuses receiveShieldedToMap to qualify and insert the change coin. -/
+  | sendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
+      (inputAmount sendAmount : Expr (.uint (2 ^ 128 - 1)))
+      (recipient selfAddress : Expr (.bytes 32))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
       (isUnshielded : Expr .bool)
@@ -1082,7 +1088,7 @@ private def Constructor.validate (caps : Capabilities) (states : List StateDecl)
 
 private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
-    .receiveShieldedToMap state .. |
+    .receiveShieldedToMap state .. | .sendShieldedFromMap state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
     .emptyMapPath state .. | .setInsert state .. | .removePath state .. |
@@ -1284,6 +1290,22 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         nonce.validate caps env
         color.validate caps env
         amount.validate caps env
+        recipient.validate caps env
+        selfAddress.validate caps env
+        pure []
+      | .sendShieldedFromMap state nonce color inputAmount sendAmount recipient selfAddress => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown shielded coin map '{state}'"
+        let .tree (.map keyTy (.composite compositeEnv recordType)) := declaration.kind
+          | throw s!"shielded coin send requires a root Bytes32-keyed tree Map '{state}'"
+        unless keyTy == .bytes 32 do
+          throw "shielded coin map key must be Bytes32"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        inputAmount.validate caps env
+        sendAmount.validate caps env
         recipient.validate caps env
         selfAddress.validate caps env
         pure []

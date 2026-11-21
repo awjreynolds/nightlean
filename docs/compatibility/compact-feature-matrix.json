@@ -1813,7 +1813,7 @@
       "layer": "language-ledger",
       "surface": "Kernel.claimZswapCoinReceive",
       "noctiumStatus": "related-subset",
-      "notes": "The native mint-and-receive fixture claims one guaranteed contract-owned output with its Ledger commitment and finalizes on localnet. A standalone public source primitive and other offer shapes remain open.",
+      "notes": "The native mint-and-receive fixture claims one guaranteed contract-owned output. The partial spend also claims and retains one change output. Both finalize on Ledger 9.1.0.1. A standalone public source primitive and other offer shapes remain open.",
       "source": [
         "adt"
       ],
@@ -1823,6 +1823,7 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "docs/development/shielded-partial-spend-localnet-receipt.json",
         "docs/development/shielded-receive-localnet-receipt.json"
       ],
       "equivalence": "unverified"
@@ -1832,7 +1833,7 @@
       "layer": "language-ledger",
       "surface": "Kernel.claimZswapCoinSpend",
       "noctiumStatus": "related-subset",
-      "notes": "The unguarded whole-coin Map spend claims one guaranteed user-owned output and finalizes on Ledger 9.1.0.1 with ZKIR 3.2.1. It covers one input and one full-value output.",
+      "notes": "Whole and partial root Map spends finalize on Ledger 9.1.0.1 with ZKIR 3.2.1. The partial case claims one user output and one contract-owned change output for one qualified input.",
       "source": [
         "adt"
       ],
@@ -1842,6 +1843,7 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "docs/development/shielded-partial-spend-localnet-receipt.json",
         "docs/development/shielded-spend-localnet-receipt.json",
         "docs/development/compact-shielded-coin-map.md"
       ],
@@ -2429,7 +2431,7 @@
       "layer": "language-ledger",
       "surface": "Map.insertCoin",
       "noctiumStatus": "related-subset",
-      "notes": "The same-call mint-and-receive fixture finalizes on localnet and stores the Ledger-assigned output index in a root Bytes32-keyed Map. General Map.insertCoin remains open.",
+      "notes": "Native same-call mint-and-receive and partial-spend change finalize on Ledger 9.1.0.1 and store the Ledger-assigned index in a root Bytes32-keyed Map. General Map.insertCoin remains open.",
       "source": [
         "adt"
       ],
@@ -2439,6 +2441,7 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "docs/development/shielded-partial-spend-localnet-receipt.json",
         "docs/development/shielded-receive-localnet-receipt.json",
         "tests/ShieldedReceive.lean",
         "runtime/tests/shielded_receive.rs",
@@ -5214,7 +5217,7 @@
       "layer": "standard-library",
       "surface": "sendShielded",
       "noctiumStatus": "related-subset",
-      "notes": "The pinned Compact comparator and Noctium exercise a full-value send from one qualified Map coin to one user output. Noctium finalizes this scope on Ledger 9.1.0.1 with ZKIR 3.2.1. Partial spend with retained change is tracked separately.",
+      "notes": "The pinned Compact comparator and Noctium exercise full-value and 5-to-2-plus-3 sends from one qualified Map coin. Noctium finalizes both on Ledger 9.1.0.1 with ZKIR 3.2.1, including contract change qualification.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5228,6 +5231,7 @@
         "ABI"
       ],
       "observedEvidence": [
+        "docs/development/shielded-partial-spend-localnet-receipt.json",
         "docs/development/shielded-spend-localnet-receipt.json",
         "docs/development/compact-shielded-coin-map.md"
       ],

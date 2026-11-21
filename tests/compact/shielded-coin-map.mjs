@@ -113,6 +113,53 @@ try {
     /coin nonce missing/,
   );
   console.log('Shielded whole-coin spend: exact claims, recipient output, Map removal, and replay rejection matched');
+
+  const split = await contract.circuits.withdrawPartial(
+    contextFor(query.state, 'withdrawPartial'), coin.nonce, recipient, 2n,
+  );
+  const splitQuery = split.context.callContext.currentQueryContext;
+  const splitOffer = split.context.callContext.currentZswapLocalState;
+  const [recipientOutput, changeOutput] = splitOffer.outputs;
+  assert.equal(splitOffer.inputs.length, 1);
+  assert.equal(splitOffer.outputs.length, 2);
+  assert.equal(splitOffer.currentIndex, 2n);
+  assert.deepEqual(splitQuery.effects.claimedNullifiers, afterSpend.effects.claimedNullifiers);
+  const changeCommitment = 'ac1f3bb1ec93068af7810556a541cd2fbd3eb3e8e1c4336a7e5a72ee403405c2';
+  assert.deepEqual(splitQuery.effects.claimedShieldedSpends, [
+    'ed1aadafa7d1883bc63e45853fc4b51f21fb99c6ae68c8de9a256cbc3ac299c7',
+    changeCommitment,
+  ]);
+  assert.deepEqual(splitQuery.effects.claimedShieldedReceives, [changeCommitment]);
+  assert.equal(recipientOutput.coinInfo.value, 2n);
+  assert.deepEqual(recipientOutput.coinInfo.color, coin.color);
+  assert.deepEqual(recipientOutput.coinInfo.nonce, output.coinInfo.nonce);
+  assert.equal(recipientOutput.recipient.is_left, true);
+  assert.deepEqual(recipientOutput.recipient.left, recipient);
+  assert.equal(changeOutput.coinInfo.value, 3n);
+  assert.deepEqual(changeOutput.coinInfo.color, coin.color);
+  assert.equal(Buffer.from(changeOutput.coinInfo.nonce).toString('hex'),
+    '0283a70d7732a940d63ebf3957495f2549236d165e604aa67a59d7eb746f4b00');
+  assert.equal(changeOutput.recipient.is_left, false);
+  assert.deepEqual(changeOutput.recipient.right.bytes, new Uint8Array(32));
+  assert.deepEqual([...ledger(splitQuery.state).pot], [[changeOutput.coinInfo.nonce, {
+    ...changeOutput.coinInfo,
+    mt_index: 1n,
+  }]]);
+  await assert.rejects(
+    contract.circuits.withdrawPartial(
+      contextFor(splitQuery.state, 'withdrawPartial'), coin.nonce, recipient, 2n,
+    ),
+    /coin nonce missing/,
+  );
+  for (const amount of [0n, 5n, 6n]) {
+    await assert.rejects(
+      contract.circuits.withdrawPartial(
+        contextFor(query.state, 'withdrawPartial'), coin.nonce, recipient, amount,
+      ),
+      /partial send must leave change/,
+    );
+  }
+  console.log('Shielded partial spend: exact claims, 2+3 outputs, qualified change Map row, amount bounds, and replay rejection matched');
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }

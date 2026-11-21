@@ -1,0 +1,28 @@
+{
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "changeCommitment": "e631a0b95e317a6a7993e42bdb9072087958132495141baedd559a9803ed76cd",
+  "changeIndex": 33,
+  "changeValue": 3,
+  "contractStateSha256": "cd656349dd7b5c469b25ceb05e4c674cf72c1844641ae7f59889fee3e38cd179",
+  "decryptedOutput": true,
+  "deploymentHeight": 224,
+  "inputCommitment": "1f856eb9aa07da86fe89806004dc107f6f200d0628b4601aab03edd62e571c71",
+  "inputNonce": "f6a19da6c87449d1f1d5d70f26c63bb20332a3e588d9b8b51e2d3ae0404e400b",
+  "inputNullifier": "0ed574c48187bc4f2d263ac522541373d174b7d5f71ba44b387fa47359ff1a65",
+  "outputCommitment": "7a902a2105e55e87443f32b844202cab3e774a4e2efa54d67244e50e4b6a191f",
+  "outputIndex": 32,
+  "rejected": [
+    "mismatchedNonce",
+    "fullValueAmount",
+    "replayedNonce"
+  ],
+  "sendAmount": 2,
+  "spendHeight": 231,
+  "spendTransaction": "618ce5cdbd27571e9922d3c46430f1ec4744b60304628fe1b61f01a7d4240cc3",
+  "tipHeight": 227,
+  "spendK": 15,
+  "spendRows": 19599,
+  "tipBundleManifestSha256": "27b77780e72ca0bfe4f289c23e98f1db2998c15356b0b6feea4030c837551ceb",
+  "spendBundleManifestSha256": "6b050287917a376e026fe5e65795964ced9c0af7ab024ea48fb00d9e42d5f6bc"
+}

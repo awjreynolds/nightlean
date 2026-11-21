@@ -419,6 +419,87 @@ impl BoundTransaction {
         .await
     }
 
+    #[cfg(feature = "localnet")]
+    pub(crate) async fn prepare_shielded_split(
+        contract: &ProvedNativeIntent,
+        expected_offer: &zswap::Offer<transient_crypto::proofs::Proof, Db>,
+        policy: NetworkPolicy,
+        chain: &impl ChainAdapter,
+        funding: &impl FundingAdapter,
+        signer: &impl SigningAdapter,
+    ) -> Result<Self> {
+        let Some(ContractAction::Call(call)) = contract.actions.get(0) else {
+            return Err(Error::Funding);
+        };
+        let Some(transcript) = call.guaranteed_transcript.as_deref() else {
+            return Err(Error::Funding);
+        };
+        let Some(input) = expected_offer.inputs.get(0) else {
+            return Err(Error::Funding);
+        };
+        let mut user_output = None;
+        let mut change_output = None;
+        for output in expected_offer.outputs.iter_deref() {
+            match (
+                output.contract_address.as_deref(),
+                output.ciphertext.is_some(),
+            ) {
+                (None, true) if user_output.is_none() => user_output = Some(output),
+                (Some(owner), false) if owner == &call.address && change_output.is_none() => {
+                    change_output = Some(output)
+                }
+                _ => return Err(Error::Funding),
+            }
+        }
+        let (Some(user_output), Some(change_output)) = (user_output, change_output) else {
+            return Err(Error::Funding);
+        };
+        require(
+            contract.actions.len() == 1
+                && call.fallible_transcript.is_none()
+                && transcript.effects.claimed_nullifiers.size() == 1
+                && transcript
+                    .effects
+                    .claimed_nullifiers
+                    .iter()
+                    .any(|nullifier| **nullifier == input.nullifier)
+                && transcript.effects.claimed_shielded_spends.size() == 2
+                && transcript
+                    .effects
+                    .claimed_shielded_spends
+                    .iter()
+                    .any(|commitment| **commitment == user_output.coin_com)
+                && transcript
+                    .effects
+                    .claimed_shielded_spends
+                    .iter()
+                    .any(|commitment| **commitment == change_output.coin_com)
+                && transcript.effects.claimed_shielded_receives.size() == 1
+                && transcript
+                    .effects
+                    .claimed_shielded_receives
+                    .iter()
+                    .any(|commitment| **commitment == change_output.coin_com)
+                && transcript.effects.shielded_mints.size() == 0
+                && user_output.coin_com != change_output.coin_com
+                && expected_offer.inputs.len() == 1
+                && expected_offer.outputs.len() == 2
+                && expected_offer.transient.is_empty()
+                && input.contract_address.as_deref() == Some(&call.address),
+            Error::Funding,
+        )?;
+        let expected_offer = body(&Some(storage::arena::Sp::new(expected_offer.clone())))?;
+        Self::prepare_inner(
+            contract,
+            policy,
+            chain,
+            funding,
+            signer,
+            Some(expected_offer),
+        )
+        .await
+    }
+
     async fn prepare_inner(
         contract: &ProvedNativeIntent,
         policy: NetworkPolicy,
