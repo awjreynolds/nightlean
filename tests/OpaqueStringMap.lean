@@ -44,6 +44,13 @@ private def opaqueStringReadEntry : Entrypoint :=
   | .ok _ => Bool.true
   | .error _ => Bool.false
 
+#guard ([StateKind.cell .opaqueString, .map (.bytes 32) .opaqueString,
+    .tree (.map .native (.map (.bytes 32) (.scalar .opaqueString)))]).all fun kind =>
+  let unsupported : Contract := {name := "Unsupported", state := [{name := "strings", kind}]}
+  match unsupported.validate Capabilities.source with
+  | .error diagnostic => diagnostic.message.contains "root Bytes32 tree Map value"
+  | .ok _ => Bool.false
+
 #guard match Backend.Impact.lower OpaqueStringMap.state opaqueStringStoreEntry with
   | .ok _ => Bool.true
   | .error _ => Bool.false

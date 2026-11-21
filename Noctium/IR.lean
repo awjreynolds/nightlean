@@ -1035,35 +1035,43 @@ private def validateLedgerMapKeyType (keyTy : Ty) : Except String Unit := do
   | .bytes length => unless length == 32 do throw "only Bytes32 is supported as a ledger map key"
   | _ => pure ()
 
-def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except String Unit
-  | .counter => pure ()
-  | .merkleTree depth _ => do
-    unless 2 ≤ depth && depth ≤ 32 do
-      throw "MerkleTree depth must be between 2 and 32"
-  | .scalar ty => ty.validate caps
-  | .map keyTy value => do
-    validateLedgerMapKeyType keyTy
-    keyTy.validate caps
-    value.validate caps
-  | .set keyTy => do
-    validateLedgerMapKeyType keyTy
-    keyTy.validate caps
-  | .shieldedCoinSet environment type => do
-    let fields ← LedgerValueType.shieldedCoinRecordFields environment type
-    for (_, ty) in fields do
-      ty.validate caps
-  | .composite environment type => do
-    let fields ← match LedgerValueType.recordFields environment type with
-      | .ok fields => pure fields
-      | .error _ => LedgerValueType.shieldedCoinRecordFields environment type
-    for (_, ty) in fields do
-      ty.validate caps
-    pure ()
-  | .list environment type => do
-    let fields ← LedgerValueType.listElementFields environment type
-    for (_, ty) in fields do
-      ty.validate caps
-    pure ()
+private def validateStateScalar (caps : Capabilities) (ty : Ty) : Except String Unit := do
+  if ty.isOpaqueString then
+    throw "OpaqueString is only supported as a root Bytes32 tree Map value"
+  ty.validate caps
+
+def LedgerValueType.validate (caps : Capabilities) (schema : LedgerValueType) : Except String Unit :=
+  match schema with
+  | .map (.bytes 32) (.scalar .opaqueString) => Ty.validate caps .opaqueString
+  | _ => nested schema
+where
+  nested : LedgerValueType → Except String Unit
+    | .counter => pure ()
+    | .merkleTree depth _ => do
+      unless 2 ≤ depth && depth ≤ 32 do
+        throw "MerkleTree depth must be between 2 and 32"
+    | .scalar ty => validateStateScalar caps ty
+    | .map keyTy value => do
+      validateLedgerMapKeyType keyTy
+      validateStateScalar caps keyTy
+      nested value
+    | .set keyTy => do
+      validateLedgerMapKeyType keyTy
+      validateStateScalar caps keyTy
+    | .shieldedCoinSet environment type => do
+      let fields ← LedgerValueType.shieldedCoinRecordFields environment type
+      for (_, ty) in fields do
+        validateStateScalar caps ty
+    | .composite environment type => do
+      let fields ← match LedgerValueType.recordFields environment type with
+        | .ok fields => pure fields
+        | .error _ => LedgerValueType.shieldedCoinRecordFields environment type
+      for (_, ty) in fields do
+        validateStateScalar caps ty
+    | .list environment type => do
+      let fields ← LedgerValueType.listElementFields environment type
+      for (_, ty) in fields do
+        validateStateScalar caps ty
 
 private def resolveTreeState (decls : List StateDecl) (state : String)
     (keys : List PathKey) : Except String LedgerValueType := do
@@ -1235,7 +1243,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
-      match ty.validate caps with
+      match validateStateScalar caps ty with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
   e.circuit.validate caps
@@ -1780,7 +1788,7 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
-      match ty.validate caps with
+      match validateStateScalar caps ty with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
     if let .tree schema := decl.kind then

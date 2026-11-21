@@ -30,9 +30,21 @@ NOCTIUM_OPAQUE_MAP_DIR="$PWD/build/opaque-byte-map" \
   opaque_bytes_map_round_trips_and_binds_one_compress_field -- --ignored --exact
 ```
 
-The local native check uses fresh Lean plans and relations. It exercises both an
-empty and a nonempty payload. It is separate from the ledger run below.
+The byte Map check uses fresh Lean plans and relations for an empty and a
+nonempty payload. For the string Map check, use a fresh output directory.
 [Native check](../../runtime/tests/opaque_byte_map.rs)
+
+```sh
+artifacts=$(mktemp -d)
+trap 'rm -rf "$artifacts"' EXIT
+lake exe noctium compile tests/OpaqueStringMap.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --output "$artifacts"
+NOCTIUM_OPAQUE_STRING_MAP_DIR="$artifacts" \
+  cargo test --locked --manifest-path runtime/Cargo.toml --no-default-features \
+  --features zkir-321 --test opaque_string_map \
+  opaque_string_map_round_trips_canonical_utf8 -- --ignored --exact
+```
 
 ## Ledger 9 localnet run
 
