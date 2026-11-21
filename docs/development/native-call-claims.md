@@ -132,6 +132,18 @@ Ledger 9 localnet transaction at height 10. The native client matched
 both finalized state byte strings to their expected values.
 [Named-interface composition receipt](named-interface-composition-receipt.json)
 
+The [stateful pair fixture](../../tests/ContractInterfaceComposition.lean)
+passed a grouped `UInt 8` and `Bool` through a named interface. The caller read
+the callee address from a ledger cell. One localnet transaction finalized both
+proofs and advanced both counters from zero to one. The native assembly step
+rejected a caller that expected amount `8` from a callee returning `7`.
+[Stateful composition receipt](named-interface-stateful-composition-receipt.json)
+
+With Compact 0.36.1 and runtime 0.21.0, the grouped `readPair` comparator
+returned `[7n, true]` and stored `saved = 7n` in memory. This checks the grouped
+argument and return behavior. The Noctium receipt covers atomic state updates
+across two deployed contracts.
+
 ### Bind the entrypoint and read the address from a registry
 
 The two-argument form derives the entrypoint selector from the same declared

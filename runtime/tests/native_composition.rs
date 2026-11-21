@@ -91,7 +91,7 @@ fn interface_caller_inputs(expected_amount: &str) -> BTreeMap<String, Json> {
 fn interface_callee_inputs() -> BTreeMap<String, Json> {
     BTreeMap::from([
         ("request.amount".into(), json!("7")),
-        ("request.accepted".into(), json!(true)),
+        ("request.accepted".into(), json!("1")),
     ])
 }
 

@@ -131,6 +131,7 @@ jobs:
           lake env lean tests/NativeReturns.lean
           lake env lean tests/TypedCallArguments.lean
           lake env lean tests/ContractInterfaces.lean
+          lake env lean tests/ContractInterfaceComposition.lean
           lake env lean tests/NativeCallClaims.lean
           lake env lean tests/NativeCopy.lean
           lake env lean tests/NativeOpaqueReturns.lean

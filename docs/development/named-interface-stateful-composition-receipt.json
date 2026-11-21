@@ -1,0 +1,69 @@
+{
+  "artifacts": {
+    "callee": {
+      "bundleManifestSha256": "01e31dc4d12120d5dedb43f48dcf0570a5c206eeb2b8d2ad3123c8f6237280b5",
+      "circuitSha256": "0542d8eff41647176d996e9535c22381e2f3785692d065377de244aae3ceefd6",
+      "contract": "PairInterfaceTarget",
+      "k": 7,
+      "operation": "claim",
+      "planSha256": "045c0f823ca401d8850c19feaffe7c1d808f14d5ac3c4f03618edfa405d5709e",
+      "proofParametersSha256": "e82ae890c080188355f37feaffe91372584cd810615082d9143d4dec0453fd9d",
+      "rows": 93
+    },
+    "caller": {
+      "bundleManifestSha256": "e52fde1d7990082c86a9a1c7e3aa5cfa66d1d5a37f502a67dabf43fdf7834152",
+      "circuitSha256": "42f045cbb67afa8b7778f9152a5edbb4b93719a4ce4c963c94e88e1692a5c612",
+      "contract": "PairInterfaceCaller",
+      "k": 9,
+      "operation": "claim",
+      "planSha256": "f81fa52a111421cf7c24a1ff1a67acfcae59234ce0c4d10fbe8f3c77c72883fe",
+      "proofParametersSha256": "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd",
+      "rows": 268
+    }
+  },
+  "blockHash": "ee00d5bdcbf303d6b9d4b2c629bca9482c7f824e2d7a45ef1ed38674eb3a181e",
+  "callee": {
+    "address": "352e2b8685eea8d868045facad814549186e08202e9c5a9fd4a896ad7b4f66b5",
+    "calls": "1",
+    "stateSha256": "32b9ad202b80bb93ebdafb0f605d3c7f1e3cd9b7497d16f2c161776d3208463f"
+  },
+  "caller": {
+    "address": "8d31b7962d57f5a0d9566ff2e73ef6caef3622d063fe9582e2ec0667c4852ad2",
+    "calls": "1",
+    "route": "352e2b8685eea8d868045facad814549186e08202e9c5a9fd4a896ad7b4f66b5",
+    "stateSha256": "cb61303f52a7528ba2156d00c86e06f768083b9381099d9f43e153f7187c83c0"
+  },
+  "compilerBinarySha256": "f8bdf5db334c9457bbe1d1ea01dc1cf497da277e73cdf455f1448b0c722a9bee",
+  "compilerRevision": "68d9b28b40ec0fe095c7221a5e38d56977ec86fd",
+  "deployments": [
+    {
+      "address": "8d31b7962d57f5a0d9566ff2e73ef6caef3622d063fe9582e2ec0667c4852ad2",
+      "blockHash": "8f649e46da3b68de5f23af566ab9d5a44b1d7b1fc9cc5da80d5abc7faf905e34",
+      "height": 25,
+      "transactionId": "55ce75f64ec94fb7c9a08e4eab927f4e75baab24cba98620ba92ae45f72b89b8"
+    },
+    {
+      "address": "352e2b8685eea8d868045facad814549186e08202e9c5a9fd4a896ad7b4f66b5",
+      "blockHash": "0cca825ce976407fea80622e60754a46ea91772e04d184841c35c1bcb3885f92",
+      "height": 28,
+      "transactionId": "5546f7d8d5e0cac4d5d09c03ba3baa2f8685d3b434e7a860a0db5e758f288614"
+    }
+  ],
+  "exactPredictedStateAccepted": true,
+  "extrinsicHash": "9904832044602f437fefdd3bd894b259e4d9febe00585901f9cc2ea0dd9bef85",
+  "extrinsicIndex": 4,
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "height": 31,
+  "independentProvers": false,
+  "intentId": "57da1aeb4c7a50c32facb31bd9fe149813f663f6708e8249e3adf6d5212a9bf5",
+  "ledgerParametersBlockHash": "c66bb0af5dd9013ca1006a2e58a8d8a8b0ff3d429d246bd970b8b03b9cf25886",
+  "ledgerParametersHeight": 8,
+  "ledgerParametersSha256": "d7d5f27e5dba936f21c14a8a8a1d5128c65f17fd09b2958c5b3c3593a94cd708",
+  "mismatchedResultRejectedBeforeProving": true,
+  "nativeZkirBinarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+  "nodeImage": "midnightntwrk/midnight-node@sha256:0c1ad548d523c1109aa1f16daab1bf72dcb78c7e17b8a8c6d97424ad0eba7b8a",
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "publicExchange": null,
+  "sourceSha256": "9e6a29452d20e2095fad1a56e5429884dbdc3a5a41a5450263d1aaa2722759e6",
+  "transactionId": "5154eb17c03eba311a87f0bb07ff197c6b8dde600e5d10662321312c4ea7b9c7"
+}
