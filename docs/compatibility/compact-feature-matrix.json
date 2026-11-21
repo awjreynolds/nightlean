@@ -5611,8 +5611,8 @@
       "id": "C-STDLIB-CREATEZSWAPINPUT",
       "layer": "standard-library",
       "surface": "createZswapInput",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "Native shielded send stages a contract-owned input against the live ledger snapshot. The test checks the root, indexed commitment, owner and unused nullifier. Evidence covers host staging for finalized contract coins.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5625,15 +5625,17 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "runtime/src/localnet/shielded_transfer.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-CREATEZSWAPOUTPUT",
       "layer": "standard-library",
       "surface": "createZswapOutput",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "Native shielded send stages guaranteed contract outputs. The test checks the exact commitment, contract recipient and absence of wallet ciphertext. Evidence covers the contract-owned host staging route.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5646,7 +5648,9 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "runtime/src/localnet/shielded_transfer.rs"
+      ],
       "equivalence": "unverified"
     },
     {
