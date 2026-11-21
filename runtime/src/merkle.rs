@@ -243,6 +243,40 @@ pub fn merkle_tree_at(
     name: &str,
     keys: &[Value],
 ) -> Result<MerkleTreeSnapshot> {
+    let (slot, schema, aligned_keys) = typed_schema_path(declarations, name, keys)?;
+    let (depth, historic) = checked_merkle_tree_schema(schema)?;
+    let node = state_node_at_path(state, declarations.len(), slot, &aligned_keys)?;
+    merkle_tree_snapshot_from_checked_node(&node, depth, historic)
+}
+
+/// Build a snapshot after a caller has resolved a typed state path.
+pub(crate) fn merkle_tree_at_node(
+    schema: &Json,
+    node: &StateValue<Db>,
+) -> Result<MerkleTreeSnapshot> {
+    let (depth, historic) = checked_merkle_tree_schema(schema)?;
+    merkle_tree_snapshot_from_checked_node(node, depth, historic)
+}
+
+/// Resolve a declared map path with the same typed key alignment used by Merkle reads.
+/// The returned node owns a reference-counted snapshot value, while `schema` borrows
+/// the final path schema from its declaration.
+pub(crate) fn typed_state_path<'a>(
+    declarations: &'a [StateDecl],
+    state: &ChargedState<Db>,
+    name: &str,
+    keys: &[Value],
+) -> Result<(&'a Json, Sp<StateValue<Db>>)> {
+    let (slot, schema, aligned_keys) = typed_schema_path(declarations, name, keys)?;
+    let node = state_node_at_path(state, declarations.len(), slot, &aligned_keys)?;
+    Ok((schema, node))
+}
+
+fn typed_schema_path<'a>(
+    declarations: &'a [StateDecl],
+    name: &str,
+    keys: &[Value],
+) -> Result<(usize, &'a Json, Vec<AlignedValue>)> {
     ensure!(declarations.len() <= 16, "state array exceeds native limit");
     let mut matches = declarations
         .iter()
@@ -273,13 +307,20 @@ pub fn merkle_tree_at(
         });
         schema = &parts[1];
     }
+    Ok((slot, schema, aligned_keys))
+}
 
-    let (depth, historic) = checked_merkle_tree_schema(schema)?;
+fn state_node_at_path(
+    state: &ChargedState<Db>,
+    declaration_count: usize,
+    slot: usize,
+    aligned_keys: &[AlignedValue],
+) -> Result<Sp<StateValue<Db>>> {
     let StateValue::Array(root) = state.get_ref() else {
         bail!("contract state must be an array")
     };
     ensure!(
-        root.len() == declarations.len(),
+        root.len() == declaration_count,
         "contract state schema mismatch"
     );
     let mut node = Sp::new(
@@ -287,7 +328,7 @@ pub fn merkle_tree_at(
             .ok_or_else(|| anyhow!("state slot out of range"))?
             .clone(),
     );
-    for key in &aligned_keys {
+    for key in aligned_keys {
         node = match &*node {
             StateValue::Map(map) => map
                 .get(key)
@@ -295,7 +336,7 @@ pub fn merkle_tree_at(
             _ => bail!("state path does not address a map"),
         };
     }
-    merkle_tree_snapshot_from_node(&node, depth, historic)
+    Ok(node)
 }
 
 fn checked_merkle_tree_schema(schema: &Json) -> Result<(u8, bool)> {
@@ -322,7 +363,7 @@ fn checked_merkle_tree_schema(schema: &Json) -> Result<(u8, bool)> {
     Ok((depth.try_into()?, historic))
 }
 
-fn merkle_tree_snapshot_from_node(
+fn merkle_tree_snapshot_from_checked_node(
     node: &StateValue<Db>,
     depth: u8,
     historic: bool,

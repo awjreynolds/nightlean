@@ -4,6 +4,9 @@ import CompactStandardLibrary;
 export ledger flags: Map<Field, Boolean>;
 export ledger members: Set<Bytes<32>>;
 export ledger values: List<Field>;
+export ledger nestedFlags: Map<Bytes<32>, Map<Field, Boolean>>;
+export ledger nestedMembers: Map<Bytes<32>, Set<Bytes<32>>>;
+export ledger nestedValues: Map<Bytes<32>, List<Field>>;
 
 export circuit put(key: Field, value: Boolean): [] {
   flags.insert(disclose(key), disclose(value));
@@ -15,4 +18,22 @@ export circuit add(tag: Bytes<32>): [] {
 
 export circuit prepend(value: Field): [] {
   values.pushFront(disclose(value));
+}
+
+export circuit putNested(owner: Bytes<32>, key: Field, value: Boolean): [] {
+  const path = disclose(owner);
+  if (!nestedFlags.member(path)) { nestedFlags.insertDefault(path); }
+  nestedFlags.lookup(path).insert(disclose(key), disclose(value));
+}
+
+export circuit addNested(owner: Bytes<32>, tag: Bytes<32>): [] {
+  const path = disclose(owner);
+  if (!nestedMembers.member(path)) { nestedMembers.insertDefault(path); }
+  nestedMembers.lookup(path).insert(disclose(tag));
+}
+
+export circuit prependNested(owner: Bytes<32>, value: Field): [] {
+  const path = disclose(owner);
+  if (!nestedValues.member(path)) { nestedValues.insertDefault(path); }
+  nestedValues.lookup(path).pushFront(disclose(value));
 }

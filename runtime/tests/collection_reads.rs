@@ -13,8 +13,12 @@ use noctium_runtime::{
 use onchain_runtime::state::{ChargedState, ContractState, StateValue};
 use serde_json::{Value, json};
 use serialize::tagged_serialize;
+use std::sync::Mutex;
 use storage::{arena::Sp, storage::HashMap};
 use transient_crypto::curve::Fr;
+
+// Keep the pagination cases within the shared native ABI work limit.
+static PAGE_TESTS: Mutex<()> = Mutex::new(());
 
 struct Snapshot {
     plan: Vec<u8>,
@@ -34,12 +38,16 @@ impl Snapshot {
     }
 
     fn page(&self, name: &str, offset: usize, limit: usize) -> Value {
+        self.page_at(name, Vec::new(), offset, limit)
+    }
+
+    fn page_at(&self, name: &str, keys: Vec<Value>, offset: usize, limit: usize) -> Value {
         let request = serde_json::to_vec(&json!({
             "abiVersion": 1,
             "planSha256": artifacts::digest(&self.plan),
             "stateSha256": artifacts::digest(&self.state),
             "name": name,
-            "keys": [],
+            "keys": keys,
             "offset": offset,
             "limit": limit,
         }))
@@ -73,12 +81,23 @@ impl Snapshot {
     }
 
     fn status(&self, name: &str, offset: usize, limit: usize, state_sha256: &str) -> i32 {
+        self.status_at(name, Vec::new(), offset, limit, state_sha256)
+    }
+
+    fn status_at(
+        &self,
+        name: &str,
+        keys: Vec<Value>,
+        offset: usize,
+        limit: usize,
+        state_sha256: &str,
+    ) -> i32 {
         let request = serde_json::to_vec(&json!({
             "abiVersion": 1,
             "planSha256": artifacts::digest(&self.plan),
             "stateSha256": state_sha256,
             "name": name,
-            "keys": [],
+            "keys": keys,
             "offset": offset,
             "limit": limit,
         }))
@@ -102,6 +121,14 @@ impl Snapshot {
         }
         status
     }
+}
+
+fn bytes32_key(value: u8) -> Value {
+    json!({"type":"Bytes<32>","value":{"kind":"bytes","values":vec![value;32]}})
+}
+
+fn native_key(value: u64) -> Value {
+    json!({"type":"Native","value":value.to_string()})
 }
 
 fn plan(state: Vec<Value>) -> Value {
@@ -208,8 +235,48 @@ fn malformed_list_snapshot() -> Snapshot {
     )
 }
 
+fn nested_collection_snapshot() -> Snapshot {
+    let owner = [7u8; 32];
+    let flags = [(10u64, true), (2, false), (1, true)].into_iter().fold(
+        HashMap::new(),
+        |map, (key, value)| {
+            map.insert(
+                field_value(Fr::from(key)),
+                StateValue::Cell(Sp::new(field_value(Fr::from(if value { 1 } else { 0 })))),
+            )
+        },
+    );
+    let nested_flags = HashMap::new().insert(AlignedValue::from(owner), StateValue::Map(flags));
+
+    let members = [[9u8; 32], [1; 32], [4; 32]]
+        .into_iter()
+        .fold(HashMap::new(), |set, member| {
+            set.insert(AlignedValue::from(member), StateValue::Null)
+        });
+    let nested_members = HashMap::new().insert(AlignedValue::from(owner), StateValue::Map(members));
+    let nested_values =
+        HashMap::new().insert(AlignedValue::from(owner), scalar_list(&[11, 22, 33]));
+
+    Snapshot::new(
+        plan(vec![
+            json!({"name":"nestedFlags","kind":{"tree":{"map":["Bytes<32>",{"map":["Native","Bool"]}]}}}),
+            json!({"name":"nestedMembers","kind":{"tree":{"map":["Bytes<32>",{"set":"Bytes<32>"}]}}}),
+            json!({"name":"nestedValues","kind":{"tree":{"map":["Bytes<32>",{"list":{"scalar":"Native"}}]}}}),
+        ]),
+        ChargedState::new(StateValue::Array(
+            vec![
+                StateValue::Map(nested_flags),
+                StateValue::Map(nested_members),
+                StateValue::Map(nested_values),
+            ]
+            .into(),
+        )),
+    )
+}
+
 #[test]
 fn map_and_set_pages_are_typed_stable_and_bounded() {
+    let _guard = PAGE_TESTS.lock().unwrap();
     let snapshot = map_set_snapshot(false);
     let reverse = map_set_snapshot(true);
 
@@ -274,6 +341,7 @@ fn map_and_set_pages_are_typed_stable_and_bounded() {
 
 #[test]
 fn scalar_list_pages_validate_count_and_empty_sentinel() {
+    let _guard = PAGE_TESTS.lock().unwrap();
     let snapshot = list_snapshot(&[11, 22, 33]);
     assert_eq!(
         snapshot.page("empty", 0, 2),
@@ -306,6 +374,67 @@ fn scalar_list_pages_validate_count_and_empty_sentinel() {
     let malformed = malformed_list_snapshot();
     assert_eq!(
         malformed.status("values", 0, 2, &artifacts::digest(&malformed.state)),
+        INVALID_ARGUMENT
+    );
+}
+
+#[test]
+fn nested_scalar_collection_pages_follow_typed_paths() {
+    let _guard = PAGE_TESTS.lock().unwrap();
+    let snapshot = nested_collection_snapshot();
+    let owner_path = vec![bytes32_key(7)];
+
+    assert_eq!(
+        snapshot.page_at("nestedFlags", owner_path.clone(), 0, 2),
+        json!({
+            "abiVersion": 1,
+            "kind": "map",
+            "entries": [
+                {"key":"1","value":true},
+                {"key":"2","value":false}
+            ],
+            "nextOffset": 2
+        })
+    );
+    assert_eq!(
+        snapshot.page_at("nestedMembers", owner_path.clone(), 0, 2),
+        json!({
+            "abiVersion": 1,
+            "kind": "set",
+            "entries": [
+                {"kind":"bytes","values":vec![1u8;32]},
+                {"kind":"bytes","values":vec![4u8;32]}
+            ],
+            "nextOffset": 2
+        })
+    );
+    assert_eq!(
+        snapshot.page_at("nestedValues", owner_path.clone(), 1, 2),
+        json!({
+            "abiVersion": 1,
+            "kind": "list",
+            "entries": ["22", "33"],
+            "nextOffset": null
+        })
+    );
+
+    let state_digest = artifacts::digest(&snapshot.state);
+    assert_eq!(
+        snapshot.status_at("nestedFlags", vec![native_key(7)], 0, 2, &state_digest),
+        INVALID_ARGUMENT
+    );
+    assert_eq!(
+        snapshot.status_at("nestedFlags", vec![bytes32_key(8)], 0, 2, &state_digest),
+        INVALID_ARGUMENT
+    );
+    assert_eq!(
+        snapshot.status_at(
+            "nestedFlags",
+            vec![bytes32_key(7), native_key(1)],
+            0,
+            2,
+            &state_digest
+        ),
         INVALID_ARGUMENT
     );
 }
