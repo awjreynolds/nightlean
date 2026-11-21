@@ -125,6 +125,7 @@ inductive BytesOp where
   | sha256 (length : Nat)
   | sha512 (length : Nat)
   | keccak256 (length : Nat)
+  | keccak256Secp256k1Point
   | reverseBytes32
   | reverseBytes (length : Nat)
   | sliceBytes (length start stop : Nat)
@@ -148,6 +149,7 @@ def BytesOp.operationName : BytesOp → String
   | .sha256 length => s!"sha256:{length}"
   | .sha512 length => s!"sha512:{length}"
   | .keccak256 length => s!"keccak256:{length}"
+  | .keccak256Secp256k1Point => "keccak256:Secp256k1Point"
   | .reverseBytes32 => "reverseBytes32"
   | .reverseBytes length => s!"reverseBytes:{length}"
   | .sliceBytes length start stop => s!"sliceBytes:{length}:{start}:{stop}"
@@ -203,6 +205,9 @@ def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except Strin
     unless argumentCount == 1 do throw "keccak256 requires one byte-string argument"
     unless length ≤ Types.defaultLimits.maxVectorLength do throw "keccak256 input length exceeds the source limit"
     pure ([.bytes length], .bytes 32)
+  | .keccak256Secp256k1Point =>
+    unless argumentCount == 1 do throw "keccak256 Secp256k1Point requires one point argument"
+    pure ([.foreign (.point .secp256k1)], .bytes 32)
   | .reverseBytes32 =>
     unless argumentCount == 1 do throw "reverseBytes32 requires one Bytes32 argument"
     pure ([.bytes 32], .bytes 32)
@@ -1287,6 +1292,7 @@ private def inferPartialTerm (fuel : Nat) (program : Program) (scope : Nat)
         | .bool => pure Ty.bool
         | .uint maximum => pure (Ty.uint maximum)
         | .bytes _ => fail span "byte strings do not support scalar arithmetic"
+        | .opaqueBytes => fail span "OpaqueBytes do not support scalar arithmetic"
         | .jubjubScalar | .jubjubPoint =>
           fail span "Jubjub values require a qualified curve operation"
         | .foreign _ => fail span "foreign values require a qualified curve operation"
@@ -1840,6 +1846,7 @@ private def nativeOfScalar (span : SourceSpan) (value : Scalar) : Except Diagnos
   | ⟨.bool, value⟩ => pure (.cast .native value)
   | ⟨.uint _, value⟩ => pure (.cast .native value)
   | ⟨.bytes _, _⟩ => fail span "byte strings require separate native byte leaves"
+  | ⟨.opaqueBytes, _⟩ => fail span "OpaqueBytes require a Compress projection"
   | ⟨.jubjubScalar, _⟩ | ⟨.jubjubPoint, _⟩ =>
     fail span "Jubjub values require a qualified curve operation"
   | ⟨.foreign _, _⟩ => fail span "foreign values require a qualified curve operation"
@@ -1877,7 +1884,8 @@ private partial def expressionUsesName (name : String) : Expr ty → Bool
   | .native _ | .bool _ | .uint _ _ | .bytesLiteral _ _ | .bytes32Literal _
   | .foreignBase _ _ | .foreignScalar _ _ | .foreignPoint _ _ => false
   | .bytesField value _ | .bytesAt value _ | .reverseBytes value | .sliceBytes value _ _
-  | .sha256 value | .sha512 value | .keccak256 value | .persistentHash32 value | .reverseBytes32 value
+  | .sha256 value | .sha512 value | .keccak256 value | .keccak256Secp256k1Point value
+  | .persistentHash32 value | .reverseBytes32 value
   | .persistentHashNative value | .toBytes32 value | .fromBytes32 value | .fromBytes value
   | .jubjubScalarFromNative value | .jubjubScalarToNative value | .jubjubMulGenerator value
   | .jubjubNeg value | .jubjubCoordinate value _ | .foreignEncodedField value _
@@ -2463,6 +2471,9 @@ mutual
         | .keccak256 length, [value] => do
           let value ← liftD (typedExpr span (.bytes length) value)
           pure (scalarValue (Expr.keccak256 value))
+        | .keccak256Secp256k1Point, [value] => do
+          let value ← liftD (typedExpr span (.foreign (.point .secp256k1)) value)
+          pure (scalarValue (Expr.keccak256Secp256k1Point value))
         | .reverseBytes32, [value] => do
           let value ← liftD (typedExpr span (.bytes 32) value)
           pure (scalarValue (Expr.reverseBytes32 value))
@@ -3078,6 +3089,7 @@ private def traceType : TraceValue → ResultType
   | none => .unit
   | some value => .scalar (match value.kind with
     | .native => .native | .bool => .bool | .uint m => .uint m | .bytes length => .bytes length
+    | .opaqueBytes => .opaqueBytes
     | .jubjubScalar => .jubjubScalar | .jubjubPoint => .jubjubPoint
     | .foreign kind => .foreign kind)
 

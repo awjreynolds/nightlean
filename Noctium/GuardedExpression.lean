@@ -8,6 +8,7 @@ def zeroValue : (ty : Ty) → Expr ty
   | .uint maximum => .uint maximum 0
   | .bytes 32 => .bytes32Literal (List.replicate 32 0)
   | .bytes length => .bytesLiteral length (List.replicate length 0)
+  | .opaqueBytes => .ref "_noctium_unsupported_opaque_default"
   | .jubjubScalar => .jubjubScalarFromNative (.native 0)
   | .jubjubPoint => .jubjubFromCoordinates (.native 0) (.native 1)
   | .foreign (.base curve) => .foreignBase curve 0
@@ -83,9 +84,13 @@ def totalize (guard : Expr .bool) : Expr ty → Expr ty
   | .uint maximum value => .uint maximum value
   | .bytesField value index => .bytesField (totalize guard value) index
   | .bytesAt value index => .bytesAt (totalize guard value) index
+  | .opaqueBytesProjection value => .opaqueBytesProjection (totalize guard value)
   | .sha256 value => .sha256 (totalize guard value)
   | .sha512 value => .sha512 (totalize guard value)
   | .keccak256 value => .keccak256 (totalize guard value)
+  | .keccak256Secp256k1Point value =>
+    .keccak256Secp256k1Point
+      (.select guard (totalize guard value) (safeForeignPoint .secp256k1))
   | .persistentHash32 value => .persistentHash32 (totalize guard value)
   | .bytes32Literal values => .bytes32Literal values
   | .bytesLiteral length values => .bytesLiteral length values

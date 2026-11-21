@@ -9,6 +9,7 @@ def typeName : Ty → String
   | .bool => "Bool"
   | .uint maximum => s!"UIntRange<{maximum + 1}>"
   | .bytes byteLength => s!"Bytes<{byteLength}>"
+  | .opaqueBytes => "OpaqueBytes"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
   | .foreign kind => kind.sourceName
@@ -44,6 +45,7 @@ private def nativeExpressionJson : Expr ty → Json
       ("maximum", toJson (toString maximum)), ("value", toJson (toString value))]
   | .bytesField value index => Json.mkObj [("tag", toJson ("bytesField" : String)),
       ("value", nativeExpressionJson value), ("index", toJson index)]
+  | .opaqueBytesProjection value => nativeExpressionJson value
   | .bytesAt value index => Json.mkObj [("tag", toJson ("byteAt" : String)),
       ("value", nativeExpressionJson value), ("index", toJson index)]
   | .bytesLiteral length values => Json.mkObj [("tag", toJson ("bytesLiteral" : String)),
@@ -66,6 +68,9 @@ private def nativeExpressionJson : Expr ty → Json
       ("value", nativeExpressionJson value)]
   | .keccak256 (length := length) value => Json.mkObj [
       ("tag", toJson ("keccak256" : String)), ("length", toJson length),
+      ("value", nativeExpressionJson value)]
+  | .keccak256Secp256k1Point value => Json.mkObj [
+      ("tag", toJson ("keccak256Secp256k1Point" : String)),
       ("value", nativeExpressionJson value)]
   | .reverseBytes32 value => Json.mkObj [("tag", toJson ("reverseBytes32" : String)),
       ("value", nativeExpressionJson value)]

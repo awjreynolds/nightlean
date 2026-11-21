@@ -9,6 +9,7 @@ abbrev Ty.Denote : Ty → Type
   | .bool => Bool
   | .uint _ => Nat
   | .bytes _ => List Nat
+  | .opaqueBytes => List Nat
   | .jubjubScalar => Nat
   | .jubjubPoint => Nat × Nat
   | .foreign kind => kind.Denote
@@ -18,6 +19,7 @@ inductive Value where
   | bool (value : Bool)
   | uint (maximum value : Nat)
   | bytes (length : Nat) (value : List Nat)
+  | opaqueBytes (value : List Nat)
   | jubjubScalar (value : Nat)
   | jubjubPoint (x y : Nat)
   | foreignBase (curve : Foreign.Curve) (value : Nat)
@@ -31,6 +33,9 @@ def Value.as : (ty : Ty) → Value → Option ty.Denote
   | .uint maximum, .uint found n => if maximum == found then some n else none
   | .bytes length, .bytes found values =>
     if length == found && values.length == length && values.all (· ≤ 255) then some values else none
+  | .opaqueBytes, .opaqueBytes values =>
+    if values.length ≤ maxBytesLength && values.all (· ≤ 255) &&
+        (values.isEmpty || values.getLast! != 0) then some values else none
   | .jubjubScalar, .jubjubScalar scalar => some scalar
   | .jubjubPoint, .jubjubPoint x y => some (x, y)
   | .foreign (.base curve), .foreignBase found value =>
@@ -46,6 +51,7 @@ def Value.pack : (ty : Ty) → ty.Denote → Value
   | .bool, b => .bool b
   | .uint maximum, n => .uint maximum n
   | .bytes length, values => .bytes length values
+  | .opaqueBytes, values => .opaqueBytes values
   | .jubjubScalar, scalar => .jubjubScalar scalar
   | .jubjubPoint, (x, y) => .jubjubPoint x y
   | .foreign (.base curve), value => .foreignBase curve value
@@ -173,6 +179,9 @@ structure EvalContext where
   The default rejects, so evaluation never substitutes a placeholder hash. -/
   persistentHash32 : List Nat → Except String (List Nat) :=
     fun _ => .error "qualified Bytes32 persistent-hash oracle is unavailable"
+  /-- Qualified FAB Compress projection for canonical raw opaque bytes. -/
+  opaqueBytesCompress : List Nat → Except String Nat :=
+    fun _ => .error "qualified FAB Compress oracle is unavailable"
   /-- Qualified SHA-512 oracle for source byte strings. -/
   sha512 : List Nat → Except String (List Nat) :=
     fun _ => .error "qualified SHA-512 oracle is unavailable"
@@ -209,6 +218,7 @@ private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .bool, a, b => a == b
   | .uint _, a, b => a == b
   | .bytes _, a, b => a == b
+  | .opaqueBytes, a, b => a == b
   | .jubjubScalar, a, b => a == b
   | .jubjubPoint, a, b => a == b
   | .foreign _, a, b => a == b
@@ -219,6 +229,8 @@ private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   | .bool => true
   | .uint maximum => maximum ≤ ScalarPolicy.maxUint && v ≤ maximum && v < ctx.modulus
   | .bytes length => v.length == length && v.all (· ≤ 255)
+  | .opaqueBytes => v.length ≤ maxBytesLength && v.all (· ≤ 255) &&
+      (v.isEmpty || v.getLast! != 0)
   | .jubjubScalar => v < Jubjub.scalarOrder
   | .jubjubPoint => v.1 < ctx.modulus && v.2 < ctx.modulus &&
       (ctx.jubjub.pointValid v).isOk
@@ -229,6 +241,7 @@ private def defaultDenote : (ty : Ty) → ty.Denote
   | .bool => false
   | .uint _ => 0
   | .bytes length => List.replicate length 0
+  | .opaqueBytes => []
   | .jubjubScalar => 0
   | .jubjubPoint => (0, 1)
   | .foreign (.base _) | .foreign (.scalar _) => 0
@@ -249,6 +262,8 @@ theorem canonical_eq (ctx : EvalContext) (ty : Ty) (value : ty.Denote) :
       | .bool => true
       | .uint maximum => maximum ≤ ScalarPolicy.maxUint && value ≤ maximum && value < ctx.modulus
       | .bytes length => value.length == length && value.all (· ≤ 255)
+      | .opaqueBytes => value.length ≤ maxBytesLength && value.all (· ≤ 255) &&
+          (value.isEmpty || value.getLast! != 0)
       | .jubjubScalar => value < Jubjub.scalarOrder
       | .jubjubPoint => value.1 < ctx.modulus && value.2 < ctx.modulus &&
           (ctx.jubjub.pointValid value).isOk
@@ -258,6 +273,7 @@ private def scalarNumber : (ty : Ty) → ty.Denote → Except String Nat
   | .native, n | .uint _, n => pure n
   | .bool, b => pure (if b then 1 else 0)
   | .bytes _, _ => .error "byte strings do not support scalar conversion"
+  | .opaqueBytes, _ => .error "opaque byte strings do not support scalar conversion"
   | .jubjubScalar, _ => .error "Jubjub scalars do not support scalar conversion"
   | .jubjubPoint, _ => .error "Jubjub points do not support scalar conversion"
   | .foreign _, _ => .error "foreign values do not support scalar conversion"
@@ -270,6 +286,7 @@ private def scalarCast (ctx : EvalContext) (target : Ty) (number : Nat) : Except
     if maximum ≤ ScalarPolicy.maxUint && number ≤ maximum && number < ctx.modulus then pure number
     else .error "scalar conversion exceeds unsigned bound"
   | .bytes _ => .error "byte strings do not support scalar conversion"
+  | .opaqueBytes => .error "opaque byte strings do not support scalar conversion"
   | .jubjubScalar | .jubjubPoint => .error "Jubjub values do not support scalar conversion"
   | .foreign _ => .error "foreign values do not support scalar conversion"
 
@@ -480,6 +497,14 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     let values ← value.eval ctx env
     let result := bytesFieldChunk length index values
     if result < ctx.modulus then pure result else .error "noncanonical packed byte field"
+  | .opaqueBytesProjection value => do
+    let bytes ← value.eval ctx env
+    unless bytes.length ≤ maxBytesLength && bytes.all (· ≤ 255) &&
+        (bytes.isEmpty || bytes.getLast! != 0) do
+      throw "opaque byte input is not in canonical Compress form"
+    let projected ← ctx.opaqueBytesCompress bytes
+    if projected < ctx.modulus then pure projected
+    else throw "FAB Compress oracle returned a noncanonical field"
   | .bytes32Literal values =>
     if values.length == 32 && values.all (· ≤ 255) then pure values
     else .error "Bytes32 literal must contain exactly 32 byte values"
@@ -518,6 +543,13 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     let input ← value.eval ctx env
     if input.length != length || !input.all (· ≤ 255) then
       throw "Keccak-256 input is not a canonical fixed byte string"
+    let digest ← ctx.keccak256 input
+    if digest.length != 32 || !digest.all (· ≤ 255) then
+      throw "Keccak-256 oracle returned a malformed Bytes32 digest"
+    pure digest
+  | .keccak256Secp256k1Point value => do
+    let point ← value.eval ctx env
+    let input ← Foreign.secp256k1PointFabBytes point
     let digest ← ctx.keccak256 input
     if digest.length != 32 || !digest.all (· ≤ 255) then
       throw "Keccak-256 oracle returned a malformed Bytes32 digest"
@@ -1655,6 +1687,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             | .bool => false
             | .uint _ => 0
             | .bytes length => List.replicate length 0
+            | .opaqueBytes => []
             | .jubjubScalar => 0
             | .jubjubPoint => (0, 1)
             | .foreign (.base _) | .foreign (.scalar _) => 0
@@ -1666,6 +1699,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             | .bool => false
             | .uint _ => 0
             | .bytes length => List.replicate length 0
+            | .opaqueBytes => []
             | .jubjubScalar => 0
             | .jubjubPoint => (0, 1)
             | .foreign (.base _) | .foreign (.scalar _) => 0
@@ -1693,6 +1727,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             | .bool => false
             | .uint _ => 0
             | .bytes length => List.replicate length 0
+            | .opaqueBytes => []
             | .jubjubScalar => 0
             | .jubjubPoint => (0, 1)
             | .foreign (.base _) | .foreign (.scalar _) => 0

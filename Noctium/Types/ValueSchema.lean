@@ -89,6 +89,7 @@ private def valueJsonAux : Nat → AggregateValue → Except String Json
     | .scalar (.uint maximum) value => pure (Json.mkObj [("kind", toJson ("uint" : String)),
         ("maximum", toJson (toString maximum)), ("value", toJson (toString value))])
     | .scalar (.bytes _) _ => throw "byte strings require an aggregate bytes value"
+    | .scalar .opaqueBytes _ => throw "OpaqueBytes require a qualified ledger scalar schema"
     | .scalar .jubjubScalar _ | .scalar .jubjubPoint _ =>
       throw "Jubjub values require a qualified curve schema"
     | .scalar (.foreign _) _ => throw "foreign values require a qualified curve schema"

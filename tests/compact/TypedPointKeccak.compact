@@ -1,0 +1,8 @@
+pragma language_version >= 0.28;
+import CompactStandardLibrary;
+
+export ledger savedHash: Bytes<32>;
+
+export circuit pointHash(point: Secp256k1Point): [] {
+  savedHash = disclose(keccak256<Secp256k1Point>(point));
+}

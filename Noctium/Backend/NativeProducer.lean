@@ -213,6 +213,13 @@ private def nativeFieldAtom : Json := Json.mkObj [
   ("tag", toJson ("atom" : String)),
   ("value", Json.mkObj [("tag", toJson ("field" : String))])]
 
+private def byteAtom (length : Nat) : Json := Json.mkObj [
+  ("tag", toJson ("atom" : String)),
+  ("value", Json.mkObj [("tag", toJson ("bytes" : String)), ("length", toJson length)])]
+
+private def secp256k1PointKeccakAlignment : Json := Json.arr #[
+  byteAtom 24, byteAtom 8, byteAtom 24, byteAtom 8, nativeFieldAtom]
+
 /-- Accept only the single fixed-byte source preimage, or the empty preimage.
 Canonical comparison rejects mixed atoms, extra fields and alternate number forms. -/
 private def fixedByteHashLength (alignment : Json) : Except String Nat := do
@@ -238,6 +245,29 @@ private def checkedFixedByteHashTerm (opcode : String) (alignment : Json)
     ensure (value.maximum ≤ 2 ^ (8 * bytesChunkWidth length index) - 1)
       "byte hash operand lacks its exact chunk range bound"
   pure (fixedByteHashTerm opcode length (values.map (·.term)))
+
+private def checkedSecp256k1PointKeccakTerm (alignment : Json)
+    (values : List Fact) : Except String Term := do
+  ensure (alignment == secp256k1PointKeccakAlignment)
+    "Secp256k1Point Keccak requires the canonical FAB alignment"
+  let kind := Foreign.Kind.point .secp256k1
+  let maxima := List.range kind.encodedFieldCount |>.map (foreignEncodedFieldMaximum kind)
+  ensure (values.length == maxima.length)
+    "Secp256k1Point Keccak requires five encoded field operands"
+  for (value, maximum) in values.zip maxima do
+    ensure (value.maximum ≤ maximum)
+      "Secp256k1Point Keccak operand lacks its exact Encode range bound"
+  let some first := values.head? | throw "Secp256k1Point Keccak requires five encoded field operands"
+  let point ← match first.term with
+    | Term.unary opcode point => do
+      ensure (opcode == s!"foreign_encode:{kind.nativeName}:0")
+        "Secp256k1Point Keccak input is not a typed Encode projection"
+      pure point
+    | _ => throw "Secp256k1Point Keccak input is not a typed Encode projection"
+  for (value, index) in values.zipIdx do
+    ensure (value.term == foreignEncodedFieldTerm kind point index)
+      "Secp256k1Point Keccak fields must come from one ordered typed Encode"
+  pure (.unary "keccak256_secp256k1_point" point)
 
 private def bytes32FromChunksTerm (low31 highByte : Term) : Term :=
   .unary "bytes32_from_chunks" (.hash [low31, highByte])
@@ -494,7 +524,10 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     else pure state
   | "sha512" | "keccak256" => do
     let values ← nativeArguments state instruction "inputs"
-    let term ← checkedFixedByteHashTerm opcode (← instruction.getObjVal? "alignment") values
+    let alignment ← instruction.getObjVal? "alignment"
+    let term ← if opcode == "keccak256" && alignment == secp256k1PointKeccakAlignment then
+        checkedSecp256k1PointKeccakTerm alignment values
+      else checkedFixedByteHashTerm opcode alignment values
     let fact ← combine term 0 values
     defineResult state instruction {fact with valueType := byteValueType (if opcode == "sha512" then 64 else 32)}
   | "persistent_hash" => do
@@ -760,6 +793,7 @@ def sourceMaximum : Ty → Nat
   | .bool => 1
   | .uint maximum => maximum
   | .bytes _ => 0
+  | .opaqueBytes => Field.modulus - 1
   | .jubjubScalar => Jubjub.scalarOrder - 1
   | .jubjubPoint | .foreign _ => 0
 

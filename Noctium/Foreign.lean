@@ -274,6 +274,21 @@ def encodePoint (curve : Curve) (point : Point) : Except String (List Nat) := do
     if curve == .curve25519 then pure (xFields ++ yFields)
     else pure (xFields ++ yFields ++ [0])
 
+private def littleEndianBytes (length value : Nat) : List Nat :=
+  (List.range length).map fun index => value / (256 ^ index) % 256
+
+/-- Compact's `keccak256<Secp256k1Point>` hashes the canonical FAB encoding:
+two 24-byte/8-byte coordinate pairs and a 32-byte identity field. -/
+def secp256k1PointFabBytes (point : Point) : Except String (List Nat) := do
+  let [xLow, xHigh, yLow, yHigh, identity] ← encodePoint .secp256k1 point
+    | throw "Secp256k1 point Encode must produce five fields"
+  let preimage := littleEndianBytes 24 xLow ++ littleEndianBytes 8 xHigh ++
+    littleEndianBytes 24 yLow ++ littleEndianBytes 8 yHigh ++
+    littleEndianBytes 32 identity
+  unless preimage.length == 96 && preimage.all (· ≤ 255) do
+    throw "Secp256k1 point FAB encoding is not a canonical 96-byte value"
+  pure preimage
+
 /-- Decode canonical Secp flags or Curve25519 coordinates, then validate. -/
 def decodePoint (curve : Curve) (encoding : List Nat) : Except String Point := do
   if curve == .curve25519 then

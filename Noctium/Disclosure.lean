@@ -40,11 +40,13 @@ origins. Missing references fail closed instead of becoming public values. -/
 def origins (env : Environment) : Expr ty → Except String Origins
   | .native _ | .bool _ | .uint _ _ => pure []
   | .bytesField value _ | .bytesAt value _ => origins env value
+  | .opaqueBytesProjection value => origins env value
   | .bytesLiteral _ _ => pure []
   | .reverseBytes value | .sliceBytes value .. => origins env value
   | .concatBytes left right => do
     pure (merge (← origins env left) (← origins env right))
-  | .sha256 value | .sha512 value | .keccak256 value => origins env value
+  | .sha256 value | .sha512 value | .keccak256 value
+  | .keccak256Secp256k1Point value => origins env value
   | .reverseBytes32 value => origins env value
   | .persistentHash32 value => origins env value
   | .bytes32Literal _ => pure []

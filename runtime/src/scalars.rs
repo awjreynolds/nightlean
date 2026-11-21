@@ -7,6 +7,7 @@ use num_bigint::BigUint;
 
 pub const MAX_UINT_BITS: usize = 248;
 pub const MAX_BYTES_LENGTH: usize = 1024;
+pub(super) const MAX_OPAQUE_BYTES_LENGTH: usize = 1_048_576;
 pub fn max_uint() -> BigUint {
     (BigUint::from(1u8) << MAX_UINT_BITS) - 1u8
 }
@@ -42,6 +43,7 @@ pub enum ScalarType {
     UInt(BigUint),
     Bytes32,
     Bytes(usize),
+    OpaqueBytes,
     JubjubScalar,
     JubjubPoint,
     #[cfg(feature = "zkir-321")]
@@ -73,6 +75,7 @@ impl ScalarType {
             "Native" => Ok(Self::Native),
             "Bool" => Ok(Self::Bool),
             "Bytes<32>" => Ok(Self::Bytes32),
+            "OpaqueBytes" => Ok(Self::OpaqueBytes),
             "JubjubScalar" => Ok(Self::JubjubScalar),
             "JubjubPoint" => Ok(Self::JubjubPoint),
             _ => {
@@ -132,6 +135,7 @@ impl Value {
             Self::UInt { maximum, .. } => ScalarType::UInt(maximum.clone()),
             Self::Bytes(bytes) if bytes.len() == 32 => ScalarType::Bytes32,
             Self::Bytes(bytes) => ScalarType::Bytes(bytes.len()),
+            Self::OpaqueBytes(_) => ScalarType::OpaqueBytes,
             Self::JubjubScalar(_) => ScalarType::JubjubScalar,
             Self::JubjubPoint(_) => ScalarType::JubjubPoint,
             #[cfg(feature = "zkir-321")]
@@ -143,6 +147,16 @@ impl Value {
         if let Self::UInt { number, maximum } = self {
             ensure!(number <= maximum, "unsigned value outside declared type");
         }
+        if let Self::OpaqueBytes(bytes) = self {
+            ensure!(
+                bytes.len() <= MAX_OPAQUE_BYTES_LENGTH,
+                "opaque byte value exceeds native limit"
+            );
+            ensure!(
+                bytes.is_empty() || bytes.last() != Some(&0),
+                "opaque byte value has trailing zero bytes"
+            );
+        }
         Ok(())
     }
     fn number(&self) -> Result<BigUint> {
@@ -150,7 +164,9 @@ impl Value {
             Self::Native(n) => BigUint::from_bytes_le(&n.as_le_bytes()),
             Self::Bool(b) => BigUint::from(u8::from(*b)),
             Self::UInt { number, .. } => number.clone(),
-            Self::Bytes(_) => bail!("bytes have no numeric scalar encoding"),
+            Self::Bytes(_) | Self::OpaqueBytes(_) => {
+                bail!("bytes have no numeric scalar encoding")
+            }
             Self::JubjubScalar(_) | Self::JubjubPoint(_) => {
                 bail!("Jubjub values require explicit typed conversions")
             }
@@ -162,7 +178,9 @@ impl Value {
         self.validate()?;
         target.validate()?;
         let opaque = match self {
-            Self::Bytes(_) | Self::JubjubScalar(_) | Self::JubjubPoint(_) => true,
+            Self::Bytes(_) | Self::OpaqueBytes(_) | Self::JubjubScalar(_) | Self::JubjubPoint(_) => {
+                true
+            }
             #[cfg(feature = "zkir-321")]
             Self::Foreign(_) => true,
             _ => false,
@@ -182,7 +200,9 @@ impl Value {
                 number,
                 maximum: maximum.clone(),
             },
-            ScalarType::Bytes32 | ScalarType::Bytes(_) => bail!("scalars cannot be cast to bytes"),
+            ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes => {
+                bail!("scalars cannot be cast to bytes")
+            }
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
                 bail!("scalars cannot be cast to Jubjub values")
             }
@@ -202,6 +222,9 @@ impl Value {
             Self::Bool(b) => serde_json::Value::Bool(*b),
             Self::UInt { number, .. } => serde_json::Value::String(number.to_str_radix(10)),
             Self::Bytes(bytes) => serde_json::json!({"kind":"bytes","values":bytes}),
+            Self::OpaqueBytes(bytes) => {
+                serde_json::json!({"kind":"opaqueBytes","values":bytes})
+            }
             Self::JubjubScalar(value) => serde_json::json!({
                 "kind":"jubjubScalar",
                 "value":BigUint::from_bytes_le(&value.as_le_bytes()).to_str_radix(10)
