@@ -45,6 +45,9 @@ private def expressionJson : Expr ty → Json
   | .keccak256 (length := length) value => Json.mkObj [
       ("tag", toJson ("keccak256" : String)), ("length", toJson length),
       ("value", expressionJson value)]
+  | .keccak256Secp256k1Point value => Json.mkObj [
+      ("tag", toJson ("keccak256Secp256k1Point" : String)),
+      ("value", expressionJson value)]
   | .reverseBytes32 value => Json.mkObj [("tag", toJson ("reverseBytes32" : String)),
       ("value", expressionJson value)]
   | .persistentHash32 value => Json.mkObj [("tag", toJson ("persistentHash32" : String)),

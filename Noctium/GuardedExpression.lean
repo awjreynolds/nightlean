@@ -86,6 +86,9 @@ def totalize (guard : Expr .bool) : Expr ty → Expr ty
   | .sha256 value => .sha256 (totalize guard value)
   | .sha512 value => .sha512 (totalize guard value)
   | .keccak256 value => .keccak256 (totalize guard value)
+  | .keccak256Secp256k1Point value =>
+    .keccak256Secp256k1Point
+      (.select guard (totalize guard value) (safeForeignPoint .secp256k1))
   | .persistentHash32 value => .persistentHash32 (totalize guard value)
   | .bytes32Literal values => .bytes32Literal values
   | .bytesLiteral length values => .bytesLiteral length values

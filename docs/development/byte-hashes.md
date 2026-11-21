@@ -38,5 +38,14 @@ Rust host Session case exercises the same operations through the interpreter.
 
 These are source, checker, sizing and host execution results on the selected
 3.2.1 profile. No new keys, proofs or deployment were created for this feature.
-The source API covers bounded byte preimages. Mixed FAB overloads, broader
-profile qualification and compiler-wide preservation remain separate work.
+`keccak256(point)` also accepts a typed `Secp256k1Point` on the 3.2.1 profile.
+Its 96-byte FAB preimage includes both coordinates and the field-encoded identity
+flag. The compiler binds the five aligned operands to one validated point.
+Compact and the native checker agree on the generator digest. The native case
+rejects a compressed point with an out-of-field coordinate and a changed digest
+return. [Lean fixture](../../tests/TypedPointKeccak.lean)
+[Compact reference](../../tests/compact/typed-point-keccak.mjs)
+[Native check](../../runtime/tests/typed_point_keccak.rs)
+
+Other mixed FAB overloads, broader profile qualification and compiler-wide
+preservation remain separate work.

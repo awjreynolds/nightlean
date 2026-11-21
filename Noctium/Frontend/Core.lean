@@ -986,9 +986,12 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     pure (.bytes 64, ← `(Noctium.Expr.sha512 $value))
   | `(nlexpr| keccak256($value)) => do
     let (valueTy, value) ← expression env value
-    let .bytes _ := valueTy
-      | throwErrorAt stx "keccak256 requires a Bytes expression"
-    pure (.bytes 32, ← `(Noctium.Expr.keccak256 $value))
+    match valueTy with
+    | .bytes _ => pure (.bytes 32, ← `(Noctium.Expr.keccak256 $value))
+    | .foreign (.point .secp256k1) =>
+      pure (.bytes 32, ← `(Noctium.Expr.keccak256Secp256k1Point $value))
+    | .foreign (.point _) => throwErrorAt stx "keccak256 point overload supports Secp256k1Point"
+    | _ => throwErrorAt stx "keccak256 requires a Bytes or Secp256k1Point expression"
   | `(nlexpr| secp256k1EcdsaVerify($msgHash, $r, $s, $pk)) => do
     let msgHash ← expected env msgHash (.bytes 32)
     let r ← expected env r (.foreign (.scalar .secp256k1))

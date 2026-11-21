@@ -522,6 +522,13 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     if digest.length != 32 || !digest.all (· ≤ 255) then
       throw "Keccak-256 oracle returned a malformed Bytes32 digest"
     pure digest
+  | .keccak256Secp256k1Point value => do
+    let point ← value.eval ctx env
+    let input ← Foreign.secp256k1PointFabBytes point
+    let digest ← ctx.keccak256 input
+    if digest.length != 32 || !digest.all (· ≤ 255) then
+      throw "Keccak-256 oracle returned a malformed Bytes32 digest"
+    pure digest
   | .reverseBytes32 value => do
     pure ((← value.eval ctx env).reverse)
   | .jubjubScalarFromNative value => do

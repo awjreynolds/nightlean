@@ -95,6 +95,7 @@ jobs:
           lake env lean tests/Control.lean
           lake env lean --run tests/NativeProducer.lean
           lake env lean tests/ByteHashes.lean
+          lake env lean tests/TypedPointKeccak.lean
           lake env lean tests/BooleanGates.lean
           lake env lean tests/HashToCurve.lean
           lake env lean tests/ForeignTransport.lean
