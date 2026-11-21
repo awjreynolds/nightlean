@@ -44,7 +44,6 @@ try {
     fixture: 'ShieldedCoinInfo',
     compact: compilerVersion,
     fields: ['nonce:Bytes<32>', 'color:Bytes<32>', 'value:Uint<128>'],
-    frameBytes: 80,
     values: cases.map(({ value }) => value.toString()),
   }));
 } finally {

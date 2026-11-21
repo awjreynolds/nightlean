@@ -4620,8 +4620,8 @@
       "id": "C-STDLIB-SECP256K1POINT",
       "layer": "standard-library",
       "surface": "Secp256k1Point",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean Secp256k1 generator input and return match the pinned Compact point and its compressed native host value. The fixture also rejects a point carrying the other curve tag in the Secp256k1 slot.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4634,15 +4634,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256K1BASE",
       "layer": "standard-library",
       "surface": "Secp256k1Base",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Typed Secp256k1 Base values returned by Lean affine projections match both pinned Compact generator coordinates in canonical little-endian host bytes.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4655,15 +4661,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256K1SCALAR",
       "layer": "standard-library",
       "surface": "Secp256k1Scalar",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A representative canonical Secp256k1 Scalar passes through Lean source, the native relation and the Rust return codec with the pinned Compact value and field role.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4676,15 +4688,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256K1POINTX",
       "layer": "standard-library",
       "surface": "secp256k1PointX",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean curveX projects the typed Secp256k1 generator to the exact pinned Compact x-coordinate. The return keeps the curve Base type.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4697,15 +4715,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignOperations.lean",
+        "runtime/tests/foreign_operations.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256K1POINTY",
       "layer": "standard-library",
       "surface": "secp256k1PointY",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean curveY projects the typed Secp256k1 generator to the exact pinned Compact y-coordinate. The return keeps the curve Base type.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4718,15 +4742,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignOperations.lean",
+        "runtime/tests/foreign_operations.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256R1POINT",
       "layer": "standard-library",
       "surface": "Secp256r1Point",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean Secp256r1 generator input and return match the pinned Compact point and its compressed native host value. The fixture also rejects a point carrying the other curve tag in the Secp256k1 slot.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4739,15 +4769,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256R1BASE",
       "layer": "standard-library",
       "surface": "Secp256r1Base",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Typed Secp256r1 Base values returned by Lean affine projections match both pinned Compact generator coordinates in canonical little-endian host bytes.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4760,15 +4796,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256R1SCALAR",
       "layer": "standard-library",
       "surface": "Secp256r1Scalar",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A representative canonical Secp256r1 Scalar passes through Lean source, the native relation and the Rust return codec with the pinned Compact value and field role.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4781,15 +4823,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256R1POINTX",
       "layer": "standard-library",
       "surface": "secp256r1PointX",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean curveX projects the typed Secp256r1 generator to the exact pinned Compact x-coordinate. The return keeps the curve Base type.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4802,15 +4850,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignOperations.lean",
+        "runtime/tests/foreign_operations.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256R1POINTY",
       "layer": "standard-library",
       "surface": "secp256r1PointY",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean curveY projects the typed Secp256r1 generator to the exact pinned Compact y-coordinate. The return keeps the curve Base type.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4823,7 +4877,13 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignOperations.lean",
+        "runtime/tests/foreign_operations.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -5066,8 +5126,8 @@
       "id": "C-STDLIB-NEG",
       "layer": "standard-library",
       "surface": "neg",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean foreignNeg lowering matches pinned Compact for the base and scalar fields of Secp256k1, Secp256r1 and Curve25519. A native 3.2.1 fixture checks one nonzero value and zero for each field. ABI and full semantic coverage remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5080,15 +5140,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ForeignFieldNegInv.lean",
+        "runtime/tests/foreign_field_neg_inv.rs",
+        "tests/compact/foreign-field-neg-inv.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-INV",
       "layer": "standard-library",
       "surface": "inv",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean foreignInv lowering matches pinned Compact for the base and scalar fields of Secp256k1, Secp256r1 and Curve25519. The native 3.2.1 fixture checks one nonzero inverse per field and rejects each active zero inverse. ABI and full semantic coverage remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5101,7 +5165,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ForeignFieldNegInv.lean",
+        "runtime/tests/foreign_field_neg_inv.rs",
+        "tests/compact/foreign-field-neg-inv.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
