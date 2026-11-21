@@ -1,0 +1,23 @@
+{"version": {"minor": 2, "major": 3},
+ "outputs": ["Scalar<BLS12-381>", "Scalar<BLS12-381>"],
+ "instructions":
+ [{"type": "Point<Secp256k1>",
+   "output": "%input_point",
+   "op": "private_input",
+   "guard": null},
+  {"outputs": ["%v0", "%v1", "%v2", "%v3", "%v4"],
+   "op": "encode",
+   "input": "%input_point"},
+  {"output": "%v5",
+   "op": "keccak256",
+   "inputs": ["%v0", "%v1", "%v2", "%v3", "%v4"],
+   "alignment":
+   [{"value": {"tag": "bytes", "length": 24}, "tag": "atom"},
+    {"value": {"tag": "bytes", "length": 8}, "tag": "atom"},
+    {"value": {"tag": "bytes", "length": 24}, "tag": "atom"},
+    {"value": {"tag": "bytes", "length": 8}, "tag": "atom"},
+    {"value": {"tag": "field"}, "tag": "atom"}]},
+  {"outputs": ["%v6", "%v7"], "op": "bytes_into_natives", "bytes": "%v5"},
+  {"vals": ["%v7", "%v6"], "op": "output"}],
+ "inputs": [],
+ "do_communications_commitment": true}

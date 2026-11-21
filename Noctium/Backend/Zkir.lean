@@ -54,7 +54,8 @@ private def checkConstants : Expr ty → Except String Unit
   | .fromBytes32 value => checkConstants value
   | .fromBytes value => checkConstants value
   | .inv value => checkConstants value
-  | .sha256 value | .sha512 value | .keccak256 value | .persistentHash32 value => checkConstants value
+  | .sha256 value | .sha512 value | .keccak256 value
+  | .keccak256Secp256k1Point value | .persistentHash32 value => checkConstants value
   | .bytes32Literal _ => pure ()
   | .persistentHashVector32 _ => pure ()
   | .persistentHashNative value => checkConstants value
@@ -785,6 +786,28 @@ private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
     lowerFixedByteHash "sha512" length 64 (← lowerBytes value)
   | .keccak256 (length := length) value => do
     lowerFixedByteHash "keccak256" length 32 (← lowerBytes value)
+  | .keccak256Secp256k1Point value => do
+    let point ← lowerExpr value
+    let fields ← encodeForeign (.point .secp256k1) point
+    let alignment := Json.arr #[
+      Json.mkObj [("tag", toJson ("atom" : String)), ("value", Json.mkObj [
+        ("tag", toJson ("bytes" : String)), ("length", toJson (24 : Nat))])],
+      Json.mkObj [("tag", toJson ("atom" : String)), ("value", Json.mkObj [
+        ("tag", toJson ("bytes" : String)), ("length", toJson (8 : Nat))])],
+      Json.mkObj [("tag", toJson ("atom" : String)), ("value", Json.mkObj [
+        ("tag", toJson ("bytes" : String)), ("length", toJson (24 : Nat))])],
+      Json.mkObj [("tag", toJson ("atom" : String)), ("value", Json.mkObj [
+        ("tag", toJson ("bytes" : String)), ("length", toJson (8 : Nat))])],
+      nativeFieldAtom]
+    let key : ExpressionKey := ("keccak256", fields, some 96)
+    let digest ← match (← get).expressions.lookup key with
+      | some existing => pure existing
+      | none => do
+        let digest ← fresh
+        emit "keccak256" [("alignment", alignment), ("inputs", toJson fields), ("output", toJson digest)]
+        modify fun state => {state with expressions := (key, digest) :: state.expressions}
+        pure digest
+    encodeFixedBytes 32 digest
   | .persistentHash32 value => do
     let values ← lowerBytes value
     let (highByte, low31) ← alignedBytes32Fields values.values
@@ -1068,7 +1091,7 @@ def lowerExpr : Expr ty → LowerM String
       ("output", toJson output)]
     modify fun s => {s with expressions := (key, output) :: s.expressions}
     return output
-  | .foreignToBytes _ | .sha256 _ | .sha512 _ | .keccak256 _
+  | .foreignToBytes _ | .sha256 _ | .sha512 _ | .keccak256 _ | .keccak256Secp256k1Point _
   | .bytesLiteral _ _ | .reverseBytes _ | .sliceBytes _ _ _ | .concatBytes _ _
   | .bytes32Literal _ | .persistentHash32 _ | .persistentHashVector32 _
   | .persistentHashNative _ | .persistentHashNativeVector _ | .toBytes32 _ | .reverseBytes32 _ => do
