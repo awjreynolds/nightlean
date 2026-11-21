@@ -1139,8 +1139,11 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
       ("nativeGuardQualified", toJson Bool.false)]))]
   let witnessFields := if witnessMetadata.isEmpty then [] else [("hostWitnessPlans", Json.arr witnessMetadata)]
   let explicitSelection := !roles.isEmpty || rustBindings
-  let inventory := if !explicitSelection then [] else [("artifacts", Json.arr (lowered.map fun (role, file, _) =>
-    Json.mkObj [("role", toJson role.label), ("file", toJson file)]))]
+  let inventory := if !explicitSelection then [] else [("artifacts", Json.arr (lowered.map fun (role, file, content) =>
+    Json.mkObj ([("role", toJson role.label), ("file", toJson file)] ++
+      if role == .rustBinding then
+        [("sha256", toJson (EntryPointHash.sha256Hex (content ++ "\n").toUTF8))]
+      else [])))]
   let circuitSchemas := if emit .standalone then circuits else #[]
   let schemaVersion : Nat := if bindPlanBytes then 3 else if explicitSelection then 2 else 1
   let metadata := Json.mkObj ([
