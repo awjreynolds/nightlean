@@ -115,3 +115,7 @@ default hashes a record of the field defaults. The checked source layout limits
 the full leaf preimage to 1,024 bytes, including the hash domain. Nested
 composites and curve-valued leaf fields remain open.
 [Record example](../../tests/RecordMerkleLeaves.lean)
+
+A standalone JubjubPoint leaf hashes its two canonical field coordinates with
+the same ledger leaf domain. Its indexed default uses the curve identity.
+[Source fixture](../../tests/JubjubMerkleLeaves.lean)
