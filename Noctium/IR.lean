@@ -532,6 +532,8 @@ inductive Effect where
   | mapIsEmpty (state destination : String) (keys : List PathKey)
   | mapSize (state destination : String) (keys : List PathKey)
   | counterRead (state destination : String) (keys : List PathKey)
+  | counterLessThan (state destination : String) (keys : List PathKey)
+      (threshold : Expr (.uint (2 ^ 64 - 1)))
   | counterAdjust (state : String) (keys : List PathKey) (subtract : Bool) (amount : Nat)
   | counterReset (state : String) (keys : List PathKey)
   | insertPath (state : String) (keys : List PathKey) (valueTy : Ty) (value : Expr valueTy)
@@ -1133,7 +1135,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
           .readPath .. | .memberPath .. | .mapIsEmpty .. | .mapSize .. |
           .insertPath .. | .writePath .. | .emptyMapPath .. | .setInsert .. |
-          .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
+          .readCompositePath .. | .writeCompositePath .. | .counterRead .. | .counterLessThan .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
           .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. |
           .readCaller .. | .blockTimeCompare .. | .merkleTreeIsFull .. | .merkleTreeCheckRoot .. |
@@ -1264,6 +1266,12 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         for key in keys do key.validate caps env
         validateCounterEffect decls state keys
         pure [(destination, .uint (2 ^ 64 - 1))]
+      | .counterLessThan state destination keys threshold => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        validateCounterEffect decls state keys
+        threshold.validate caps env
+        pure [(destination, .bool)]
       | .counterAdjust state keys _ amount => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env

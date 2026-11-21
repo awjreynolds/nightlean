@@ -191,6 +191,10 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("op", toJson ("mapIsEmpty" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
       ("destination", toJson destination)]
+  | .counterLessThan slot keys threshold destination => Json.mkObj [
+      ("op", toJson ("counterLessThan" : String)), ("slot", toJson slot),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
+      ("threshold", nativeExpressionJson threshold), ("destination", toJson destination)]
   | .listHead slot keys schema expressions => Json.mkObj [
       ("op", toJson ("listHead" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
@@ -396,6 +400,12 @@ private def effectJson : Effect → Json
       ("destination", toJson destination),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value))]
+  | .counterLessThan state destination keys threshold => Json.mkObj [
+      ("op", toJson ("counterLessThan" : String)), ("state", toJson state),
+      ("destination", toJson destination),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value)),
+      ("threshold", expressionJson threshold)]
   | .counterAdjust state keys subtract amount => Json.mkObj [
       ("op", toJson ("counterAdjust" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with

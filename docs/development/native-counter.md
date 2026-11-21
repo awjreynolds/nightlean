@@ -11,6 +11,8 @@ u32 amount. `reset ...` writes zero. Missing parent maps require explicit
 initialization. A reset initializes an absent counter leaf or replaces an
 existing value. Contracts decide whether to expose reset to callers.
 
+`counterLessThan path against limit as below` binds a Bool from the native VM. The threshold has type `UInt 64`, and equality returns `false`. The same syntax works on a standalone Counter or a nested path. Under `when`, an inactive comparison returns `false` without reading the path or evaluating the threshold. Active comparisons require an existing Counter with the ledger's Bytes8 alignment. Disclose private values before using them in the path, threshold or public activity guard.
+
 Updates use native `Idx(push_path)`, `Addi` or `Subi`, then `Ins`. They do not
 bind the previous value as a circuit read unless the source requests a read.
 The native VM rejects u64 overflow and underflow. Guards cover every operation
@@ -26,7 +28,6 @@ The pinned recipes are
 [Counter operations](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/onchain-runtime/vendored/program_fragments.rs#L158-L217).
 Counter uses eight-byte alignment in
 [FAB alignments](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/base-crypto/src/fab/alignments.rs#L73-L81).
-These source operations add ledger VM support, not new ZKIR instruction names.
-Counter comparison helpers and full token integration remain open.
+The comparison uses the pinned `Counter_less_than` opcode sequence. It compares the ordered ledger state, including updates earlier in the same entrypoint. [Source fixture](../../tests/CounterCompare.lean) · [Native checker case](../../runtime/tests/counter_compare.rs)
 [Native-field memo Lists](native-lists.md) have a separate source/native example.
 No new keys, proofs or deployments were generated for this slice.

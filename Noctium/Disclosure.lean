@@ -273,6 +273,10 @@ def describeEffect : Effect → LedgerEffectDescriptor
   | .counterRead state destination keys =>
     .publicEffect "counterRead" .stateRead .publicActivity s!"public Counter read guard '{state}'"
       [.path s!"public Counter read path '{state}'" keys] [destination]
+  | .counterLessThan state destination keys threshold =>
+    .publicEffect "counterLessThan" .stateRead .publicActivity s!"public Counter comparison guard '{state}'"
+      [.path s!"public Counter comparison path '{state}'" keys,
+       .selector "threshold" s!"public Counter comparison threshold '{state}'" threshold] [destination]
   | .counterAdjust state keys .. =>
     let sink := s!"public Counter mutation path '{state}'"
     .publicEffect "counterAdjust" .stateWrite .publicActivity sink [.path sink keys] []
