@@ -107,6 +107,21 @@ Rust clients load this variant with `artifacts::verify_and_regenerate(directory,
 
 The normal `verify` command still requires every listed file. Regeneration writes no key to disk and reports a mismatch when the deployed verifier, regenerated verifier or committed prover key differs. Fetching finalized state and retaining the regenerated bundle across calls belong to the host. The browser and mobile loaders still require complete bundles.
 
+#### Reproduce finalized `totalSupply` key agreement
+
+Use the manifest and its listed payloads for the full `OpenZeppelinPort.ConfidentialToken.totalSupply` bundle from the recorded Ledger 9.1.0.1 and ZKIR 3.2.1 run. Its manifest SHA-256 is `0d2e6268be03691f4f3a907e6f413a3ab91d9113f26118761520b11f4ea51756`. At the final maintenance receipt's block, height 23339, query the indexer's `contract(address: $address, offset: {hash: $block}) { state stateAt { hash height } }`. Decode `state` from hex into `finalized-state.bin`. Check the block hash against the finalized chain and the 33,919 state bytes against `a8183ee5ad89efa60961163e89328bd6e2dcecd873b6a6fabcfeeb028316f77d`. [Scenario, address, and finalized receipt](../../tests/confidential-token-localnet-evidence.json)
+
+Use official K7 parameters with SHA-256 `e82ae890c080188355f37feaffe91372584cd810615082d9143d4dec0453fd9d`. The pinned native CLI reproduced the retained prover and verifier bytes for the 66-row circuit. The Rust test matched the installed verifier and regenerated prover bytes to the full bundle. Substituting the installed verifier from a different operation failed key regeneration.
+
+```sh
+NOCTIUM_TOTAL_SUPPLY_BUNDLE=/path/to/full-bundle \
+NOCTIUM_TOTAL_SUPPLY_FINALIZED_STATE=/path/to/finalized-state.bin \
+NOCTIUM_TOTAL_SUPPLY_SRS=/path/to/bls_midnight_2p7 \
+  cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
+  --no-default-features --features zkir-321 --test native_proof \
+  retained_total_supply_bundle_regenerates_exact_prover_key -- --ignored --exact
+```
+
 Errors use JSON with stable `error.code` values, including `unsupported_version`, `unsupported_name`, `profile_mismatch`, `plan_mismatch`, `digest_mismatch`, `manifest_digest_mismatch`, `unsafe_path`, `private_artifact`, `missing_role` and `limit_exceeded`. Error messages omit input values and local paths.
 
 ## Canonical representation and limits
