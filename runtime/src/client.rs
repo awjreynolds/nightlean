@@ -7,6 +7,13 @@ use crate::{
     lifecycle::{Event, Lifecycle, Phase},
     proof::ProvedNativeIntent,
 };
+#[cfg(feature = "localnet")]
+use base_crypto::hash::HashOutput;
+#[cfg(feature = "localnet")]
+use coin_structure::{
+    coin::Info,
+    transfer::{Recipient, SenderEvidence},
+};
 use ledger::{
     semantics::{TransactionContext, TransactionResult},
     structure::{
@@ -15,6 +22,8 @@ use ledger::{
     },
     verify::WellFormedStrictness,
 };
+#[cfg(feature = "localnet")]
+use onchain_runtime::context::Effects;
 use onchain_runtime::{context::BlockContext, ops::Op};
 use serde::{Deserialize, Serialize};
 use serialize::{Serializable, Tagged, tagged_deserialize, tagged_serialize};
@@ -323,6 +332,128 @@ struct BoundData {
 pub struct BoundTransaction {
     data: BoundData,
 }
+
+#[cfg(feature = "localnet")]
+fn no_unshielded_effects(effects: &Effects<Db>) -> bool {
+    effects.unshielded_mints.size() == 0
+        && effects.unshielded_inputs.size() == 0
+        && effects.unshielded_outputs.size() == 0
+        && effects.claimed_unshielded_spends.size() == 0
+}
+
+/// Accept only the pinned two-call relay shape and its exact transient/output commitments.
+#[cfg(feature = "localnet")]
+pub(crate) fn shielded_relay_shape_valid(
+    contract: &ProvedNativeIntent,
+    offer: &zswap::Offer<transient_crypto::proofs::Proof, Db>,
+    relay_mint: &Info,
+    mint_domain: HashOutput,
+) -> bool {
+    const RELAY_AMOUNT: u128 = 5;
+    const NONCE_EVOLUTION_DOMAIN: &[u8] = b"midnight:kernel:nonce_evolve";
+
+    if contract.actions.len() != 2
+        || offer.inputs.len() != 0
+        || offer.outputs.len() != 1
+        || offer.transient.len() != 1
+        || offer.deltas.len() != 1
+        || relay_mint.value != RELAY_AMOUNT
+    {
+        return false;
+    }
+
+    let mut actions = contract.actions.iter_deref();
+    let Some(ContractAction::Call(relay)) = actions.next() else {
+        return false;
+    };
+    let Some(ContractAction::Call(destination)) = actions.next() else {
+        return false;
+    };
+    if actions.next().is_some() || relay.address == destination.address {
+        return false;
+    }
+
+    let Some(relay_transcript) = relay.guaranteed_transcript.as_deref() else {
+        return false;
+    };
+    let Some(destination_transcript) = destination.guaranteed_transcript.as_deref() else {
+        return false;
+    };
+    if relay.fallible_transcript.is_some() || destination.fallible_transcript.is_some() {
+        return false;
+    }
+
+    let Some(transient) = offer.transient.iter_deref().next() else {
+        return false;
+    };
+    let Some(output) = offer.outputs.iter_deref().next() else {
+        return false;
+    };
+    let Some(delta) = offer.deltas.iter_deref().next() else {
+        return false;
+    };
+
+    let relay_type = relay.address.custom_shielded_token_type(mint_domain);
+    if relay_mint.type_ != relay_type {
+        return false;
+    }
+    let destination_coin = relay_mint.evolve_from(NONCE_EVOLUTION_DOMAIN, RELAY_AMOUNT, relay_type);
+    let transient_commitment = relay_mint.commitment(&Recipient::Contract(relay.address));
+    let transient_nullifier = relay_mint.nullifier(&SenderEvidence::Contract(relay.address));
+    let output_commitment = destination_coin.commitment(&Recipient::Contract(destination.address));
+
+    let relay_effects = &relay_transcript.effects;
+    let destination_effects = &destination_transcript.effects;
+    relay_effects.claimed_shielded_receives.size() == 1
+        && relay_effects
+            .claimed_shielded_receives
+            .iter()
+            .any(|commitment| **commitment == transient_commitment)
+        && relay_effects.claimed_nullifiers.size() == 1
+        && relay_effects
+            .claimed_nullifiers
+            .iter()
+            .any(|nullifier| **nullifier == transient_nullifier)
+        && relay_effects.claimed_shielded_spends.size() == 1
+        && relay_effects
+            .claimed_shielded_spends
+            .iter()
+            .any(|commitment| **commitment == output_commitment)
+        && relay_effects.claimed_contract_calls.size() == 1
+        && relay_effects.claimed_contract_calls.iter().any(|claim| {
+            let (sequence, address, entry_point, commitment) = (**claim).into_inner();
+            sequence == 0
+                && address == destination.address
+                && entry_point == destination.entry_point.ep_hash()
+                && commitment == destination.communication_commitment
+        })
+        && relay_effects.shielded_mints.size() == 1
+        && relay_effects
+            .shielded_mints
+            .get(&mint_domain)
+            .is_some_and(|amount| *amount == RELAY_AMOUNT as u64)
+        && no_unshielded_effects(relay_effects)
+        && destination_effects.claimed_shielded_receives.size() == 1
+        && destination_effects
+            .claimed_shielded_receives
+            .iter()
+            .any(|commitment| **commitment == output_commitment)
+        && destination_effects.claimed_nullifiers.size() == 0
+        && destination_effects.claimed_shielded_spends.size() == 0
+        && destination_effects.claimed_contract_calls.size() == 0
+        && destination_effects.shielded_mints.size() == 0
+        && no_unshielded_effects(destination_effects)
+        && transient.coin_com == transient_commitment
+        && transient.nullifier == transient_nullifier
+        && transient.contract_address.as_deref() == Some(&relay.address)
+        && transient.ciphertext.is_none()
+        && output.coin_com == output_commitment
+        && output.contract_address.as_deref() == Some(&destination.address)
+        && output.ciphertext.is_none()
+        && delta.token_type == relay_type
+        && delta.value == -(RELAY_AMOUNT as i128)
+}
+
 impl BoundTransaction {
     pub async fn prepare(
         contract: &ProvedNativeIntent,
@@ -405,6 +536,33 @@ impl BoundTransaction {
                 && input.contract_address.as_deref() == Some(&call.address)
                 && output.contract_address.is_none()
                 && output.ciphertext.is_some(),
+            Error::Funding,
+        )?;
+        let expected_offer = body(&Some(storage::arena::Sp::new(expected_offer.clone())))?;
+        Self::prepare_inner(
+            contract,
+            policy,
+            chain,
+            funding,
+            signer,
+            Some(expected_offer),
+        )
+        .await
+    }
+
+    #[cfg(feature = "localnet")]
+    pub(crate) async fn prepare_shielded_relay(
+        contract: &ProvedNativeIntent,
+        expected_offer: &zswap::Offer<transient_crypto::proofs::Proof, Db>,
+        relay_mint: &Info,
+        mint_domain: HashOutput,
+        policy: NetworkPolicy,
+        chain: &impl ChainAdapter,
+        funding: &impl FundingAdapter,
+        signer: &impl SigningAdapter,
+    ) -> Result<Self> {
+        require(
+            shielded_relay_shape_valid(contract, expected_offer, relay_mint, mint_domain),
             Error::Funding,
         )?;
         let expected_offer = body(&Some(storage::arena::Sp::new(expected_offer.clone())))?;

@@ -9,7 +9,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow, ensure};
 use base_crypto::time::Timestamp;
-use coin_structure::coin::Commitment;
+use coin_structure::coin::{Commitment, PublicAddress};
 use ledger::{
     construct::{ContractCallPrototype, PreTranscript, partition_transcripts},
     structure::{
@@ -358,12 +358,25 @@ fn nonzero_random(rng: &mut (impl Rng + CryptoRng)) -> Result<Fr> {
 struct Built {
     initial: ContractState<Db>,
     predicted: ContractState<Db>,
+    execution: Execution,
+    initial_context: QueryContext<Db>,
+    entry_point: EntryPointBuf,
+    communication_commitment_rand: Fr,
     deploy: NativeIntent,
     call: NativeIntent,
     address: String,
     operations: usize,
     guaranteed: usize,
     fallible: usize,
+}
+
+/// Checked execution data retained only while assembling a relay/destination pair.
+pub(crate) struct CheckedCurrentStateCall {
+    pub(crate) execution: Execution,
+    pub(crate) initial_context: QueryContext<Db>,
+    pub(crate) entry_point: EntryPointBuf,
+    pub(crate) communication_commitment_rand: Fr,
+    pub(crate) predicted: ContractState<Db>,
 }
 
 pub(crate) struct PreparedDeployment {
@@ -636,6 +649,8 @@ fn build_with_rng(
         None,
         block,
         &com_indices,
+        None,
+        None,
         &mut rng,
     )
 }
@@ -653,12 +668,15 @@ fn build_for_deployment(
     retained_intent: Option<&NativeIntent>,
     block: Option<&BlockContext>,
     com_indices: &BookedComIndices,
+    caller: Option<PublicAddress>,
+    communication_commitment_rand: Option<Fr>,
     rng: &mut (impl Rng + CryptoRng),
 ) -> Result<Built> {
     ensure!(ttl > 0, "TTL must be explicit Unix seconds");
     let address = deployment.address();
     let mut context = QueryContext::new(initial.data.clone(), address);
     context.call_context.balance = initial.balance.clone();
+    context.call_context.caller = caller;
     context.call_context.com_indices = com_indices.clone();
     // prepare's zero-randomness preimage is diagnostic only. Reuse only its
     // evaluated program and private fields, then repartition for this commitment.
@@ -668,6 +686,7 @@ fn build_for_deployment(
         context.call_context.parent_block_hash = block.parent_block_hash;
         context.call_context.last_block_time = block.last_block_time;
     }
+    let initial_context = context.clone();
     let evaluated = prepare_with_context_and_block_time(
         plan,
         &config.inputs,
@@ -677,7 +696,11 @@ fn build_for_deployment(
     )?;
     let call_input = evaluated.call_input()?;
     let call_output = evaluated.call_output()?;
-    let randomness = nonzero_random(rng)?;
+    let randomness = match communication_commitment_rand {
+        Some(randomness) if randomness != Fr::from(0u64) => randomness,
+        Some(_) => return Err(anyhow!("native call commitment randomness must be nonzero")),
+        None => nonzero_random(rng)?,
+    };
     let commitment = onchain_runtime::communication_commitment(
         call_input.clone(),
         call_output.clone(),
@@ -739,7 +762,7 @@ fn build_for_deployment(
     let fallible_count = fallible.as_ref().map_or(0, |t| t.program.len());
     let prototype = ContractCallPrototype {
         address,
-        entry_point: entry,
+        entry_point: entry.clone(),
         op: operation,
         guaranteed_public_transcript: guaranteed,
         fallible_public_transcript: fallible,
@@ -775,13 +798,18 @@ fn build_for_deployment(
     let mut predicted = initial.clone();
     predicted.data = after.state;
     predicted.balance = after.call_context.balance;
+    let operation_count = evaluated.program.len();
     Ok(Built {
         initial,
         predicted,
+        execution: evaluated,
+        initial_context,
+        entry_point: entry,
+        communication_commitment_rand: randomness,
         deploy,
         call,
         address: hex::encode(address.0.0),
-        operations: evaluated.program.len(),
+        operations: operation_count,
         guaranteed: guaranteed_count,
         fallible: fallible_count,
     })
@@ -824,6 +852,8 @@ pub(crate) fn prepare_call_for_target(
         Some(&target.intent),
         None,
         &Map::new(),
+        None,
+        None,
         rng,
     )?;
     Ok(built.call)
@@ -879,6 +909,86 @@ pub(crate) fn prepare_call_for_ready_state(
     com_indices: &BookedComIndices,
     rng: &mut (impl Rng + CryptoRng),
 ) -> Result<(NativeIntent, ContractState<Db>)> {
+    let built = build_ready_state_call(
+        plan,
+        contract,
+        selected_operation,
+        config,
+        parameters,
+        operation,
+        circuit,
+        ttl,
+        target,
+        ready,
+        current,
+        com_indices,
+        None,
+        None,
+        rng,
+    )?;
+    Ok((built.call, built.predicted))
+}
+
+pub(crate) fn prepare_checked_call_for_ready_state(
+    plan: &Plan,
+    contract: &str,
+    selected_operation: &str,
+    config: &Config,
+    parameters: &LedgerParameters,
+    operation: ContractOperation,
+    circuit: &IrSource,
+    ttl: u64,
+    target: &PreparedOperationMapDeployment,
+    ready: &ContractState<Db>,
+    current: &ContractState<Db>,
+    com_indices: &BookedComIndices,
+    caller: Option<PublicAddress>,
+    communication_commitment_rand: Option<Fr>,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<CheckedCurrentStateCall> {
+    let built = build_ready_state_call(
+        plan,
+        contract,
+        selected_operation,
+        config,
+        parameters,
+        operation,
+        circuit,
+        ttl,
+        target,
+        ready,
+        current,
+        com_indices,
+        caller,
+        communication_commitment_rand,
+        rng,
+    )?;
+    Ok(CheckedCurrentStateCall {
+        execution: built.execution,
+        initial_context: built.initial_context,
+        entry_point: built.entry_point,
+        communication_commitment_rand: built.communication_commitment_rand,
+        predicted: built.predicted,
+    })
+}
+
+fn build_ready_state_call(
+    plan: &Plan,
+    contract: &str,
+    selected_operation: &str,
+    config: &Config,
+    parameters: &LedgerParameters,
+    operation: ContractOperation,
+    circuit: &IrSource,
+    ttl: u64,
+    target: &PreparedOperationMapDeployment,
+    ready: &ContractState<Db>,
+    current: &ContractState<Db>,
+    com_indices: &BookedComIndices,
+    caller: Option<PublicAddress>,
+    communication_commitment_rand: Option<Fr>,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<Built> {
     ensure!(
         target.contract == contract,
         "native target contract mismatch"
@@ -925,13 +1035,15 @@ pub(crate) fn prepare_call_for_ready_state(
         Some(target.intent()),
         None,
         com_indices,
+        caller,
+        communication_commitment_rand,
         rng,
     )?;
     ensure!(
         built.address == target.address(),
         "native target address mismatch"
     );
-    Ok((built.call, built.predicted))
+    Ok(built)
 }
 
 /// In-memory constructor used by the native proof API after authenticating public material.
