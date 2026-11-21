@@ -243,6 +243,8 @@ scoped syntax "reverseBytes(" nlexpr ")" : nlexpr
 scoped syntax "sliceBytes(" nlexpr "," num "," num ")" : nlexpr
 scoped syntax "concatBytes(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "bytes32(" str ")" : nlexpr
+scoped syntax "nativeToken()" : nlexpr
+scoped syntax "tokenType(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
@@ -302,6 +304,16 @@ scoped syntax "curveY(" nlexpr ")" : nlexpr
 scoped syntax "curveFromCoordinates(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "foreignToBytes(" nlexpr ")" : nlexpr
 scoped syntax "foreignFromBytes(" nltype "," nlexpr ")" : nlexpr
+
+/-- Expand token-color helpers through the ordinary Bytes32 literal and hash
+surface so every frontend path shares the same padding and hashing rules. -/
+def expandTokenHelperSyntax (stx : TSyntax `nlexpr) : CommandElabM (Option (TSyntax `nlexpr)) := do
+  match stx with
+  | `(nlexpr| nativeToken()) =>
+    return some (← `(nlexpr| bytes32("")))
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    return some (← `(nlexpr| persistentHashVector32([bytes32("midnight:derive_token"), $domain, $contractAddress])))
+  | _ => return none
 
 declare_syntax_cat nlcstmt
 scoped syntax "public" ident ":" nltype : nlcstmt
@@ -797,6 +809,8 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| reverseBytes32($value)) => hasPartialScalar value
   | `(nlexpr| persistentHashVector32([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    hasPartialScalar domain || hasPartialScalar contractAddress
   | `(nlexpr| persistentHashNative($value)) => hasPartialScalar value
   | `(nlexpr| persistentHashFab($_:ident, $_:ident, [$values,*])) =>
     values.getElems.toList.any hasPartialScalar
@@ -1190,6 +1204,10 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let padded := bytes ++ List.replicate (32 - bytes.length) 0
     let values ← natListTerm padded
     pure (.bytes 32, ← `(Noctium.Expr.bytes32Literal $values))
+  | `(nlexpr| nativeToken()) | `(nlexpr| tokenType($_:nlexpr, $_:nlexpr)) => do
+    let some expanded ← expandTokenHelperSyntax stx
+      | throwErrorAt stx "token helper expansion failed"
+    expression env expanded
   | `(nlexpr| persistentHashVector32([$values,*])) => do
     let expressions ← values.getElems.toList.mapM fun value => do
       let (valueTy, value) ← expression env value
