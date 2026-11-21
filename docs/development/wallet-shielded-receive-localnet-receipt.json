@@ -1,0 +1,19 @@
+{
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "depositHeight": 480,
+  "depositTransaction": "a68412b8940509435af4cae3f8df329cf4ace7bd83e08d93ac4414d142f5c828",
+  "inputNullifier": "4ab2110d2bae0bf90ce33a7fbde55761f7f7ec7386abffc4f2eadf86dd2fd4aa",
+  "outputCommitment": "94f3d664924bb0224309608a8646978ad2ac315ad2f58cab37279964ee6b539a",
+  "outputIndex": 42,
+  "value": "5",
+  "rejected": [
+    "unequalValue",
+    "replayedInput"
+  ],
+  "k": 13,
+  "rows": 6572,
+  "seedTipBundleManifestSha256": "9289f1a36b7b7844e41f7e438ec3eb7744f2d3ef594d1714a9b2658d26410659",
+  "seedSpendBundleManifestSha256": "49a41a9c93dd042f0390846724165d4a53182264b161b0269664410836e55565",
+  "depositBundleManifestSha256": "c525e7b6bc434657f98062e79d959ea281c6f490c4ca009428e61531fec33afd"
+}

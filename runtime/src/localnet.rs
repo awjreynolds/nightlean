@@ -1420,6 +1420,7 @@ pub struct DevelopmentFunding<'a> {
     policy: crate::funding::FeePolicy,
     rng: RefCell<Option<rand::rngs::StdRng>>,
     shielded_receive: Option<shielded_receive::BookedOffer>,
+    wallet_shielded_receive: Option<shielded_receive::BookedWalletOffer>,
     shielded_transfer: Option<shielded_transfer::BookedTransfer>,
 }
 impl<'a> DevelopmentFunding<'a> {
@@ -1437,6 +1438,7 @@ impl<'a> DevelopmentFunding<'a> {
             policy,
             rng: RefCell::new(Some(rng)),
             shielded_receive: None,
+            wallet_shielded_receive: None,
             shielded_transfer: None,
         }
     }
@@ -1470,7 +1472,23 @@ impl crate::client::FundingAdapter for DevelopmentFunding<'_> {
             .clone();
         let rng = self.rng.borrow_mut().take().ok_or(HostFailure)?;
         let wallet = crate::funding::DustFunding::new(secret, state);
-        let funded = if let Some(receive) = &self.shielded_receive {
+        let funded = if let Some(receive) = &self.wallet_shielded_receive {
+            receive.check_booking(snapshot)?;
+            wallet
+                .fund_wallet_shielded_receive(
+                    contract,
+                    receive.offer.clone(),
+                    receive.randomness,
+                    &policy.network_id,
+                    &snapshot.state.parameters,
+                    self.material,
+                    self.parameters,
+                    snapshot.block.tblock,
+                    self.policy,
+                    rng,
+                )
+                .await
+        } else if let Some(receive) = &self.shielded_receive {
             receive.check_booking(snapshot)?;
             wallet
                 .fund_shielded_receive(
