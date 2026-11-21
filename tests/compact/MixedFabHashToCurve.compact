@@ -1,0 +1,16 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export enum LeafMarker { Only }
+
+export struct MixedFabHashToCurvePayload {
+  octets: Bytes<32>;
+  flag: Boolean;
+  counter: Uint<16>;
+  marker: LeafMarker;
+  anchor: Field;
+}
+
+export circuit hashToCurveFab(payload: MixedFabHashToCurvePayload): [JubjubPoint] {
+  return [hashToCurve<MixedFabHashToCurvePayload>(payload)];
+}
