@@ -130,6 +130,7 @@ jobs:
           lake env lean tests/TypedMerkleLeaves.lean
           lake env lean tests/RecordMerkleLeaves.lean
           lake env lean tests/JubjubMerkleLeaves.lean
+          lake env lean tests/ForeignMerkleLeaves.lean
           lake env lean tests/NativeReturns.lean
           lake env lean tests/TypedCallArguments.lean
           lake env lean tests/ContractInterfaces.lean

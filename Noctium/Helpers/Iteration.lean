@@ -59,6 +59,9 @@ private partial def bodyFreeReferences (bound : List String) : List Statement â†
   | .stage _ _ _ value :: rest | .writeCell _ _ value :: rest =>
     appendUnique (termReferences value |>.filter fun ref => !bound.contains ref)
       (bodyFreeReferences bound rest)
+  | .emitEvent _ payload :: rest =>
+    appendUnique (termReferences payload |>.filter fun ref => !bound.contains ref)
+      (bodyFreeReferences bound rest)
   | .readCell _ destination _ :: rest => bodyFreeReferences (destination :: bound) rest
   | .readMap _ destination _ _ key :: rest | .readMember _ destination _ _ key :: rest =>
     appendUnique (termReferences key |>.filter fun ref => !bound.contains ref)
@@ -106,6 +109,7 @@ private partial def statementNames : List Statement â†’ List String
   | .forRange index _ _ body :: rest => appendMany [[index], statementNames body, statementNames rest]
   | .stage capability key _ value :: rest =>
     appendMany [[capability, key], termNames value, statementNames rest]
+  | .emitEvent _ payload :: rest => appendMany [termNames payload, statementNames rest]
   | .readCell state destination _ :: rest => appendMany [[state, destination], statementNames rest]
   | .writeCell state _ value :: rest => appendMany [[state], termNames value, statementNames rest]
   | .readMap state destination _ _ key :: rest | .readMember state destination _ _ key :: rest =>
@@ -155,6 +159,9 @@ private partial def bodyCallsHiddenBy (span : SourceSpan) (outer : List String)
     bodyCallsHiddenBy span outer bound rest
   | .stage _ _ _ value :: rest | .writeCell _ _ value :: rest => do
     termCallsHiddenBy (bound ++ outer.filter fun hidden => !bound.contains hidden) span value
+    bodyCallsHiddenBy span outer bound rest
+  | .emitEvent _ payload :: rest => do
+    termCallsHiddenBy (bound ++ outer.filter fun hidden => !bound.contains hidden) span payload
     bodyCallsHiddenBy span outer bound rest
   | .readCell _ destination _ :: rest => bodyCallsHiddenBy span outer (destination :: bound) rest
   | .readMap _ destination _ _ key :: rest | .readMember _ destination _ _ key :: rest => do

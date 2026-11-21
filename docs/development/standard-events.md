@@ -1,6 +1,8 @@
 # Standard public events
 
-Use `emitEvent` with named fields inside a ledger entrypoint. The [example](../../examples/StandardEvents.lean) emits all eleven catalog events in one call and exercises a guarded event in a separate entrypoint.
+Use `emitEvent` with named fields inside a ledger entrypoint. The [example](../../examples/StandardEvents.lean) emits all eleven catalog events in one call and exercises a guarded event inline and through a checked helper.
+
+Checked ledger helper bodies use `Statement.emitEvent kind payload`. The checker enforces the catalog payload width, preserves event order across helper calls, and carries the caller's branch into the event activity guard. Disclosure analysis requires a public guard and a public or explicitly disclosed payload.
 
 ```lean
 emitEvent(Paused)
@@ -28,7 +30,7 @@ Lean emits two Impact groups per event. The first pushes the version, tag and en
 
 ## Focused qualification
 
-On Ledger 9.1.0.1 and ZKIR 3.2.1, native key generation reported K13 and 4,937 rows for the eleven-event call. The pinned Compact 0.36.1 toolchain and its 0.21.0 runtime produced the reference values. Noctium's native checker matched all eleven versions, tags, declared widths and SHA-256 digests of the full-width payloads. The fixtures exercise a 128-bit amount with the high bit set, both address branches, and a wide payload with a trailing zero. Lean rejected an undisclosed private event flag, missing or duplicate fields, and a non-Boolean flag. The separate guarded-event test checks both branches and rejects a substituted public tape.
+On Ledger 9.1.0.1 and ZKIR 3.2.1, native key generation reported K13 and 4,937 rows for the eleven-event call. The pinned Compact 0.36.1 toolchain and its 0.21.0 runtime produced the reference values. Noctium's native checker matched all eleven versions, tags, declared widths and SHA-256 digests of the full-width payloads. The fixtures exercise a 128-bit amount with the high bit set, both address branches, and a wide payload with a trailing zero. Lean rejected an undisclosed private event flag, missing or duplicate fields, and a non-Boolean flag. The helper event test checks active and inactive branches, event ordering around the helper call, its disclosed payload, and rejection of a private guard, an undisclosed payload, or a substituted public tape.
 
 The first catalog used a bytewise public prologue for the 256-byte memo. Its 19,217-byte call was rejected with pool error 111, `TransactionTooLarge`. A committed memo argument qualified at 9,918 bytes and 5,000 rows. The current compiler packs an ordinary public memo into nine fields and one push/readback pair.
 
@@ -40,7 +42,7 @@ The first catalog used a bytewise public prologue for the 256-byte memo. Its 19,
 
 The same full-width payload digests passed with each layout. [Public byte inputs](fixed-bytes.md#public-byte-arguments) · [Committed call arguments](committed-returns.md#native-call-arguments) · [Node error codes](https://docs.midnight.network/nodes/error-codes) · [Issue 74](https://github.com/awjreynolds/noctium/issues/74)
 
-The funded isolated localnet accepted the catalog deployment and proved call. Indexer delivery and emission from within reusable helper bodies still need qualification.
+The funded isolated localnet accepted the catalog deployment and proved call. The helper event path is qualified through native local simulation. Indexer delivery and helper event emission on localnet still need qualification.
 
 | Localnet action | Block | Transaction ID |
 | --- | ---: | --- |
