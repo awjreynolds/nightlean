@@ -1,0 +1,10 @@
+pragma language_version >= 0.28;
+import CompactStandardLibrary;
+
+export circuit shieldedCoinInfoShape(
+  nonce: Bytes<32>,
+  color: Bytes<32>,
+  value: Uint<128>
+): ShieldedCoinInfo {
+  return ShieldedCoinInfo{ nonce: nonce, color: color, value: value };
+}

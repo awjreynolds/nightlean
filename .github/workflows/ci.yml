@@ -56,7 +56,9 @@ jobs:
       - name: Build the POC compiler
         run: lake build noctium Noctium.Compiler Noctium.Foreign Noctium.Claim Noctium.Verification.RangeDedup
       - name: Check the private claim source-proof report
-        run: python3 scripts/proofs/check-private-claim-audit.py --report
+        run: |
+          python3 tests/check-public-audit-assertions.py
+          python3 scripts/proofs/check-private-claim-audit.py --report
       - name: Check source contract examples
         run: |
           lake env lean examples/PrivateClaim.lean
@@ -101,6 +103,7 @@ jobs:
           lake env lean tests/ImpactEffectBoundaries.lean
           lake env lean tests/HostedLedgerWitness.lean
           lake env lean tests/TypedWitnessResultCodec.lean
+          lake env lean tests/MerklePathRootNoLeafHash.lean
           lake env lean tests/LedgerWitnessTransform.lean
           lake env lean tests/StructuredLedgerWitness.lean
           lake env lean tests/StructuredTypedCells.lean
@@ -156,11 +159,14 @@ jobs:
           lake env lean tests/ShieldedMapPartialSpend.lean
           lake env lean tests/ShieldedImmediateRelay.lean
           lake env lean tests/IndexedShieldedNonce.lean
+          lake env lean tests/ShieldedBurnAddress.lean
           lake env lean tests/QualifiedCoinCell.lean
+          lake env lean tests/ShieldedCoinInfo.lean
           lake env lean tests/QualifiedCoinSet.lean
           lake env lean tests/QualifiedCoinList.lean
           lake env lean tests/QualifiedCoinRecipient.lean
           lake env lean tests/NominalShieldedRecipients.lean
+          lake env lean tests/TypedPublicAddress.lean
           lake env lean tests/NativeTaggedSettlement.lean
           lake env lean tests/NativeUnshieldedSend.lean
           lake env lean tests/ReceiveUnshielded.lean

@@ -517,6 +517,9 @@ open Noctium.Verification.ArtifactBytes Noctium.Verification.ArtifactCertificate
 
 
 def main() -> int:
+    if not __debug__:
+        print(json.dumps({"status": "rejected", "error": "optimized_python_is_not_qualified"}))
+        return 1
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     measurement = commands.add_parser("measure", help="Produce untrusted measurements for independent review/pinning")

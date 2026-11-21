@@ -837,7 +837,7 @@ private def nominalBytes32ForCodec? (codec : Helpers.Wire.Codec) :
   if codec.frameBytes != 32 then none else
   match codec.payload with
   | .structure id => do
-    let kind ← [NominalBytes32.contractAddress, .zswapCoinPublicKey].find? fun candidate =>
+    let kind ← [NominalBytes32.contractAddress, .userAddress, .zswapCoinPublicKey].find? fun candidate =>
       candidate.declarationId == id
     let some declaration := codec.composites.structures.find? (·.id == id) | none
     let [field] := declaration.fields | none
