@@ -9385,6 +9385,7 @@ mod shielded_spend_tests {
     }
 
     #[test]
+    #[ignore = "requires fresh ZKIR 3.2.1 artifacts from tests/QualifiedCoinRecipient.lean"]
     fn explicit_booked_recipient_collections_match_typed_ledger_bookings() {
         let coin = ShieldedCoinInfo {
             nonce: Nonce(HashOutput(NONCE)),
@@ -9392,12 +9393,10 @@ mod shielded_spend_tests {
             value: 5,
         };
         let parameters = &ledger::structure::INITIAL_PARAMETERS;
-        if std::env::var_os("NOCTIUM_CHECK_EXPLICIT_RECIPIENT_ARTIFACTS").is_none() {
-            return;
-        }
-
-        let artifact_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../build/experiments/277/explicit-recipient");
+        let artifact_dir = std::path::PathBuf::from(
+            std::env::var_os("NOCTIUM_EXPLICIT_RECIPIENT_DIR")
+                .expect("set NOCTIUM_EXPLICIT_RECIPIENT_DIR to the emitted contract artifacts"),
+        );
         for (collection, entrypoint) in [
             (BookedCollection::Cell, "writeCellTo"),
             (BookedCollection::Set, "insertSetTo"),
