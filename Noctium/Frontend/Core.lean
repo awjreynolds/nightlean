@@ -241,6 +241,7 @@ scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
+scoped syntax "shieldedOutputNonce(" nlexpr ")" : nlexpr
 declare_syntax_cat nlcallvalue
 scoped syntax nlexpr : nlcallvalue
 scoped syntax ident ":=" "fields(" nlexpr,* ")" : nlcallvalue
@@ -356,6 +357,7 @@ scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "receiveShieldedToMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "sendShieldedFromMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "relayShieldedImmediate" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedInputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedOutputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
@@ -738,6 +740,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| poseidon2($_:num, $a, $b)) =>
     hasPartialScalar a || hasPartialScalar b
   | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
+  | `(nlexpr| shieldedOutputNonce($value)) => hasPartialScalar value
   | `(nlexpr| sha256($value))
   | `(nlexpr| sha512($value)) | `(nlexpr| keccak256($value)) => hasPartialScalar value
   | `(nlexpr| bytes($_:num, $_:str)) => Bool.false
@@ -1062,6 +1065,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| reverseBytes32($value)) => do
     let value ← expected env value (.bytes 32)
     pure (.bytes 32, ← `(Noctium.Expr.reverseBytes32 $value))
+  | `(nlexpr| shieldedOutputNonce($value)) => do
+    let value ← expected env value (.bytes 32)
+    pure (.bytes 32, ← `(Noctium.Wire.shieldedOutputNonce $value))
   | `(nlexpr| bytes32($literal:str)) => do
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
@@ -2350,6 +2356,31 @@ private def elaborateEffect (schema : List (String × StateKind))
       let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
       let term ← `(Noctium.Effect.mintShielded $domain $amount)
       state := {state with terms := state.terms.push term}
+    | `(nlupdate| relayShieldedImmediate($nonce:nlexpr, $color:nlexpr,
+        $amount:nlexpr, $recipient:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "relayShieldedImmediate must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "relayShieldedImmediate must be unguarded"
+      let nonce ← checkedExpression state.env nonce (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let recipient ← checkedExpression state.env recipient (.bytes 32)
+      let addressName := s!"noctium_relay_address_{state.terms.size}"
+      unless state.env.all (fun binding => binding.1 != addressName) do
+        throwErrorAt update "reserved relayShieldedImmediate binding collides with an existing read"
+      let addressTerm ← `(Noctium.Effect.readContractAddress $(stringTerm addressName))
+      state := {state with terms := state.terms.push addressTerm}
+      state ← bindReadName state addressName addressName (.bytes 32)
+      let selfAddress ← `(@Noctium.Expr.ref (Noctium.Ty.bytes 32) $(stringTerm addressName))
+      let relayTerm ← `(Noctium.Effect.relayShieldedImmediate
+        $nonce $color $amount $recipient $selfAddress)
+      let noGuard ← `(none)
+      state := {state with
+        terms := state.terms.push relayTerm
+        spans := state.spans.push span
+        guards := state.guards.push noGuard}
     | `(nlupdate| receiveShieldedToMap($storage:ident, $nonce:nlexpr,
         $color:nlexpr, $amount:nlexpr)) => do
       unless depth == 0 do
