@@ -4437,8 +4437,8 @@
       "id": "C-STDLIB-SHA512",
       "layer": "standard-library",
       "surface": "sha512",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean supports fixed-byte SHA-512 and checked flat FAB values through the native instruction. A matched flat named record checks the canonical FAB bytes and two digests against Compact, and the Rust check rejects a mismatched byte wrapper. Recursive layouts and further host qualification remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4451,7 +4451,13 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ByteHashes.lean",
+        "runtime/tests/byte_hashes.rs",
+        "tests/Sha512Fab.lean",
+        "runtime/tests/sha512_fab.rs",
+        "tests/compact/sha512-fab.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

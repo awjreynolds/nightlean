@@ -161,8 +161,36 @@ private def oneByteHashAlignment : Lean.Json := Lean.Json.arr #[Lean.Json.mkObj 
     ("length", Lean.toJson (1 : Nat))])]]
 
 #guard byteHashProducerAccepts oneByteHashAlignment ["%byte"] 255
+#guard byteHashProducerAccepts (Lean.Json.arr #[]) [] 255
 #guard !(byteHashProducerAccepts oneByteHashAlignment [] 255)
 #guard !(byteHashProducerAccepts oneByteHashAlignment ["%byte"] 256)
-#guard !(byteHashProducerAccepts (Lean.Json.arr #[Lean.Json.mkObj [
+
+private def oneFieldHashAlignment : Lean.Json := Lean.Json.arr #[Lean.Json.mkObj [
   ("tag", Lean.toJson ("atom" : String)),
-  ("value", Lean.Json.mkObj [("tag", Lean.toJson ("field" : String))])]]) ["%byte"] 255)
+  ("value", Lean.Json.mkObj [("tag", Lean.toJson ("field" : String))])]]
+
+noctium_circuit rawOneByteHash where
+  private payload : Bytes 1
+  output first : UInt 8 := disclose(byteAt(sha512(payload), 0))
+end
+
+private def replaceHashJson (object : Lean.Json) (field : String) (value : Lean.Json) :
+    Lean.Json := match object.getObj? with
+  | .error _ => object
+  | .ok fields => Lean.Json.mkObj (fields.toList.filter (·.1 != field) ++ [(field, value)])
+
+-- A typed Field hash uses different binary bytes from a raw Bytes1 hash.
+#guard match Backend.Zkir.lowerCircuit rawOneByteHash, Backend.Native.expectedCircuit rawOneByteHash with
+  | .ok program, .ok expected =>
+    match (program.getObjVal? "instructions").bind Lean.Json.getArr? with
+    | .error _ => Bool.false
+    | .ok instructions =>
+      let mutated := instructions.map fun instruction =>
+        if (instruction.getObjVal? "op").toOption == some (Lean.toJson ("sha512" : String)) then
+          replaceHashJson instruction "alignment" oneFieldHashAlignment
+        else instruction
+      mutated != instructions &&
+        (Backend.Native.validate expected program).isOk &&
+        !(Backend.Native.validate expected
+          (replaceHashJson program "instructions" (.arr mutated))).isOk
+  | _, _ => Bool.false
