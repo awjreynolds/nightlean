@@ -1,0 +1,11 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export pure circuit inspect(kPoint: Secp256k1Point, kScalar: Secp256k1Scalar,
+                            rPoint: Secp256r1Point, rScalar: Secp256r1Scalar): [
+  Secp256k1Point, Secp256k1Scalar, Secp256k1Base, Secp256k1Base,
+  Secp256r1Point, Secp256r1Scalar, Secp256r1Base, Secp256r1Base
+] {
+  return [kPoint, kScalar, secp256k1PointX(kPoint), secp256k1PointY(kPoint),
+          rPoint, rScalar, secp256r1PointX(rPoint), secp256r1PointY(rPoint)];
+}
