@@ -2,6 +2,7 @@
 #[path = "localnet_store.rs"]
 pub mod journal;
 mod shielded_receive;
+mod shielded_transfer;
 use crate::{
     Db,
     client::{
@@ -1419,6 +1420,7 @@ pub struct DevelopmentFunding<'a> {
     policy: crate::funding::FeePolicy,
     rng: RefCell<Option<rand::rngs::StdRng>>,
     shielded_receive: Option<shielded_receive::BookedOffer>,
+    shielded_transfer: Option<shielded_transfer::BookedTransfer>,
 }
 impl<'a> DevelopmentFunding<'a> {
     pub fn new(
@@ -1435,6 +1437,7 @@ impl<'a> DevelopmentFunding<'a> {
             policy,
             rng: RefCell::new(Some(rng)),
             shielded_receive: None,
+            shielded_transfer: None,
         }
     }
 }
@@ -1474,6 +1477,22 @@ impl crate::client::FundingAdapter for DevelopmentFunding<'_> {
                     contract,
                     receive.offer.clone(),
                     receive.randomness,
+                    &policy.network_id,
+                    &snapshot.state.parameters,
+                    self.material,
+                    self.parameters,
+                    snapshot.block.tblock,
+                    self.policy,
+                    rng,
+                )
+                .await
+        } else if let Some(transfer) = &self.shielded_transfer {
+            transfer.check_booking(snapshot)?;
+            wallet
+                .fund_shielded_transfer(
+                    contract,
+                    transfer.offer.clone(),
+                    transfer.randomness,
                     &policy.network_id,
                     &snapshot.state.parameters,
                     self.material,

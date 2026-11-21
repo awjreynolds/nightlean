@@ -352,6 +352,7 @@ scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdat
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "receiveShieldedToMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedInputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedOutputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
@@ -1883,7 +1884,9 @@ private def elaborateTreeRead (storage destination : TSyntax `ident)
   | .composite environment (.structure typeId) => do
     let fields ← match LedgerValueType.recordFields environment (.structure typeId) with
       | .ok fields => pure fields
-      | .error message => throwErrorAt destination message
+      | .error _ => match LedgerValueType.shieldedCoinRecordFields environment (.structure typeId) with
+        | .ok fields => pure fields
+        | .error message => throwErrorAt destination message
     let (readName, updated) ← freshReadName depth state destination
     let (updated, destinations) ← bindLedgerRecordFields updated destination depth fields
     let typeTerm ← `(Noctium.Types.CompositeType.structure $(stringTerm typeId))
@@ -2384,6 +2387,60 @@ private def elaborateEffect (schema : List (String × StateKind))
         terms := state.terms.push receiveTerm
         spans := state.spans.push span |>.push span |>.push span
         guards := state.guards.push noGuard |>.push noGuard |>.push noGuard}
+    | `(nlupdate| spendShieldedFromMap($storage:ident, $nonce:nlexpr, $recipient:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "spendShieldedFromMap must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "spendShieldedFromMap must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .map keyTy (.composite environment recordType) := treeSchema
+        | throwErrorAt storage "spendShieldedFromMap requires a root Bytes32-keyed tree Map"
+      unless keyTy == .bytes 32 do
+        throwErrorAt storage "spendShieldedFromMap map key must be Bytes32"
+      let fields ← match LedgerValueType.shieldedCoinRecordFields environment recordType with
+        | .ok fields => pure fields
+        | .error message => throwErrorAt storage message
+      unless fields.map Prod.fst == ["nonce", "color", "value", "mtIndex"] do
+        throwErrorAt storage "spendShieldedFromMap requires the exact shielded coin field order"
+      let recipientValue ← checkedExpression state.env recipient (.bytes 32)
+      let coinName := s!"noctium_spend_coin_{state.terms.size}"
+      let coin := mkIdent (Name.mkSimple coinName)
+      state ← elaborateTreeRead storage coin [nonce] treeSchema depth state
+      let nonceFieldName := coinName ++ "_nonce"
+      let colorFieldName := coinName ++ "_color"
+      let amountFieldName := coinName ++ "_value"
+      let nonceField := mkIdent (Name.mkSimple nonceFieldName)
+      let colorField := mkIdent (Name.mkSimple colorFieldName)
+      let amountField := mkIdent (Name.mkSimple amountFieldName)
+      let nonceFieldSyntax ← `(nlexpr| $nonceField:ident)
+      let colorFieldSyntax ← `(nlexpr| $colorField:ident)
+      let amountFieldSyntax ← `(nlexpr| $amountField:ident)
+      let nonceRecord ← checkedExpression state.env nonceFieldSyntax (.bytes 32)
+      let color ← checkedExpression state.env colorFieldSyntax (.bytes 32)
+      let amount ← checkedExpression state.env amountFieldSyntax (.uint (2 ^ 128 - 1))
+      let equalitySyntax ← `(nlexpr| eq($nonceFieldSyntax, $nonce))
+      let equality ← checkedExpression state.env equalitySyntax .bool
+      let requireTerm ← `(Noctium.Effect.require $equality)
+      state := {state with terms := state.terms.push requireTerm}
+      let addressName := s!"noctium_spend_address_{state.terms.size}"
+      unless state.env.all (fun binding => binding.1 != addressName) do
+        throwErrorAt update "reserved spendShieldedFromMap binding collides with an existing read"
+      let addressTerm ← `(Noctium.Effect.readContractAddress $(stringTerm addressName))
+      state := {state with terms := state.terms.push addressTerm}
+      state ← bindReadName state addressName addressName (.bytes 32)
+      let selfAddress ← `(@Noctium.Expr.ref (Noctium.Ty.bytes 32) $(stringTerm addressName))
+      let spendTerm ← `(Noctium.Effect.spendShieldedFromMap
+        $(stringTerm storage.getId.toString) $nonceRecord $color $amount $recipientValue $selfAddress)
+      state := {state with terms := state.terms.push spendTerm}
+      let (path, _) ← lowerTreePath state.env treeSchema [nonce]
+      let keys ← pathKeysTerm path
+      let removeTerm ← `(Noctium.Effect.removePath $(stringTerm storage.getId.toString) $keys)
+      let noGuard ← `(none)
+      state := {state with
+        terms := state.terms.push removeTerm
+        spans := state.spans.push span |>.push span |>.push span |>.push span
+        guards := state.guards.push noGuard |>.push noGuard |>.push noGuard |>.push noGuard}
     | `(nlupdate| mintUnshielded($domain:nlexpr, $amount:nlexpr)) => do
       let domain ← checkedExpression state.env domain (.bytes 32)
       let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
