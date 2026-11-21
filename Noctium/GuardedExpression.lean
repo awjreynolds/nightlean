@@ -62,6 +62,7 @@ private def guardForeignFromBytes (guard : Expr .bool) : (kind : Foreign.Kind) �
       (.select guard value (.bytesLiteral 32 (1 :: List.replicate 31 0)))
   | kind, _, value => .foreignFromBytes kind value
 
+mutual
 /-- Replace every partial scalar operation with a safe inactive computation.
 The caller supplies a stable guard expression, usually a fresh outer let
 reference, so nested source lets cannot capture it. Eager selects still
@@ -100,6 +101,8 @@ def totalize (guard : Expr .bool) : Expr ty → Expr ty
   | .persistentHashVector32 values => .persistentHashVector32 (values.map (totalize guard))
   | .persistentHashNative value => .persistentHashNative (totalize guard value)
   | .persistentHashNativeVector values => .persistentHashNativeVector (values.map (totalize guard))
+  | .persistentHashFab environment type values =>
+    .persistentHashFab environment type (totalizeFabValues guard values)
   | .transientHash values => .transientHash (values.map (totalize guard))
   | .hashToCurve values => .hashToCurve (values.map (totalize guard))
   | .toBytes32 value => .toBytes32 (totalize guard value)
@@ -154,5 +157,24 @@ def totalize (guard : Expr .bool) : Expr ty → Expr ty
     .select (totalize guard condition) (totalize guard yes) (totalize guard no)
   | .poseidon2 domain left right =>
     .poseidon2 domain (totalize guard left) (totalize guard right)
+termination_by value => sizeOf value
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | have h := Noctium.sizeOfMemberListLt (by assumption); omega
+    | omega
+
+private def totalizeFabValues (guard : Expr .bool) :
+    List (Sigma Expr) → List (Sigma Expr)
+  | [] => []
+  | ⟨valueTy, value⟩ :: rest =>
+      ⟨valueTy, totalize guard value⟩ :: totalizeFabValues guard rest
+termination_by values => sizeOf values
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | have _h := Noctium.sizeOfSigmaExprHeadLt _ _; omega
+    | omega
+end
 
 end Noctium.GuardedExpression

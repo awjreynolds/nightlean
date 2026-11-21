@@ -1256,6 +1256,7 @@ private def merkleTreeResetHistoryAtOp (state : List StateDecl) (name : String)
   unless historic do throw "resetHistory requires a HistoricMerkleTree"
   pure (.merkleTreeResetHistoryAt slot depth keys)
 
+mutual
 private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ | .foreignBase _ _ | .foreignScalar _ _ | .foreignPoint _ _ => []
   | .opaqueBytesProjection value => expressionNames value
@@ -1268,6 +1269,7 @@ private def expressionNames : Expr ty → List String
   | .bytes32Literal _ | .bytesLiteral _ _ => []
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value
+  | .persistentHashFab _ _ values => expressionNamesFabValues values
   | .hashToCurve values | .persistentHashNativeVector values | .transientHash values => values.flatMap expressionNames
   | .toBytes32 value | .fromBytes32 value | .fromBytes value => expressionNames value
   | .reverseBytes32 value | .reverseBytes value | .sliceBytes value _ _ => expressionNames value
@@ -1295,6 +1297,25 @@ private def expressionNames : Expr ty → List String
   | .select condition yes no =>
     expressionNames condition ++ expressionNames yes ++ expressionNames no
   | .poseidon2 _ left right => expressionNames left ++ expressionNames right
+termination_by value => sizeOf value
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | have _h := sizeOfSigmaExprMemberLt (by assumption); omega
+    | have _h := sizeOfSigmaExprHeadLt _ _; omega
+    | have h := sizeOfMemberListLt (by assumption); omega
+    | omega
+
+private def expressionNamesFabValues : List (Sigma Expr) → List String
+  | [] => []
+  | ⟨_, value⟩ :: rest => expressionNames value ++ expressionNamesFabValues rest
+termination_by values => sizeOf values
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | exact sizeOfSigmaExprHeadLt _ _
+    | omega
+end
 
 private def pathExpressionNames (keys : List PathKey) : List String :=
   keys.flatMap fun key => match key with

@@ -492,6 +492,8 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
     s!"byteAt({renderExpr value}, {index.getNat})"
   | `(nlexpr| persistentHashVector32([$values,*])) =>
     s!"persistentHashVector32([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
+  | `(nlexpr| persistentHashFab($environment:ident, $type:ident, [$values,*])) =>
+    s!"persistentHashFab({environment.getId}, {type.getId}, [{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| persistentHashNative($value)) => s!"persistentHashNative({renderExpr value})"
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     s!"persistentHashNativeVector([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
@@ -585,6 +587,7 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| concatBytes($left, $right)) => disclosedValues left ++ disclosedValues right
   | `(nlexpr| byteAt($value, $_:num)) => disclosedValues value
   | `(nlexpr| persistentHashVector32([$values,*]))
+  | `(nlexpr| persistentHashFab($_:ident, $_:ident, [$values,*]))
   | `(nlexpr| persistentHashNativeVector([$values,*]))
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.flatMap disclosedValues
@@ -643,6 +646,7 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| concatBytes($left, $right)) => inlineAssertions left ++ inlineAssertions right
   | `(nlexpr| byteAt($value, $_:num)) => inlineAssertions value
   | `(nlexpr| persistentHashVector32([$values,*]))
+  | `(nlexpr| persistentHashFab($_:ident, $_:ident, [$values,*]))
   | `(nlexpr| persistentHashNativeVector([$values,*]))
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.flatMap inlineAssertions

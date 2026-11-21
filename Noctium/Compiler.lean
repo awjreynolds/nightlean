@@ -61,6 +61,8 @@ private def expressionJson : Expr ty → Json
       ("value", expressionJson value)]
   | .persistentHashNativeVector values => Json.mkObj [("tag", toJson ("persistentHashNativeVector" : String)),
       ("values", toJson (values.map expressionJson))]
+  | .persistentHashFab environment type values =>
+      _root_.Noctium.NativeExpression.toJson (.persistentHashFab environment type values)
   | .transientHash values => Json.mkObj [("tag", toJson ("transientHash" : String)),
       ("values", toJson (values.map expressionJson))]
   | .toBytes32 value => Json.mkObj [("tag", toJson ("toBytes32" : String)),

@@ -305,6 +305,51 @@ private def alignedBytes32Pairs : List Fact → Except String (List (Term × Ter
     pure ((highByte.term, low31.term) :: (← alignedBytes32Pairs rest))
   | _ => throw "Bytes32 persistent_hash requires two fields per aligned value"
 
+private def fabAlignmentDescriptor (atom : Json) : Except String String := do
+  ensure ((← stringField atom "tag") == "atom") "mixed FAB alignment entry must be an atom"
+  let value ← atom.getObjVal? "value"
+  match ← stringField value "tag" with
+  | "field" =>
+    fields value ["tag"]
+    pure "field"
+  | "bytes" => do
+    fields value ["tag", "length"]
+    let length ← natField value "length"
+    ensure (length > 0 && length ≤ 32) "mixed FAB byte atom width is unsupported"
+    pure s!"bytes:{length}"
+  | _ => throw "mixed FAB alignment has an unsupported atom"
+
+private def checkedFabHashOperands (alignment : Json) (values : List Fact) :
+    Except String (List String × List Term) := do
+  let atoms ← alignment.getArr?
+  ensure (atoms.size > 0 && atoms.size ≤ 32) "mixed FAB alignment must contain 1 to 32 atoms"
+  let descriptors ← atoms.toList.mapM fabAlignmentDescriptor
+  let mut remaining := values
+  let mut terms := []
+  for descriptor in descriptors do
+    match descriptor with
+    | "field" =>
+      let some value := remaining.head? | throw "mixed FAB field atom lacks an operand"
+      remaining := remaining.drop 1
+      terms := terms ++ [value.term]
+    | descriptor =>
+      let some width := (descriptor.drop 6).toNat? | throw "mixed FAB byte atom width is malformed"
+      if width == 32 then
+        let some highByte := remaining[0]? | throw "mixed FAB Bytes32 atom lacks its high byte"
+        let some low31 := remaining[1]? | throw "mixed FAB Bytes32 atom lacks its low 31 bytes"
+        ensure (highByte.maximum ≤ 255 && low31.maximum ≤ 2 ^ (31 * 8) - 1)
+          "mixed FAB Bytes32 operands lack canonical byte ranges"
+        remaining := remaining.drop 2
+        terms := terms ++ [highByte.term, low31.term]
+      else do
+        let some value := remaining.head? | throw "mixed FAB byte atom lacks an operand"
+        ensure (value.maximum ≤ 2 ^ (8 * width) - 1)
+          "mixed FAB byte operand lacks its exact byte-width range"
+        remaining := remaining.drop 1
+        terms := terms ++ [value.term]
+  ensure remaining.isEmpty "mixed FAB alignment and operand counts differ"
+  pure (descriptors, terms)
+
 private def equalityPairMatches (left right : Term) (pair : Term × Term) : Bool :=
   (left == pair.1 && right == pair.2) || (left == pair.2 && right == pair.1)
 
@@ -548,6 +593,17 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
           ensure (values.length == atoms.size)
             "Native vector persistent_hash field count differs from its alignment"
           pure (persistentHashNativeVectorTerm (values.map (·.term)))
+        else if atoms.any (fun atom =>
+            match atom.getObjVal? "value" with
+            | .ok value =>
+              match value.getObjVal? "tag" with
+              | .ok tag => match tag.getStr? with
+                | .ok "field" => true
+                | _ => false
+              | .error _ => false
+            | .error _ => false) then do
+          let (descriptors, operands) ← checkedFabHashOperands alignment values
+          pure (persistentHashFabTerm descriptors operands)
         else if atoms.size ≤ 1 then
           checkedFixedByteHashTerm opcode alignment values
         else do
