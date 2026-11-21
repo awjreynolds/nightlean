@@ -66,16 +66,6 @@ impl BookedMerge {
             || self.offer.inputs.len() != 2
             || self.offer.outputs.len() != 1
             || !self.offer.transient.is_empty()
-            || self.offer.inputs.get(0).is_none_or(|input| {
-                input.nullifier != self.inputs[0].nullifier
-                    || input.merkle_tree_root != self.inputs[0].root
-                    || input.contract_address.as_deref() != Some(&self.address)
-            })
-            || self.offer.inputs.get(1).is_none_or(|input| {
-                input.nullifier != self.inputs[1].nullifier
-                    || input.merkle_tree_root != self.inputs[1].root
-                    || input.contract_address.as_deref() != Some(&self.address)
-            })
             || self.inputs[0].nullifier == self.inputs[1].nullifier
             || self.offer.outputs.iter_deref().any(|output| {
                 output.coin_com != self.output.commitment
@@ -89,6 +79,14 @@ impl BookedMerge {
         }
 
         for expected in &self.inputs {
+            // The ledger normalizes offer order independently of the contract's inputs.
+            if !self.offer.inputs.iter_deref().any(|input| {
+                input.nullifier == expected.nullifier
+                    && input.merkle_tree_root == expected.root
+                    && input.contract_address.as_deref() == Some(&self.address)
+            }) {
+                return Err(HostFailure);
+            }
             let info = Info::from(&expected.coin);
             let commitment = info.commitment(&Recipient::Contract(self.address));
             let nullifier = info.nullifier(&SenderEvidence::Contract(self.address));
@@ -382,7 +380,7 @@ mod tests {
                 policy.clone(),
                 Duration::from_secs(15),
                 64 * 1024 * 1024,
-                10_000,
+                100_000,
             )?;
             let mut dust_seed = [0; 32];
             dust_seed[31] = 1;

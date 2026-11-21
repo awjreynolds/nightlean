@@ -151,4 +151,26 @@ NOCTIUM_PARTIAL_SPEND_SPEND_MANIFEST_SHA256=YOUR_SPEND_MANIFEST_SHA256 \
   funded_shielded_map_partial_spend_localnet -- --ignored --nocapture
 ```
 
-Pins and source behavior: [Compact 0.36.1 release](https://github.com/LFDT-Minokawa/compact/releases/tag/compactc-v0.36.1), [Compact private tip jar](https://docs.midnight.network/tutorials/private-tip-jar/smart-contract), [Compact ledger ADTs](https://docs.midnight.network/compact/reference/ledger-adt), [Ledger 9.1.0.1](https://github.com/midnightntwrk/midnight-ledger/releases/tag/ledger-9.1.0.1).
+## Merge two finalized coins
+
+`mergeShieldedFromMap(pot, nonceA, nonceB)` consumes two distinct, finalized contract-owned coins of the same color. It uses a checked UInt128 sum and derives the new nonce from the first coin. The native host checks both nullifiers and their Merkle roots and owner after the ledger normalizes the offer order. The proved call claims the exact output commitment and stores one new qualified coin.
+
+The pinned Compact comparator and native VM fixture agree for values 5 and 7, including the nonce, commitment, and both nullifiers. The fixture checks duplicate inputs, a different color, and overflow. The Compact JavaScript booking codec limits amounts to UInt64, so the UInt128 overflow check uses the native fixture.
+
+Ledger 9.1.0.1 finalized the funded merge at block 48303. The two input nullifiers were spent, and the new Map row and Zswap leaf recorded value 12 at index 32. [Receipt](shielded-map-merge-localnet-receipt.json)
+
+Compile `tests/ShieldedCoinMerge.lean` with the ZKIR 3.2.1 target and prepare authenticated `mint` and `merge` bundles using the verified localnet parameters. [Bundle assembly](portable-artifacts.md)
+
+```sh
+NOCTIUM_MERGE_NODE=http://127.0.0.1:19944 \
+NOCTIUM_MERGE_PARAMETER_CACHE=/path/to/verified/parameter-cache \
+NOCTIUM_MERGE_MINT_BUNDLE=/path/to/mint-bundle \
+NOCTIUM_MERGE_MINT_MANIFEST_SHA256=YOUR_MINT_MANIFEST_SHA256 \
+NOCTIUM_MERGE_BUNDLE=/path/to/merge-bundle \
+NOCTIUM_MERGE_MANIFEST_SHA256=YOUR_MERGE_MANIFEST_SHA256 \
+  cargo test --locked --manifest-path runtime/Cargo.toml --lib \
+  --no-default-features --features zkir-321,localnet \
+  funded_shielded_map_merge_localnet -- --ignored --nocapture
+```
+
+Pins and source behavior are recorded in the [Compact 0.36.1 release](https://github.com/LFDT-Minokawa/compact/releases/tag/compactc-v0.36.1), [Compact private tip jar](https://docs.midnight.network/tutorials/private-tip-jar/smart-contract), [Compact ledger ADTs](https://docs.midnight.network/compact/reference/ledger-adt), and [Ledger 9.1.0.1 release](https://github.com/midnightntwrk/midnight-ledger/releases/tag/ledger-9.1.0.1).
