@@ -351,6 +351,7 @@ declare_syntax_cat nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "receiveShieldedToMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedInputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedOutputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
@@ -2342,6 +2343,47 @@ private def elaborateEffect (schema : List (String × StateKind))
       let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
       let term ← `(Noctium.Effect.mintShielded $domain $amount)
       state := {state with terms := state.terms.push term}
+    | `(nlupdate| receiveShieldedToMap($storage:ident, $nonce:nlexpr,
+        $color:nlexpr, $amount:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "receiveShieldedToMap must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "receiveShieldedToMap must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .map keyTy (.composite ..) := treeSchema
+        | throwErrorAt storage "receiveShieldedToMap requires a root Bytes32-keyed tree Map"
+      unless keyTy == .bytes 32 do
+        throwErrorAt storage "receiveShieldedToMap map key must be Bytes32"
+      let nonceSyntax := nonce
+      let nonce ← checkedExpression state.env nonceSyntax (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let (path, _) ← lowerTreePath state.env treeSchema [nonceSyntax]
+      let keys ← pathKeysTerm path
+      let memberName := s!"noctium_receive_member_{state.terms.size}"
+      let addressName := s!"noctium_receive_address_{state.terms.size}"
+      unless state.env.all (fun binding => binding.1 != memberName && binding.1 != addressName) do
+        throwErrorAt update "reserved receiveShieldedToMap binding collides with an existing read"
+      let memberTerm ← `(Noctium.Effect.memberPath
+        $(stringTerm storage.getId.toString) $(stringTerm memberName) $keys)
+      state := {state with terms := state.terms.push memberTerm}
+      state ← bindReadName state memberName memberName .bool
+      let absentCondition ← `(Noctium.Expr.eq
+        (Noctium.Expr.ref $(stringTerm memberName)) (Noctium.Expr.bool Bool.false))
+      let requireTerm ← `(Noctium.Effect.require $absentCondition)
+      state := {state with terms := state.terms.push requireTerm}
+      let addressTerm ← `(Noctium.Effect.readContractAddress $(stringTerm addressName))
+      state := {state with terms := state.terms.push addressTerm}
+      state ← bindReadName state addressName addressName (.bytes 32)
+      let selfAddress ← `(@Noctium.Expr.ref (Noctium.Ty.bytes 32) $(stringTerm addressName))
+      let receiveTerm ← `(Noctium.Effect.receiveShieldedToMap
+        $(stringTerm storage.getId.toString) $nonce $color $amount $selfAddress)
+      let noGuard ← `(none)
+      state := {state with
+        terms := state.terms.push receiveTerm
+        spans := state.spans.push span |>.push span |>.push span
+        guards := state.guards.push noGuard |>.push noGuard |>.push noGuard}
     | `(nlupdate| mintUnshielded($domain:nlexpr, $amount:nlexpr)) => do
       let domain ← checkedExpression state.env domain (.bytes 32)
       let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))

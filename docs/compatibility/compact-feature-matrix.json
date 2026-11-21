@@ -2420,8 +2420,8 @@
       "id": "C-ADT-MAP-INSERTCOIN",
       "layer": "language-ledger",
       "surface": "Map.insertCoin",
-      "noctiumStatus": "missing",
-      "notes": "Qualified shielded-coin insertion requires a coin index allocated in the current transaction. Ordinary Noctium Map upsert has no qualified-coin insertion route.",
+      "noctiumStatus": "related-subset",
+      "notes": "Noctium qualifies and inserts a coin into a root Bytes32-keyed Map in the same unguarded call, using the native context's prebooked output index. General Map.insertCoin and funded transaction assembly remain open.",
       "source": [
         "adt"
       ],
@@ -2430,7 +2430,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ShieldedReceive.lean",
+        "runtime/tests/shielded_receive.rs",
+        "docs/development/compact-shielded-coin-map.md"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -3634,8 +3638,8 @@
       "id": "C-STDLIB-QUALIFIEDSHIELDEDCOININFO",
       "layer": "standard-library",
       "surface": "QualifiedShieldedCoinInfo",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "The same-call receive supports a fixed nonce, color, value and mtIndex ledger record. The native context supplies mtIndex. A general-purpose source type and ABI are open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3648,7 +3652,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ShieldedReceive.lean",
+        "runtime/tests/shielded_receive.rs",
+        "docs/development/compact-shielded-coin-map.md"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -5156,8 +5164,8 @@
       "id": "C-STDLIB-RECEIVESHIELDED",
       "layer": "standard-library",
       "surface": "receiveShielded",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "The unguarded own-contract receive-and-insert operation binds disclosed coin fields and the contract address into the ZKIR commitment. A native context with the output already booked is required. Funded transaction assembly is open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5170,7 +5178,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ShieldedReceive.lean",
+        "runtime/tests/shielded_receive.rs",
+        "docs/development/compact-shielded-coin-map.md"
+      ],
       "equivalence": "unverified"
     },
     {
