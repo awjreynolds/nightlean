@@ -49,4 +49,22 @@ for (const value of [33n, 22n, 11n]) {
   listState = await call(listState, 'prepend', value);
 }
 assert.deepEqual([...ledger(listState).values], [11n, 22n, 33n]);
-console.log('Compact 0.36.1 Map, Set and List snapshots match the native pagination fixture contents');
+
+const owner = new Uint8Array(32).fill(7);
+let nestedState = currentContractState.data;
+for (const [key, value] of flags) {
+  nestedState = await call(nestedState, 'putNested', owner, key, value);
+}
+for (const value of members) {
+  nestedState = await call(nestedState, 'addNested', owner, new Uint8Array(32).fill(value));
+}
+for (const value of [33n, 22n, 11n]) {
+  nestedState = await call(nestedState, 'prependNested', owner, value);
+}
+const nested = ledger(nestedState);
+const nestedFlags = [...nested.nestedFlags.lookup(owner)].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+const nestedMembers = [...nested.nestedMembers.lookup(owner)].sort((a, b) => Buffer.compare(a, b));
+assert.deepEqual(nestedFlags, [[1n, true], [2n, false], [10n, true]]);
+assert.deepEqual(nestedMembers, [1, 4, 9].map(value => new Uint8Array(32).fill(value)));
+assert.deepEqual([...nested.nestedValues.lookup(owner)], [11n, 22n, 33n]);
+console.log('Compact 0.36.1 nested Map, Set and List snapshots match native pagination contents');
