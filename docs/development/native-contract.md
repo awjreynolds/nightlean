@@ -307,6 +307,12 @@ The [Lean fixture](../../tests/NativeTokenBalance.lean) and
 [Compact reference fixture](../../tests/compact/TokenBalance.compact) use the
 same inputs and guards.
 
+For unshielded balance helpers, set the token tag to `true`. Derive inclusive
+comparisons from the opposite strict result. With an activity guard, use
+`select(enabled, boolXor(below, true), false)` for at least and apply the same
+expression to `above` for at most. The false branch preserves the inactive
+result. [Lean fixture](../../tests/UnshieldedBalanceHelpers.lean)
+
 The [localnet receipt](native-token-balance-localnet-receipt.json) records a
 finalized ordinary call for an absent unshielded token. The call wrote zero
 over the previous recorded value of 17. Shielded and nonzero cases use

@@ -1,0 +1,18 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger text: Opaque<"string">;
+export ledger bytes: Opaque<"Uint8Array">;
+
+export circuit write(textValue: Opaque<"string">, bytesValue: Opaque<"Uint8Array">): [] {
+  text = disclose(textValue);
+  bytes = disclose(bytesValue);
+}
+
+export circuit readText(): Opaque<"string"> {
+  return text;
+}
+
+export circuit readBytes(): Opaque<"Uint8Array"> {
+  return bytes;
+}
