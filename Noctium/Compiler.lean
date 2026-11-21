@@ -914,12 +914,14 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
   let constructorFields := match ctor with
     | none => []
     | some value => [("constructor", constructorJson value)]
+  let circuit := circuitSchemaJson ep.circuit.name.toName ep.circuit standaloneFile
+  let schemaVersion : Nat := if (circuit.getObjVal? "sharedBindings").isOk then 2 else 1
   return Json.mkObj ([
-    ("schemaVersion", toJson (1 : Nat))] ++ targetPlanFields ++ [
+    ("schemaVersion", toJson schemaVersion)] ++ targetPlanFields ++ [
     ("contractName", toJson contractName.toString),
     ("entrypoint", toJson ep.name), ("nativeCircuitFile", toJson (nativeCircuitFile contractName ep)),
     ("state", toJson (state.map stateJson)),
-    ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit standaloneFile),
+    ("circuit", circuit),
     ("operations", toJson (plan.operations.zipIdx.map fun (operation, index) =>
       operationJson (plan.activityGuards[index]?.getD none) operation)),
     ] ++ constructorFields ++ callInputFields ++ returnFields ++ returnViewFields ++ [

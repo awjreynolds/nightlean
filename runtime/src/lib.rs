@@ -2812,7 +2812,8 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
     }
 }
 fn validate_environment_schema(plan: &Plan) -> Result<()> {
-    ensure!(plan.schema_version == 1, "unsupported plan schema");
+    let expected_schema = if plan.circuit.shared_bindings.is_empty() { 1 } else { 2 };
+    ensure!(plan.schema_version == expected_schema, "unsupported plan schema");
     ensure!(
         profile::validate_plan(plan.target.as_deref(), plan.target_profile.as_ref()),
         "plan target differs from linked native profile"
@@ -6894,7 +6895,7 @@ mod shared_binding_tests {
 
     fn mk_plan(circuit: Json) -> Plan {
         let mut plan: Plan = serde_json::from_value(json!({
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "entrypoint": "sharedBindings",
             "circuit": circuit,
             "state": [],
@@ -6936,6 +6937,13 @@ mod shared_binding_tests {
         assert_eq!(field_decimal(native(&env, "second")), "7");
         assert!(!env.contains_key("_noctium_shared_0"));
         assert!(!env.contains_key("_noctium_shared_1"));
+
+        let mut wrong_schema = plan;
+        wrong_schema.schema_version = 1;
+        assert!(validate_environment_schema(&wrong_schema).is_err());
+        wrong_schema.schema_version = 2;
+        wrong_schema.circuit.shared_bindings.clear();
+        assert!(validate_environment_schema(&wrong_schema).is_err());
     }
 
     #[test]

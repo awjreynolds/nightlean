@@ -981,8 +981,13 @@ fn validate_payloads(payloads: &Payloads, omit_prover_key: bool) -> Result<()> {
         "profile_mismatch",
         "plan target differs from linked native consumer",
     )?;
+    let expected_plan_schema = match plan["circuit"].get("sharedBindings") {
+        Some(Value::Array(bindings)) if !bindings.is_empty() => 2,
+        None => 1,
+        _ => return Err(error("plan_mismatch", "invalid shared circuit bindings")),
+    };
     require(
-        plan["schemaVersion"] == 1
+        plan["schemaVersion"] == expected_plan_schema
             && plan["nativeCircuitFile"] == circuit_name
             && plan["operations"].is_array()
             && plan["reads"].is_array()
