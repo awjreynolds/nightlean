@@ -119,3 +119,9 @@ composites and curve-valued leaf fields remain open.
 A standalone JubjubPoint leaf hashes its two canonical field coordinates with
 the same ledger leaf domain. Its indexed default uses the curve identity.
 [Source fixture](../../tests/JubjubMerkleLeaves.lean)
+
+The ZKIR 3.2.1 foreign append check uses Base and Scalar value `1` and generator
+points for Secp256k1, Secp256r1, and Curve25519. All nine leaf digests and roots
+match the pinned Compact 0.36.1 vectors. Each cursor advances to `1`, and the
+native runtime rejects an append to a full tree.
+[Source](../../tests/ForeignMerkleLeaves.lean) · [Native check](../../runtime/tests/foreign_merkle_leaves.rs)

@@ -1676,13 +1676,30 @@ private def effectGuardTerm (env : Bindings) (parent : Option (TSyntax `term))
   | some parent, some condition =>
     `(some (Noctium.Backend.Impact.activityGuardWithin $parent $condition))
 
+private def merkleForeignFieldWidths : Foreign.Kind → List Nat
+  | .base _ | .scalar .secp256k1 | .scalar .secp256r1 => [24, 8]
+  | .scalar .curve25519 => [26, 7]
+  | .point .curve25519 => [24, 8, 24, 8]
+  | .point .secp256k1 | .point .secp256r1 => [24, 8, 24, 8, 32]
+
 private def merkleLeafWidth : Ty → Option Nat
   | .native => some 32
   | .bool => some 1
   | .uint maximum => some (maximum.log2 / 8 + 1)
   | .bytes length => some length
   | .jubjubPoint => some 64
+  | .foreign kind => some (merkleForeignFieldWidths kind).sum
   | _ => none
+
+private partial def concatMerkleLeafBytes : List (TSyntax `term) → CommandElabM (TSyntax `term)
+  | [] => `(Noctium.Expr.bytesLiteral 0 [])
+  | [bytes] => pure bytes
+  | chunks => do
+    -- Balance concatenation to bound the byte materialized at each level.
+    let mid := chunks.length / 2
+    let left ← concatMerkleLeafBytes (chunks.take mid)
+    let right ← concatMerkleLeafBytes (chunks.drop mid)
+    `(Noctium.Expr.concatBytes $left $right)
 
 private def encodeMerkleLeafScalar (ty : Ty) (value : TSyntax `term) :
     CommandElabM (TSyntax `term) := do
@@ -1700,17 +1717,13 @@ private def encodeMerkleLeafScalar (ty : Ty) (value : TSyntax `term) :
     let xBytes ← `(Noctium.Expr.toBytes32 $x)
     let yBytes ← `(Noctium.Expr.toBytes32 $y)
     `(Noctium.Expr.concatBytes $xBytes $yBytes)
+  | .foreign kind => do
+    let chunks ← (merkleForeignFieldWidths kind).zipIdx.mapM fun (width, index) => do
+      let field ← `(Noctium.Expr.foreignEncodedField $value $(natTerm index))
+      let bytes ← `(Noctium.Expr.toBytes32 $field)
+      `(Noctium.Expr.sliceBytes $bytes 0 $(natTerm width))
+    concatMerkleLeafBytes chunks
   | _ => throwError "unsupported MerkleTree leaf type"
-
-private partial def concatMerkleLeafBytes : List (TSyntax `term) → CommandElabM (TSyntax `term)
-  | [] => `(Noctium.Expr.bytesLiteral 0 [])
-  | [bytes] => pure bytes
-  | chunks => do
-    -- Balance concatenation to bound the byte materialized at each level.
-    let mid := chunks.length / 2
-    let left ← concatMerkleLeafBytes (chunks.take mid)
-    let right ← concatMerkleLeafBytes (chunks.drop mid)
-    `(Noctium.Expr.concatBytes $left $right)
 
 private def merkleLeafHash (values : List (Ty × TSyntax `term)) :
     CommandElabM (TSyntax `term) := do
@@ -2741,7 +2754,7 @@ private def checkMerkleLeafWidth (source : Syntax) (fields : List Ty) : CommandE
   let widths ← fields.mapM fun ty =>
     match merkleLeafWidth ty with
     | some width => pure width
-    | none => throwErrorAt source "MerkleTree leaves require Native, Bool, bounded UInt, fixed Bytes or JubjubPoint"
+    | none => throwErrorAt source "MerkleTree leaves require Native, Bool, bounded UInt, fixed Bytes, JubjubPoint or a foreign curve value"
   unless widths.sum + 6 ≤ Noctium.maxBytesLength do
     throwErrorAt source s!"MerkleTree leaf exceeds the maximum preimage length of {Noctium.maxBytesLength}"
 
