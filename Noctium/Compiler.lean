@@ -612,17 +612,151 @@ private def constructorJson (ctor : Constructor) : Json := Json.mkObj [
     ("type", toJson (constructorTypeName initializer.type)),
     ("value", constructorValueJson initializer.value)]))]
 
+private def jsonLetParts (expression : Json) : Except String (Array Json × Json) := do
+  let tag ← (← expression.getObjVal? "tag").getStr?
+  let body ← expression.getObjVal? "body"
+  match tag with
+  | "lets" => return (← (← expression.getObjVal? "bindings").getArr?, body)
+  | "let" =>
+    let name ← expression.getObjVal? "name"
+    let value ← expression.getObjVal? "value"
+    return (#[Json.arr #[name, value]], body)
+  | _ => throw "not a binding"
+
+private def jsonBindingParts : Json → Option (String × Json)
+  | .arr items =>
+    if items.size != 2 then none else
+      match items[0]?, items[1]? with
+      | some (Json.str name), some value => some (name, value)
+      | _, _ => none
+  | _ => none
+
+private def jsonStringField (expression : Json) (field : String) : Option String :=
+  ((expression.getObjVal? field).toOption.bind fun value => value.getStr?.toOption)
+
+private def jsonValueField (expression : Json) (field : String) : Option Json :=
+  (expression.getObjVal? field).toOption
+
+private def jsonArrayField (expression : Json) (field : String) : Option (Array Json) :=
+  (jsonValueField expression field).bind fun value => value.getArr?.toOption
+
+private partial def jsonFreeReferences (bound : List String) : Json → List String
+  | .obj fields =>
+    let expression := .obj fields
+    match jsonStringField expression "tag" with
+    | some "reference" =>
+      match jsonStringField expression "name" with
+      | some name => if bound.contains name then [] else [name]
+      | none => [""]
+    | some "let" =>
+      match jsonStringField expression "name", jsonValueField expression "value",
+          jsonValueField expression "body" with
+      | some name, some value, some body =>
+        jsonFreeReferences bound value ++ jsonFreeReferences (name :: bound) body
+      | _, _, _ => fields.toList.flatMap (fun (_, value) => jsonFreeReferences bound value)
+    | some "lets" =>
+      match jsonArrayField expression "bindings", jsonValueField expression "body" with
+      | some bindings, some body => Id.run do
+        let mut scope := bound
+        let mut references := []
+        for binding in bindings do
+          match jsonBindingParts binding with
+          | some (name, value) =>
+            references := references ++ jsonFreeReferences scope value
+            scope := name :: scope
+          | none => references := references ++ [""]
+        return references ++ jsonFreeReferences scope body
+      | _, _ => fields.toList.flatMap (fun (_, value) => jsonFreeReferences bound value)
+    | _ => fields.toList.flatMap (fun (_, value) => jsonFreeReferences bound value)
+  | .arr values => values.toList.flatMap (jsonFreeReferences bound)
+  | _ => []
+
+private def shareableBinding (inputNames outputNames earlierNames : List String)
+    (binding : Json) : _root_.Bool :=
+  match jsonBindingParts binding with
+  | some (name, value) =>
+    -- '$' marks compiler-generated temporaries in Noctium expressions.
+    let allowedNames := inputNames ++ earlierNames
+    name.startsWith "$" && !inputNames.contains name &&
+      !outputNames.contains name && !earlierNames.contains name &&
+      (jsonFreeReferences [] value).all fun reference =>
+        !outputNames.contains reference && allowedNames.contains reference
+  | none => _root_.Bool.false
+
+private def commonSharedPrefix (outputs : List Json) (inputNames outputNames : List String) : Array Json := Id.run do
+  if outputs.length < 2 then return #[]
+  let some firstExpression := outputs.head? | return #[]
+  let some (firstBindings, _) := (jsonLetParts firstExpression).toOption | return #[]
+  let otherBindings := outputs.drop 1 |>.map fun expression =>
+    ((jsonLetParts expression).toOption.map Prod.fst).getD #[]
+  let mut common := #[]
+  let mut earlierNames := []
+  for index in List.range firstBindings.size do
+    let some binding := firstBindings[index]? | break
+    if otherBindings.all (fun bindings => bindings[index]? == some binding) &&
+        shareableBinding inputNames outputNames earlierNames binding then
+      common := common.push binding
+      if let some (name, _) := jsonBindingParts binding then
+        earlierNames := earlierNames ++ [name]
+    else
+      break
+  return common
+
+private def beginsWithBindings (bindings shared : Array Json) : _root_.Bool :=
+  shared.size ≤ bindings.size && shared.toList.zipIdx.all fun (binding, index) =>
+    bindings[index]? == some binding
+
+private def wrapJsonLets (bindings : Array Json) (body : Json) : Json :=
+  if bindings.isEmpty then body else if bindings.size == 1 then
+    match jsonBindingParts bindings[0]! with
+    | some (name, value) => Json.mkObj [
+        ("tag", toJson ("let" : String)), ("name", toJson name), ("value", value), ("body", body)]
+    | none => body
+  else Json.mkObj [
+    ("tag", toJson ("lets" : String)), ("bindings", Json.arr bindings), ("body", body)]
+
+private def stripSharedPrefix (shared : Array Json) (expression : Json) : Json :=
+  match jsonLetParts expression with
+  | .ok (bindings, body) =>
+    if beginsWithBindings bindings shared then
+      wrapJsonLets (bindings.extract shared.size bindings.size) body
+    else expression
+  | .error _ => expression
+
+private partial def markSharedConstraintLets (shared : Array Json) : Json → Json
+  | .arr values => Json.arr (values.map (markSharedConstraintLets shared))
+  | .obj fields =>
+    let expression := Json.mkObj (fields.toList.map fun (key, value) =>
+      (key, markSharedConstraintLets shared value))
+    match jsonLetParts expression with
+    | .ok (bindings, body) =>
+      if beginsWithBindings bindings shared then
+        Json.mkObj [("tag", toJson ("sharedLets" : String)),
+          ("body", wrapJsonLets (bindings.extract shared.size bindings.size) body)]
+      else expression
+    | .error _ => expression
+  | expression => expression
+
 private def circuitSchemaJson (name : Name) (circuit : Circuit)
     (standaloneFile : _root_.Bool := Bool.true) : Json :=
   let files := if standaloneFile then [("file", toJson (name.toString ++ ".zkir"))] else []
+  let outputExpressions := circuit.outputs.map fun out => nativeExpressionJson out.value
+  let sharedBindings := commonSharedPrefix outputExpressions (circuit.inputs.map (·.name))
+    (circuit.outputs.map (·.name))
+  let outputs := (circuit.outputs.zip outputExpressions).map fun (out, expression) => Json.mkObj [
+    ("name", toJson out.name), ("type", toJson (typeName out.ty)),
+    ("visibility", toJson ("public" : String)),
+    ("expression", if sharedBindings.isEmpty then expression
+      else stripSharedPrefix sharedBindings expression)]
   Json.mkObj ([("name", toJson name.toString)] ++ files ++ [
     ("inputs", toJson (circuit.inputs.map fun input => Json.mkObj [
       ("name", toJson input.name), ("type", toJson (typeName input.ty)),
       ("visibility", toJson (if input.visibility == .«public» then "public" else "private"))])),
-    ("outputs", toJson (circuit.outputs.map fun out => Json.mkObj [
-      ("name", toJson out.name), ("type", toJson (typeName out.ty)),
-      ("visibility", toJson ("public" : String)), ("expression", nativeExpressionJson out.value)])),
-    ("constraints", toJson (circuit.constraints.map nativeExpressionJson))])
+    ("outputs", toJson outputs)] ++
+    (if sharedBindings.isEmpty then [] else [("sharedBindings", Json.arr sharedBindings)]) ++ [
+    ("constraints", toJson (circuit.constraints.map fun constraint =>
+      if sharedBindings.isEmpty then nativeExpressionJson constraint
+      else markSharedConstraintLets sharedBindings (nativeExpressionJson constraint)))])
 
 private def failDiagnostic (d : Diagnostic) : CommandElabM α :=
   throwError "{d.span.file}:{d.span.line}:{d.span.column}: {d.message}"
@@ -789,12 +923,14 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
   let constructorFields := match ctor with
     | none => []
     | some value => [("constructor", constructorJson value)]
+  let circuit := circuitSchemaJson ep.circuit.name.toName ep.circuit standaloneFile
+  let schemaVersion : Nat := if (circuit.getObjVal? "sharedBindings").isOk then 2 else 1
   return Json.mkObj ([
-    ("schemaVersion", toJson (1 : Nat))] ++ targetPlanFields ++ [
+    ("schemaVersion", toJson schemaVersion)] ++ targetPlanFields ++ [
     ("contractName", toJson contractName.toString),
     ("entrypoint", toJson ep.name), ("nativeCircuitFile", toJson (nativeCircuitFile contractName ep)),
     ("state", toJson (state.map stateJson)),
-    ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit standaloneFile),
+    ("circuit", circuit),
     ("operations", toJson (plan.operations.zipIdx.map fun (operation, index) =>
       operationJson (plan.activityGuards[index]?.getD none) operation)),
     ] ++ constructorFields ++ callInputFields ++ returnFields ++ returnViewFields ++ [

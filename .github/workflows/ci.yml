@@ -150,7 +150,12 @@ jobs:
           lake env lean tests/Issue43EffectBlocks.lean
           lake env lean examples/openzeppelin/PublicSupply.lean
           lake env lean examples/openzeppelin/ConfidentialToken.lean
-          .lake/build/bin/noctium check examples/openzeppelin/ShieldedRoleGate.lean --target profiles/midnight-ledger-9-zkir-3.2.1-target.json
+          role_dir=$(mktemp -d)
+          trap 'rm -rf "$role_dir"' EXIT
+          .lake/build/bin/noctium compile examples/openzeppelin/ShieldedRoleGate.lean \
+            --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+            --dedup-range-checks --emit ledger --emit witness --output "$role_dir"
+          test "$(wc -c < "$role_dir/OpenZeppelinPort.ShieldedRoleGate.ShieldedRoleGate.protectedAction.impact.json")" -le 2097152
       - name: Check source proof registration
         run: |
           lake build Noctium.Verification
