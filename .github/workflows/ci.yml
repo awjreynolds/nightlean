@@ -141,3 +141,5 @@ jobs:
         run: |
           bash tests/private-authoring-cli.sh
           bash tests/disclosure-cli.sh
+      - name: Check module identity and re-export disclosure
+        run: bash tests/modules/check.sh

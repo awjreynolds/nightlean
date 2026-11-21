@@ -1,0 +1,20 @@
+pragma language_version >= 0.28;
+
+module GenericLedger<T, #N> {
+  export ledger balance: T;
+  export circuit update(value: T): [] {
+    balance = disclose(value);
+    return [];
+  }
+}
+
+import GenericLedger<Field, 2> prefix first_;
+import GenericLedger<Field, 2> prefix again_;
+import GenericLedger<Uint<8>, 3> prefix different_;
+
+export {first_balance, again_balance, different_balance, first_update, again_update, different_update};
+
+export circuit againRead(value: Field): [] {
+  assert(again_balance == value, "wrong shared balance");
+  return [];
+}

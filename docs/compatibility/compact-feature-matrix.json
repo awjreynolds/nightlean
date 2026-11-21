@@ -963,7 +963,7 @@
       "id": "C-LANG-MODULE",
       "layer": "language",
       "surface": "Modules, imports, exports, includes",
-      "noctiumStatus": "missing",
+      "noctiumStatus": "subset",
       "notes": "Namespace and visibility behavior, top-level exports, generic modules.",
       "source": [
         "reference"
@@ -972,8 +972,23 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
+      "observedEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-21",
+        "scope": "Lean module imports, selective re-exports, visibility and cycle checks, and scalar ledger identity for repeated and distinct generic instances. Separate-file imports emit identical artifacts. One Ledger 9 localnet contract finalized four calls across the two instances. The Compact oracle covers the same scalar read and write behavior.",
+        "evidence": [
+          "tests/Modules.lean",
+          "tests/modules/check.sh",
+          "tests/compact/ModuleLedger.compact",
+          "docs/development/modules.md",
+          "docs/development/module-ledger-localnet-receipts.json"
+        ]
+      }
     },
     {
       "id": "C-LANG-SCOPE",
