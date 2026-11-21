@@ -309,12 +309,13 @@ scoped syntax "initialize" ident ":=" str : nlconstructorinit
 scoped syntax "constructor" "(" nlconstructorparam,* ")" "where" nlconstructorinit* "end" : nlstate
 scoped syntax "map" ident ":" nltype "=>" nltype : nlstate
 scoped syntax "counter" ident : nlstate
-declare_syntax_cat nlmerklespec
-scoped syntax num ("of" nltype)? : nlmerklespec
-scoped syntax "merkleTree" ident ":" nlmerklespec : nlstate
-scoped syntax "historicMerkleTree" ident ":" nlmerklespec : nlstate
 declare_syntax_cat nlcompositefield
 scoped syntax ident ":" nltype : nlcompositefield
+declare_syntax_cat nlmerklespec
+scoped syntax num ("of" nltype)? : nlmerklespec
+scoped syntax num "of" "struct" ident "{" nlcompositefield* "}" : nlmerklespec
+scoped syntax "merkleTree" ident ":" nlmerklespec : nlstate
+scoped syntax "historicMerkleTree" ident ":" nlmerklespec : nlstate
 scoped syntax "tree" ident ":" nltype "=>" "struct" ident "{" nlcompositefield* "}" : nlstate
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "struct" ident "{" nlcompositefield* "}" : nlstate
 scoped syntax ident ident ":" "struct" ident "{" nlcompositefield* "}" : nlstate
@@ -337,9 +338,9 @@ scoped syntax "tree" ident ":" nltype "=>" nltype "=>" nltype : nlstate
 declare_syntax_cat nlleaves
 scoped syntax "fields(" nlexpr,* ")" : nlleaves
 
-declare_syntax_cat nllistvalue
-scoped syntax nlexpr : nllistvalue
-scoped syntax nlleaves : nllistvalue
+declare_syntax_cat nlledgervalue
+scoped syntax nlexpr : nlledgervalue
+scoped syntax nlleaves : nlledgervalue
 
 declare_syntax_cat nlpath
 scoped syntax ident : nlpath
@@ -393,7 +394,7 @@ scoped syntax "insert" ident "[" nlexpr "]" ":=" nlleaves : nleffect
 scoped syntax "write" ident "[" nlexpr "]" ":=" nlleaves : nleffect
 scoped syntax "insert" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlleaves : nleffect
 scoped syntax "write" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlleaves : nleffect
-scoped syntax "pushFront" nlpath ":=" nllistvalue : nleffect
+scoped syntax "pushFront" nlpath ":=" nlledgervalue : nleffect
 scoped syntax "popFront" nlpath : nleffect
 scoped syntax "remove" nlpath : nleffect
 scoped syntax "blockTimeBefore(" nlexpr ")" "as" ident : nleffect
@@ -423,13 +424,13 @@ scoped syntax "insertHashIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
 scoped syntax "insertFieldIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insertHashIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insertFieldIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
-scoped syntax "insertLeaf" nlpath ":=" nlexpr : nleffect
-scoped syntax "when" nlexpr "insertLeaf" nlpath ":=" nlexpr : nleffect
-scoped syntax "insertLeafIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
-scoped syntax "when" nlexpr "insertLeafIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
+scoped syntax "insertLeaf" nlpath ":=" nlledgervalue : nleffect
+scoped syntax "when" nlexpr "insertLeaf" nlpath ":=" nlledgervalue : nleffect
+scoped syntax "insertLeafIndex" nlpath "at" nlexpr ":=" nlledgervalue : nleffect
+scoped syntax "when" nlexpr "insertLeafIndex" nlpath "at" nlexpr ":=" nlledgervalue : nleffect
 scoped syntax "insertLeafDefault" nlpath "at" nlexpr : nleffect
 scoped syntax "when" nlexpr "insertLeafDefault" nlpath "at" nlexpr : nleffect
-scoped syntax "when" nlexpr "pushFront" nlpath ":=" nllistvalue : nleffect
+scoped syntax "when" nlexpr "pushFront" nlpath ":=" nlledgervalue : nleffect
 scoped syntax "when" nlexpr "popFront" nlpath : nleffect
 scoped syntax "when" nlexpr "remove" nlpath : nleffect
 scoped syntax "when" nlexpr "blockTimeBefore(" nlexpr ")" "as" ident : nleffect
@@ -1367,15 +1368,19 @@ private def checkedExpression (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty)
   let (found, value) ← expression env stx
   coerceExpression stx found ty value
 
-private def elaborateLedgerFieldValues (env : Bindings) (payload : TSyntax `nlleaves)
-    (fields : List (String × Ty)) : CommandElabM (TSyntax `term) := do
-  let items ← match payload with
-    | `(nlleaves| fields($items:nlexpr,*)) => pure items.getElems.toList
-    | _ => throwErrorAt payload "ledger record payload expects fields(...)"
+private def checkedLedgerFieldValues (env : Bindings) (payload : TSyntax `nlleaves)
+    (fields : List (String × Ty)) : CommandElabM (List (Ty × TSyntax `term)) := do
+  let `(nlleaves| fields($items:nlexpr,*)) := payload
+    | throwErrorAt payload "ledger record payload expects fields(...)"
+  let items := items.getElems.toList
   unless items.length == fields.length do
     throwErrorAt payload "ledger record field count does not match its checked layout"
-  let values ← (items.zip fields).mapM fun (item, _, ty) => do
-    let value ← checkedExpression env item ty
+  (items.zip fields).mapM fun (item, _, ty) => do
+    pure (ty, ← checkedExpression env item ty)
+
+private def elaborateLedgerFieldValues (env : Bindings) (payload : TSyntax `nlleaves)
+    (fields : List (String × Ty)) : CommandElabM (TSyntax `term) := do
+  let values ← (← checkedLedgerFieldValues env payload fields).mapM fun (ty, value) => do
     `(Noctium.LedgerFieldExpr.mk $(← tyTerm ty) $value)
   let values := values.toArray
   `(([$values,*] : List Noctium.LedgerFieldExpr))
@@ -1604,9 +1609,14 @@ private def addReferenceAs (env : Bindings) (sourceName internalName : String) (
     CommandElabM Bindings := do
   pure ((sourceName, ty, ← `(@Noctium.Expr.ref $(← tyTerm ty) $(stringTerm internalName))) :: env)
 
+private inductive MerkleLeafType where
+  | scalar (ty : Ty)
+  | record (fields : List (String × Ty))
+  deriving BEq
+
 private structure EntryEffects where
   env : Bindings
-  merkleLeafTypes : List (String × Ty) := []
+  merkleLeafTypes : List (String × MerkleLeafType) := []
   terms : Array (TSyntax `term) := #[]
   spans : Array (TSyntax `term) := #[]
   guards : Array (TSyntax `term) := #[]
@@ -1640,10 +1650,10 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr insertHash $_path:nlpath := $_hash:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr insertHashIndex $_path:nlpath at $_index:nlexpr := $_hash:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr insertFieldIndex $_path:nlpath at $_index:nlexpr := $_leaf:nlexpr) => some condition
-  | `(nleffect| when $condition:nlexpr insertLeaf $_path:nlpath := $_leaf:nlexpr) => some condition
-  | `(nleffect| when $condition:nlexpr insertLeafIndex $_path:nlpath at $_index:nlexpr := $_leaf:nlexpr) => some condition
+  | `(nleffect| when $condition:nlexpr insertLeaf $_path:nlpath := $_leaf:nlledgervalue) => some condition
+  | `(nleffect| when $condition:nlexpr insertLeafIndex $_path:nlpath at $_index:nlexpr := $_leaf:nlledgervalue) => some condition
   | `(nleffect| when $condition:nlexpr insertLeafDefault $_path:nlpath at $_index:nlexpr) => some condition
-  | `(nleffect| when $condition:nlexpr pushFront $_path:nlpath := $_payload:nllistvalue) => some condition
+  | `(nleffect| when $condition:nlexpr pushFront $_path:nlpath := $_payload:nlledgervalue) => some condition
   | `(nleffect| when $condition:nlexpr popFront $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr remove $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr blockTimeBefore($_deadline:nlexpr) as $_dest:ident)
@@ -1673,19 +1683,52 @@ private def merkleLeafWidth : Ty → Option Nat
   | .bytes length => some length
   | _ => none
 
-private def merkleLeafHash (ty : Ty) (value : TSyntax `term) : CommandElabM (TSyntax `term) := do
-  let some width := merkleLeafWidth ty
-    | throwError "MerkleTree leaf must be Native, Bool, bounded UInt or fixed Bytes"
-  let bytes ← match ty with
-    | .native => `(Noctium.Expr.toBytes32 $value)
-    | .bool => `(Noctium.Expr.select $value
-        (Noctium.Expr.bytesLiteral 1 [1]) (Noctium.Expr.bytesLiteral 1 [0]))
-    | .uint _ => `(Noctium.Expr.sliceBytes
-        (Noctium.Expr.toBytes32 (Noctium.Expr.cast Noctium.Ty.native $value)) 0 $(natTerm width))
-    | .bytes _ => pure value
-    | _ => throwError "unsupported MerkleTree leaf type"
+private def encodeMerkleLeafScalar (ty : Ty) (value : TSyntax `term) :
+    CommandElabM (TSyntax `term) := do
+  match ty with
+  | .native => `(Noctium.Expr.toBytes32 $value)
+  | .bool => `(Noctium.Expr.select $value
+      (Noctium.Expr.bytesLiteral 1 [1]) (Noctium.Expr.bytesLiteral 1 [0]))
+  | .uint maximum => `(Noctium.Expr.sliceBytes
+      (Noctium.Expr.toBytes32 (Noctium.Expr.cast Noctium.Ty.native $value)) 0
+      $(natTerm (maximum.log2 / 8 + 1)))
+  | .bytes _ => pure value
+  | _ => throwError "unsupported MerkleTree leaf type"
+
+private partial def concatMerkleLeafBytes : List (TSyntax `term) → CommandElabM (TSyntax `term)
+  | [] => `(Noctium.Expr.bytesLiteral 0 [])
+  | [bytes] => pure bytes
+  | chunks => do
+    -- Balance concatenation to bound the byte materialized at each level.
+    let mid := chunks.length / 2
+    let left ← concatMerkleLeafBytes (chunks.take mid)
+    let right ← concatMerkleLeafBytes (chunks.drop mid)
+    `(Noctium.Expr.concatBytes $left $right)
+
+private def merkleLeafHash (values : List (Ty × TSyntax `term)) :
+    CommandElabM (TSyntax `term) := do
+  let chunks ← values.mapM fun (ty, value) => encodeMerkleLeafScalar ty value
   let domain ← `(Noctium.Expr.bytesLiteral 6 [109, 100, 110, 58, 108, 104])
-  `(Noctium.Expr.sha256 (Noctium.Expr.concatBytes $domain $bytes))
+  let bytes ← concatMerkleLeafBytes (domain :: chunks)
+  `(Noctium.Expr.sha256 $bytes)
+
+private def merkleLeafValues (env : Bindings) (ty : MerkleLeafType)
+    (leaf : Option (TSyntax `nlledgervalue)) : CommandElabM (List (Ty × TSyntax `term)) := do
+  match leaf with
+  | none =>
+    let types := match ty with | .scalar scalar => [scalar] | .record fields => fields.map Prod.snd
+    types.mapM fun field => do
+      pure (field, ← `(Noctium.GuardedExpression.zeroValue $(← tyTerm field)))
+  | some payload =>
+    match ty with
+    | .scalar scalar => do
+      let `(nlledgervalue| $value:nlexpr) := payload
+        | throwErrorAt payload "scalar MerkleTree leaf expects one expression"
+      pure [(scalar, ← checkedExpression env value scalar)]
+    | .record fields => do
+      let `(nlledgervalue| $values:nlleaves) := payload
+        | throwErrorAt payload "record MerkleTree leaf expects fields(...)"
+      checkedLedgerFieldValues env values fields
 
 private def merkleWriteTerm (storage : TSyntax `ident) (keys hash : TSyntax `term)
     (nested : _root_.Bool) (index : Option (TSyntax `term)) : CommandElabM (TSyntax `term) := do
@@ -1697,17 +1740,14 @@ private def merkleWriteTerm (storage : TSyntax `ident) (keys hash : TSyntax `ter
   | Bool.true, some index => `(Noctium.Effect.merkleTreeInsertHashIndexAt $name $keys $hash $index)
 
 private def elaborateTypedMerkleWrite (schema : List (String × StateKind)) (path : TSyntax `nlpath)
-    (leaf index : Option (TSyntax `nlexpr)) (fieldOnly : _root_.Bool)
+    (leaf : Option (TSyntax `nlledgervalue)) (index : Option (TSyntax `nlexpr)) (fieldOnly : _root_.Bool)
     (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, keys, _, _, nested) ← lowerMerkleTreePath schema state.env path
   let some ty := state.merkleLeafTypes.lookup storage.getId.toString
     | throwErrorAt path "MerkleTree path is missing its declared leaf type"
-  if fieldOnly && ty != .native then
+  if fieldOnly && ty != .scalar .native then
     throwErrorAt path "insertField requires a Native MerkleTree leaf"
-  let value ← match leaf with
-    | some leaf => checkedExpression state.env leaf ty
-    | none => `(Noctium.GuardedExpression.zeroValue $(← tyTerm ty))
-  let hash ← merkleLeafHash ty value
+  let hash ← merkleLeafHash (← merkleLeafValues state.env ty leaf)
   let index ← index.mapM fun index => checkedExpression state.env index (.uint (2 ^ 64 - 1))
   let term ← merkleWriteTerm storage keys hash nested index
   pure {state with terms := state.terms.push term}
@@ -1927,16 +1967,16 @@ private def elaborateListHeadOrDefault (schema : List (String × StateKind))
   elaborateListHead schema path record depth updated
 
 private def elaborateListPushFront (schema : List (String × StateKind))
-    (path : TSyntax `nlpath) (payload : TSyntax `nllistvalue)
+    (path : TSyntax `nlpath) (payload : TSyntax `nlledgervalue)
     (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, keys, type, fields) ← lowerListPath schema state.env path
   let valuesTerm ← match payload with
-    | `(nllistvalue| $item:nlexpr) => do
+    | `(nlledgervalue| $item:nlexpr) => do
       let .scalar ty := type
         | throwErrorAt payload "record List pushFront expects fields(...)"
       let value ← checkedExpression state.env item ty
       `([Noctium.LedgerFieldExpr.mk $(← tyTerm ty) $value])
-    | `(nllistvalue| $items:nlleaves) => do
+    | `(nlledgervalue| $items:nlleaves) => do
       if let .scalar _ := type then
         throwErrorAt payload "scalar List pushFront expects one value expression"
       elaborateLedgerFieldValues state.env items fields
@@ -2403,16 +2443,18 @@ private def elaborateEffect (schema : List (String × StateKind))
     let term ← merkleWriteTerm storage keys hash nested (some index)
     state := {state with terms := state.terms.push term}
   | `(nleffect| insertField $path:nlpath := $leaf:nlexpr)
-  | `(nleffect| when $_:nlexpr insertField $path:nlpath := $leaf:nlexpr) =>
-    state := ← elaborateTypedMerkleWrite schema path (some leaf) none Bool.true state
+  | `(nleffect| when $_:nlexpr insertField $path:nlpath := $leaf:nlexpr) => do
+    let payload ← `(nlledgervalue| $leaf:nlexpr)
+    state := ← elaborateTypedMerkleWrite schema path (some payload) none Bool.true state
   | `(nleffect| insertFieldIndex $path:nlpath at $index:nlexpr := $leaf:nlexpr)
-  | `(nleffect| when $_:nlexpr insertFieldIndex $path:nlpath at $index:nlexpr := $leaf:nlexpr) =>
-    state := ← elaborateTypedMerkleWrite schema path (some leaf) (some index) Bool.true state
-  | `(nleffect| insertLeaf $path:nlpath := $leaf:nlexpr)
-  | `(nleffect| when $_:nlexpr insertLeaf $path:nlpath := $leaf:nlexpr) =>
+  | `(nleffect| when $_:nlexpr insertFieldIndex $path:nlpath at $index:nlexpr := $leaf:nlexpr) => do
+    let payload ← `(nlledgervalue| $leaf:nlexpr)
+    state := ← elaborateTypedMerkleWrite schema path (some payload) (some index) Bool.true state
+  | `(nleffect| insertLeaf $path:nlpath := $leaf:nlledgervalue)
+  | `(nleffect| when $_:nlexpr insertLeaf $path:nlpath := $leaf:nlledgervalue) =>
     state := ← elaborateTypedMerkleWrite schema path (some leaf) none Bool.false state
-  | `(nleffect| insertLeafIndex $path:nlpath at $index:nlexpr := $leaf:nlexpr)
-  | `(nleffect| when $_:nlexpr insertLeafIndex $path:nlpath at $index:nlexpr := $leaf:nlexpr) =>
+  | `(nleffect| insertLeafIndex $path:nlpath at $index:nlexpr := $leaf:nlledgervalue)
+  | `(nleffect| when $_:nlexpr insertLeafIndex $path:nlpath at $index:nlexpr := $leaf:nlledgervalue) =>
     state := ← elaborateTypedMerkleWrite schema path (some leaf) (some index) Bool.false state
   | `(nleffect| insertLeafDefault $path:nlpath at $index:nlexpr)
   | `(nleffect| when $_:nlexpr insertLeafDefault $path:nlpath at $index:nlexpr) =>
@@ -2457,8 +2499,8 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| decrement $path:nlpath by $amount:nlexpr)
   | `(nleffect| when $_:nlexpr decrement $path:nlpath by $amount:nlexpr) =>
     state := ← elaborateCounterAdjust schema path Bool.true amount state
-  | `(nleffect| pushFront $path:nlpath := $payload:nllistvalue)
-  | `(nleffect| when $_:nlexpr pushFront $path:nlpath := $payload:nllistvalue) =>
+  | `(nleffect| pushFront $path:nlpath := $payload:nlledgervalue)
+  | `(nleffect| when $_:nlexpr pushFront $path:nlpath := $payload:nlledgervalue) =>
     state := ← elaborateListPushFront schema path payload state
   | `(nleffect| popFront $path:nlpath)
   | `(nleffect| when $_:nlexpr popFront $path:nlpath) =>
@@ -2578,6 +2620,12 @@ private def elaborateReturns (statements : Array (TSyntax `nlreturn))
     | _ => throwErrorAt statement "unsupported Noctium entry return"
   pure state
 
+private def readCompositeField (field : TSyntax `nlcompositefield) :
+    CommandElabM (String × Ty) := do
+  let `(nlcompositefield| $fieldName:ident : $fieldType:nltype) := field
+    | throwErrorAt field "unsupported composite record field"
+  pure (fieldName.getId.toString, ← readTy fieldType)
+
 private def elaborateNamedRecord (contractName : Name) (record : TSyntax `ident)
     (recordFields : Array (TSyntax `nlcompositefield)) (owner : Syntax) :
     CommandElabM (Types.CompositeEnv × Types.CompositeType × TSyntax `term × TSyntax `term) := do
@@ -2585,16 +2633,11 @@ private def elaborateNamedRecord (contractName : Name) (record : TSyntax `ident)
   let mut fieldTerms : Array (TSyntax `term) := #[]
   let mut fieldValues : List Noctium.Types.Field := []
   for field in recordFields do
-    match field with
-    | `(nlcompositefield| $fieldName:ident : $fieldType:nltype) => do
-      let fieldTy ← readTy fieldType
-      let fieldNameString := fieldName.getId.toString
-      fieldValues := fieldValues ++ [{name := fieldNameString, type := .scalar fieldTy}]
-      let fieldTyTerm ← tyTerm fieldTy
-      let fieldTypeTerm ← `(Noctium.Types.CompositeType.scalar $fieldTyTerm)
-      let fieldSpan ← spanTerm field
-      fieldTerms := fieldTerms.push (← `({ name := $(stringTerm fieldNameString), type := $fieldTypeTerm, span := $fieldSpan : Noctium.Types.Field }))
-    | _ => throwErrorAt field "unsupported composite record field"
+    let (fieldName, fieldTy) ← readCompositeField field
+    fieldValues := fieldValues ++ [{name := fieldName, type := .scalar fieldTy}]
+    let fieldTypeTerm ← `(Noctium.Types.CompositeType.scalar $(← tyTerm fieldTy))
+    let fieldSpan ← spanTerm field
+    fieldTerms := fieldTerms.push (← `({ name := $(stringTerm fieldName), type := $fieldTypeTerm, span := $fieldSpan : Noctium.Types.Field }))
   let structSpan ← spanTerm owner
   let structureTerm ← `({ id := $(stringTerm typeId), fields := [$fieldTerms,*], span := $structSpan : Noctium.Types.StructDecl })
   let environmentTerm ← `({ structures := [$structureTerm] : Noctium.Types.CompositeEnv })
@@ -2687,20 +2730,34 @@ private def elaborateConstructor (source : TSyntax `nlstate)
   let initializers := initializerTerms
   `(some ({parameters := [$parameters,*], initializers := [$initializers,*] : Noctium.Constructor}))
 
-private def readMerkleSpec (spec : TSyntax `nlmerklespec) : CommandElabM (Nat × Ty) := do
-  let `(nlmerklespec| $depth:num $[of $leaf:nltype]?) := spec
-    | throwErrorAt spec "expected a MerkleTree depth and optional leaf type"
-  let depth := depth.getNat
+private def checkMerkleLeafWidth (source : Syntax) (fields : List Ty) : CommandElabM Unit := do
+  let widths ← fields.mapM fun ty =>
+    match merkleLeafWidth ty with
+    | some width => pure width
+    | none => throwErrorAt source "MerkleTree leaves require Native, Bool, bounded UInt or fixed Bytes"
+  unless widths.sum + 6 ≤ Noctium.maxBytesLength do
+    throwErrorAt source s!"MerkleTree leaf exceeds the maximum preimage length of {Noctium.maxBytesLength}"
+
+private def readMerkleSpec (spec : TSyntax `nlmerklespec) : CommandElabM (Nat × MerkleLeafType) := do
+  let (depth, leaf) ← match spec with
+    | `(nlmerklespec| $depth:num $[of $leaf:nltype]?) => do
+      let ty ← match leaf with | none => pure Ty.native | some source => readTy source
+      checkMerkleLeafWidth spec [ty]
+      pure (depth.getNat, MerkleLeafType.scalar ty)
+    | `(nlmerklespec| $depth:num of struct $name:ident { $fields:nlcompositefield* }) => do
+      let fields ← fields.toList.mapM readCompositeField
+      checkMerkleLeafWidth spec (fields.map Prod.snd)
+      let id := name.getId.toString
+      let layoutFields : List Types.Field := fields.map fun (field, ty) =>
+        {name := field, type := match ty with | .bytes length => .bytes length | _ => .scalar ty}
+      let environment : Types.CompositeEnv := {structures := [{id, fields := layoutFields}]}
+      match Types.checkedLayout Types.defaultLimits environment (.structure id) with
+      | .ok _ => pure (depth.getNat, MerkleLeafType.record fields)
+      | .error diagnostic => throwErrorAt spec diagnostic.message
+    | _ => throwErrorAt spec "expected a MerkleTree depth and optional leaf type"
   unless 2 ≤ depth && depth ≤ 32 do
     throwErrorAt spec "MerkleTree depth must be between 2 and 32"
-  let ty ← match leaf with
-    | none => pure Ty.native
-    | some leaf => readTy leaf
-  let some width := merkleLeafWidth ty
-    | throwErrorAt spec "MerkleTree leaf must be Native, Bool, bounded UInt or fixed Bytes"
-  unless width + 6 ≤ Noctium.maxBytesLength do
-    throwErrorAt spec s!"MerkleTree leaf exceeds the maximum preimage length of {Noctium.maxBytesLength}"
-  pure (depth, ty)
+  pure (depth, leaf)
 
 private def merkleDeclaration? (state : TSyntax `nlstate) :
     Option (TSyntax `ident × List (TSyntax `nltype) × TSyntax `nlmerklespec × _root_.Bool) :=
@@ -2737,7 +2794,7 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
   | `(noctium_contract $name:ident where $states:nlstate* $entries:nlentry* end) =>
     let mut stateTerms : Array (TSyntax `term) := #[]
     let mut schema : List (String × StateKind) := []
-    let mut merkleLeafTypes : List (String × Ty) := []
+    let mut merkleLeafTypes : List (String × MerkleLeafType) := []
     let mut concreteSchema : List StateDecl := []
     let mut stateDeclarations : Array (TSyntax `nlstate) := #[]
     let mut constructorSyntax? : Option (TSyntax `nlstate) := none
