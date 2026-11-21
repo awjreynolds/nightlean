@@ -38,6 +38,21 @@ jobs:
           lint: false
           use-mathlib-cache: false
           use-github-cache: false
+      - name: Check the installed Linux Lean toolchain layout
+        if: runner.os == 'Linux'
+        run: |
+          python3 - <<'PY'
+          import json
+          import runpy
+
+          measure = runpy.run_path("scripts/proofs/check-private-claim-artifacts.py")["toolchain_measurement"]()
+          assert "bin/ld.lld" in measure["identity"]["files"]
+          print(json.dumps({
+              "toolchainRoot": measure["root"],
+              "toolCount": len(measure["identity"]["files"]),
+              "toolchainSha256": measure["sha256"],
+          }, sort_keys=True))
+          PY
       - name: Build the POC compiler
         run: lake build noctium Noctium.Compiler Noctium.Foreign Noctium.Claim Noctium.Verification.RangeDedup
       - name: Check the private claim source-proof report
