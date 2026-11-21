@@ -2415,6 +2415,7 @@ dependencies = [
  "midnight-zkir 2.2.0",
  "midnight-zkir 3.2.0 (git+https://github.com/midnightntwrk/midnight-zkir?rev=446c7fecc6bd41dab99ebe89ab404e9d077d11a9)",
  "midnight-zkir 3.2.0 (git+https://github.com/midnightntwrk/midnight-zkir?rev=7a51b3385bbf4bce3604df87a7c70867c9ab43c0)",
+ "midnight-zswap",
  "num-bigint",
  "parity-scale-codec",
  "rand 0.8.8",

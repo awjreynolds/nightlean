@@ -16,7 +16,7 @@ crate-type = ["rlib", "cdylib", "staticlib"]
 default = ["zkir-320"]
 zkir-320 = ["dep:zkir-320"]
 zkir-321 = ["dep:zkir-321"]
-localnet = ["dep:reqwest", "dep:bip32", "dep:frame-metadata", "dep:scale-info", "dep:parity-scale-codec", "dep:scale-value", "dep:blake2", "dep:libc"]
+localnet = ["dep:reqwest", "dep:bip32", "dep:frame-metadata", "dep:scale-info", "dep:parity-scale-codec", "dep:scale-value", "dep:blake2", "dep:libc", "dep:zswap"]
 
 [dependencies]
 anyhow = "1.0.102"
@@ -41,6 +41,7 @@ scale-value = { version = "0.18", optional = true }
 blake2 = { version = "0.10.6", optional = true }
 libc = { version = "0.2", optional = true }
 ledger = { package = "midnight-ledger-v9", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
+zswap = { package = "midnight-zswap", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74", optional = true }
 onchain-runtime = { package = "midnight-onchain-runtime", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
 base-crypto = { package = "midnight-base-crypto", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
 transient-crypto = { package = "midnight-transient-crypto", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74", features = ["public-internal-structure"] }
