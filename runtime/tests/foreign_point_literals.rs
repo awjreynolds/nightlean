@@ -1,9 +1,11 @@
 #![cfg(feature = "zkir-321")]
 
 use noctium_runtime::{
-    Plan, Value, check, field_decimal, prepare,
+    Plan, Value, check,
     constructor::construct_state,
+    field_decimal,
     foreign::{ForeignFamily, ForeignRole, ForeignType, ForeignValue},
+    prepare,
     zkir::IrSource,
 };
 use serde_json::{Value as Json, json};
@@ -18,14 +20,14 @@ fn artifacts() -> PathBuf {
 
 fn point_bytes(family: ForeignFamily) -> Vec<u8> {
     match family {
-        ForeignFamily::Secp256k1 => hex::decode(
-            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
-        )
-        .unwrap(),
-        ForeignFamily::Secp256r1 => hex::decode(
-            "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296",
-        )
-        .unwrap(),
+        ForeignFamily::Secp256k1 => {
+            hex::decode("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+                .unwrap()
+        }
+        ForeignFamily::Secp256r1 => {
+            hex::decode("036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296")
+                .unwrap()
+        }
         ForeignFamily::Curve25519 => {
             let mut bytes = vec![0x66; 32];
             bytes[0] = 0x58;
@@ -36,7 +38,10 @@ fn point_bytes(family: ForeignFamily) -> Vec<u8> {
 
 fn field_immediate(value: Fr) -> String {
     let bytes = value.as_le_bytes();
-    let width = bytes.iter().rposition(|byte| *byte != 0).map_or(1, |index| index + 1);
+    let width = bytes
+        .iter()
+        .rposition(|byte| *byte != 0)
+        .map_or(1, |index| index + 1);
     format!("0x{}", hex::encode(&bytes[..width]))
 }
 
@@ -56,7 +61,11 @@ fn assert_native_constant(ir: &Json, ty: ForeignType, point: &ForeignValue) {
             instruction["op"] == "load_constant" && instruction["type"] == type_name
         })
         .collect();
-    assert_eq!(constants.len(), 1, "expected one typed {type_name} constant");
+    assert_eq!(
+        constants.len(),
+        1,
+        "expected one typed {type_name} constant"
+    );
     assert_eq!(constants[0]["encoding"], json!(expected));
 }
 
@@ -106,14 +115,7 @@ fn affine_point_literals_match_control_zkir_and_native_results() {
         }
 
         let initial = construct_state(&plan, &BTreeMap::new()).unwrap();
-        let execution = prepare(
-            &plan,
-            &BTreeMap::new(),
-            &initial,
-            parameters,
-            address,
-        )
-        .unwrap();
+        let execution = prepare(&plan, &BTreeMap::new(), &initial, parameters, address).unwrap();
         check(&execution, &circuit).unwrap();
         assert_eq!(
             execution.returns_json(),
