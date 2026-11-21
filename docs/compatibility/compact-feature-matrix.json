@@ -5456,8 +5456,8 @@
       "id": "C-STDLIB-SENDUNSHIELDED",
       "layer": "standard-library",
       "surface": "sendUnshielded",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean composes a standard unshielded send from the native output, spend claim, contract identity and guarded input effects. The pinned Compact comparator and native checker agree on seven-unit sends to the current contract, another contract and a user with the current contract's raw address bytes. Only the first credits the input. Full equivalence remains open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5470,7 +5470,13 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeUnshieldedSend.lean",
+        "tests/compact/UnshieldedSend.compact",
+        "tests/compact/unshielded-send.mjs",
+        "runtime/tests/native_unshielded_send.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
