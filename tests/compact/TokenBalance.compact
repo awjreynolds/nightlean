@@ -16,3 +16,17 @@ export circuit inspect(color: Bytes<32>, isUnshielded: Boolean, limit: Uint<128>
   }
   return [amount, below, above];
 }
+
+export circuit unshielded(color: Bytes<32>, limit: Uint<128>, enabled: Boolean):
+    [Uint<128>, Boolean, Boolean, Boolean, Boolean] {
+  const token = disclose(color);
+  const threshold = disclose(limit);
+  const active = disclose(enabled);
+  return [
+    unshieldedBalance(token),
+    active ? unshieldedBalanceLt(token, threshold) : false,
+    active ? unshieldedBalanceGte(token, threshold) : false,
+    active ? unshieldedBalanceGt(token, threshold) : false,
+    active ? unshieldedBalanceLte(token, threshold) : false,
+  ];
+}

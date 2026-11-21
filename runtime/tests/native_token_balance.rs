@@ -104,3 +104,60 @@ fn tagged_token_balance_reads_bind_to_the_selected_ledger_namespace() -> anyhow:
     );
     Ok(())
 }
+
+#[test]
+#[ignore = "requires fresh UnshieldedBalanceHelpers artifacts in NOCTIUM_BALANCE_HELPERS_DIR"]
+fn unshielded_balance_helpers_match_compact() -> anyhow::Result<()> {
+    let directory = PathBuf::from(
+        std::env::var_os("NOCTIUM_BALANCE_HELPERS_DIR").expect("NOCTIUM_BALANCE_HELPERS_DIR"),
+    );
+    let plan: Plan = serde_json::from_reader(fs::File::open(
+        directory.join("UnshieldedBalanceHelpers.inspect.impact.json"),
+    )?)?;
+    let circuit = IrSource::load(fs::File::open(
+        directory.join("UnshieldedBalanceHelpers.inspect.zkir"),
+    )?)?;
+    let state = create_state(&plan, &BTreeMap::new())?;
+    let params = &ledger::structure::INITIAL_PARAMETERS;
+    let color = HashOutput(std::array::from_fn(|index| (index + 1) as u8));
+    let prepare = |amount: Option<u128>, limit: u128, enabled| {
+        let mut context = QueryContext::new(state.clone(), ContractAddress::default());
+        let mut balances = context
+            .call_context
+            .balance
+            .insert(TokenType::Shielded(ShieldedTokenType(color)), 11);
+        if let Some(amount) = amount {
+            balances = balances.insert(TokenType::Unshielded(UnshieldedTokenType(color)), amount);
+        }
+        context.call_context.balance = balances;
+        let inputs = BTreeMap::from([
+            ("color".into(), json!({"kind":"bytes", "values":color.0})),
+            ("limit".into(), json!(limit.to_string())),
+            ("enabled".into(), json!(enabled)),
+        ]);
+        prepare_with_context(&plan, &inputs, context, params)
+    };
+    for (amount, limit, enabled, expected) in [
+        (Some(17), 20, true, [true, false, false, true]),
+        (Some(20), 20, true, [false, true, false, true]),
+        (Some(23), 20, true, [false, true, true, false]),
+        (None, 20, true, [true, false, false, true]),
+        (Some(u128::MAX), u128::MAX, false, [false; 4]),
+    ] {
+        let execution = prepare(amount, limit, enabled)?;
+        assert_eq!(check(&execution, &circuit)?, execution.activity_schedule);
+        let returns = execution.returns_json();
+        assert_eq!(
+            returns["exactAmount"],
+            json!(amount.unwrap_or(0).to_string())
+        );
+        for (name, expected) in ["belowLimit", "atLeastLimit", "aboveLimit", "atMostLimit"]
+            .into_iter()
+            .zip(expected)
+        {
+            assert_eq!(returns[name], json!(expected), "{name}");
+        }
+    }
+    assert!(prepare(Some(u128::MAX), 20, true).is_err());
+    Ok(())
+}
