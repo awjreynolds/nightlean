@@ -1154,6 +1154,12 @@ private def validateStateScalar (caps : Capabilities) (ty : Ty) : Except String 
     throw "OpaqueString is only supported as a root Bytes32 tree Map value"
   ty.validate caps
 
+private def validateCellStateScalar (caps : Capabilities) (ty : Ty) : Except String Unit := do
+  if ty.isOpaqueString then
+    ty.validate caps
+  else
+    validateStateScalar caps ty
+
 def LedgerValueType.validate (caps : Capabilities) (schema : LedgerValueType) : Except String Unit :=
   match schema with
   | .map (.bytes 32) (.scalar .opaqueString) => Ty.validate caps .opaqueString
@@ -1359,7 +1365,10 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
-      match validateStateScalar caps ty with
+      let validation := match decl.kind with
+        | .cell _ => validateCellStateScalar caps ty
+        | _ => validateStateScalar caps ty
+      match validation with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
   e.circuit.validate caps
@@ -1943,7 +1952,10 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
-      match validateStateScalar caps ty with
+      let validation := match decl.kind with
+        | .cell _ => validateCellStateScalar caps ty
+        | _ => validateStateScalar caps ty
+      match validation with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
     if let .tree schema := decl.kind then
