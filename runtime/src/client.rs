@@ -454,6 +454,83 @@ pub(crate) fn shielded_relay_shape_valid(
         && delta.value == -(RELAY_AMOUNT as i128)
 }
 
+/// Bind the proved merge effects to the precise guaranteed offer that the host booked.
+#[cfg(feature = "localnet")]
+pub(crate) fn shielded_merge_shape_valid(
+    contract: &ProvedNativeIntent,
+    offer: &zswap::Offer<transient_crypto::proofs::Proof, Db>,
+    staged_mint: Option<(&Info, HashOutput)>,
+) -> bool {
+    let Some(ContractAction::Call(call)) = contract.actions.get(0) else {
+        return false;
+    };
+    let Some(transcript) = call.guaranteed_transcript.as_deref() else {
+        return false;
+    };
+    let (Some(input), Some(output)) = (offer.inputs.get(0), offer.outputs.get(0)) else {
+        return false;
+    };
+    let effects = &transcript.effects;
+    if contract.actions.len() != 1
+        || call.fallible_transcript.is_some()
+        || effects.claimed_contract_calls.size() != 0
+        || !no_unshielded_effects(effects)
+        || offer.outputs.len() != 1
+        || input.contract_address.as_deref() != Some(&call.address)
+        || output.contract_address.as_deref() != Some(&call.address)
+        || output.ciphertext.is_some()
+        || effects.claimed_nullifiers.size() != 2
+        || !effects.claimed_nullifiers.member(&input.nullifier)
+        || effects.claimed_shielded_spends.size() != 1
+        || !effects.claimed_shielded_spends.member(&output.coin_com)
+        || !effects.claimed_shielded_receives.member(&output.coin_com)
+    {
+        return false;
+    }
+
+    match staged_mint {
+        Some((mint, domain)) => {
+            let (Some(transient), Some(delta), Ok(amount)) = (
+                offer.transient.get(0), offer.deltas.get(0), u64::try_from(mint.value),
+            ) else {
+                return false;
+            };
+            let token_type = call.address.custom_shielded_token_type(domain);
+            offer.inputs.len() == 1
+                && offer.transient.len() == 1
+                && offer.deltas.len() == 1
+                && amount > 0
+                && mint.type_ == token_type
+                && delta.token_type == token_type
+                && delta.value == -i128::from(amount)
+                && transient.contract_address.as_deref() == Some(&call.address)
+                && transient.ciphertext.is_none()
+                && transient.nullifier == mint.nullifier(&SenderEvidence::Contract(call.address))
+                && transient.coin_com == mint.commitment(&Recipient::Contract(call.address))
+                && transient.nullifier != input.nullifier
+                && transient.coin_com != output.coin_com
+                && effects.claimed_nullifiers.member(&transient.nullifier)
+                && effects.claimed_shielded_receives.size() == 2
+                && effects.claimed_shielded_receives.member(&transient.coin_com)
+                && effects.shielded_mints.size() == 1
+                && effects.shielded_mints.get(&domain).is_some_and(|value| *value == amount)
+        }
+        None => {
+            let Some(second) = offer.inputs.get(1) else {
+                return false;
+            };
+            offer.inputs.len() == 2
+                && offer.transient.is_empty()
+                && offer.deltas.is_empty()
+                && second.contract_address.as_deref() == Some(&call.address)
+                && second.nullifier != input.nullifier
+                && effects.claimed_nullifiers.member(&second.nullifier)
+                && effects.claimed_shielded_receives.size() == 1
+                && effects.shielded_mints.size() == 0
+        }
+    }
+}
+
 impl BoundTransaction {
     pub async fn prepare(
         contract: &ProvedNativeIntent,
@@ -606,61 +683,14 @@ impl BoundTransaction {
     pub(crate) async fn prepare_shielded_merge(
         contract: &ProvedNativeIntent,
         expected_offer: &zswap::Offer<transient_crypto::proofs::Proof, Db>,
+        staged_mint: Option<(&Info, HashOutput)>,
         policy: NetworkPolicy,
         chain: &impl ChainAdapter,
         funding: &impl FundingAdapter,
         signer: &impl SigningAdapter,
     ) -> Result<Self> {
-        let Some(ContractAction::Call(call)) = contract.actions.get(0) else {
-            return Err(Error::Funding);
-        };
-        let Some(transcript) = call.guaranteed_transcript.as_deref() else {
-            return Err(Error::Funding);
-        };
-        let Some(input_a) = expected_offer.inputs.get(0) else {
-            return Err(Error::Funding);
-        };
-        let Some(input_b) = expected_offer.inputs.get(1) else {
-            return Err(Error::Funding);
-        };
-        let Some(output) = expected_offer.outputs.get(0) else {
-            return Err(Error::Funding);
-        };
         require(
-            contract.actions.len() == 1
-                && call.fallible_transcript.is_none()
-                && transcript.effects.claimed_nullifiers.size() == 2
-                && input_a.nullifier != input_b.nullifier
-                && transcript
-                    .effects
-                    .claimed_nullifiers
-                    .iter()
-                    .any(|nullifier| **nullifier == input_a.nullifier)
-                && transcript
-                    .effects
-                    .claimed_nullifiers
-                    .iter()
-                    .any(|nullifier| **nullifier == input_b.nullifier)
-                && transcript.effects.claimed_shielded_spends.size() == 1
-                && transcript
-                    .effects
-                    .claimed_shielded_spends
-                    .iter()
-                    .any(|commitment| **commitment == output.coin_com)
-                && transcript.effects.claimed_shielded_receives.size() == 1
-                && transcript
-                    .effects
-                    .claimed_shielded_receives
-                    .iter()
-                    .any(|commitment| **commitment == output.coin_com)
-                && transcript.effects.shielded_mints.size() == 0
-                && expected_offer.inputs.len() == 2
-                && expected_offer.outputs.len() == 1
-                && expected_offer.transient.is_empty()
-                && input_a.contract_address.as_deref() == Some(&call.address)
-                && input_b.contract_address.as_deref() == Some(&call.address)
-                && output.contract_address.as_deref() == Some(&call.address)
-                && output.ciphertext.is_none(),
+            shielded_merge_shape_valid(contract, expected_offer, staged_mint),
             Error::Funding,
         )?;
         let expected_offer = body(&Some(storage::arena::Sp::new(expected_offer.clone())))?;

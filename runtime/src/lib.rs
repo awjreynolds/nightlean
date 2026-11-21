@@ -11087,6 +11087,12 @@ mod shielded_merge_tests {
         let (a, b, result, nullifier_a, nullifier_b, output) =
             merge_coins([0x42; 32], [0x41; 32], 5, [0x43; 32], [0x41; 32], 7);
         let staged = b.commitment(&Recipient::Contract(ContractAddress(HashOutput(ADDRESS))));
+        assert_eq!(hex::encode(result.nonce.0.0),
+            "008886c2deacb2bc58c16043752c6107ac13841d68ab515cf6d7ca9283255500");
+        assert_eq!(hex::encode(output.0.0),
+            "22c1d942576b35bea2e506169770fcc5932e05173d69470c57a70d4d4e125ef5");
+        assert_eq!(hex::encode(staged.0.0),
+            "dfb10c0f02bdda38262b6290bb6f612705f798c12143f36a73d17febdf2d1df2");
         let inputs = BTreeMap::from([
             ("domain".into(), bytes_json(&[0x40; 32])),
             ("nonceA".into(), bytes_json(&a.nonce.0.0)),
@@ -11094,10 +11100,14 @@ mod shielded_merge_tests {
             ("colorB".into(), bytes_json(&b.type_.0.0)),
         ]);
         let schema = &plan.state[0].kind["tree"]["map"][1]["composite"];
-        let mut context = merge_context(schema, &a, None, output, 11);
+        let mut context = merge_context(schema, &a, None, output, 10);
         let parameters = &ledger::structure::INITIAL_PARAMETERS;
         assert!(prepare_with_context(&plan, &inputs, context.clone(), parameters).is_err());
-        context.call_context.com_indices = context.call_context.com_indices.insert(staged, 10);
+        let wrong_owner = b.commitment(&Recipient::Contract(ContractAddress(HashOutput([1; 32]))));
+        let mut wrong = context.clone();
+        wrong.call_context.com_indices = wrong.call_context.com_indices.insert(wrong_owner, 11);
+        assert!(prepare_with_context(&plan, &inputs, wrong, parameters).is_err());
+        context.call_context.com_indices = context.call_context.com_indices.insert(staged, 11);
 
         let execution = prepare_with_context(&plan, &inputs, context, parameters).unwrap();
         let effects = &execution.after.effects;
@@ -11118,7 +11128,7 @@ mod shielded_merge_tests {
         assert_eq!(coins.size(), 1);
         assert_eq!(
             coins.get(&AlignedValue::from(result.nonce)).as_deref(),
-            Some(&StateValue::Cell(Sp::new(AlignedValue::from(result.qualify(11)))))
+            Some(&StateValue::Cell(Sp::new(AlignedValue::from(result.qualify(10)))))
         );
         super::check(&execution, &circuit).unwrap();
     }
