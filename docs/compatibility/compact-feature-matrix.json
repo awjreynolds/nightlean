@@ -5295,8 +5295,8 @@
       "id": "C-STDLIB-MINTSHIELDEDTOKEN",
       "layer": "standard-library",
       "surface": "mintShieldedToken",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean composes the native mint and recipient-specific Cell booking. Pinned Compact confirms the reference wallet recipient and Cell booking behavior. A funded Ledger 9 run checks the finalized commitment and index, wallet recovery and the stored qualified coin. Changed recipient and replay attempts leave state unchanged. Contract recipients and multi-output settlement need separate qualification.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5309,7 +5309,13 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ShieldedWalletMint.lean",
+        "tests/compact/explicit-booked-coin-recipients.mjs",
+        "runtime/tests/shielded_wallet_mint.rs",
+        "runtime/src/localnet/shielded_receive.rs",
+        "docs/development/shielded-wallet-mint-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
