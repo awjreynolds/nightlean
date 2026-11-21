@@ -574,6 +574,20 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     let alignment ← instruction.getObjVal? "alignment"
     let term ← if opcode == "keccak256" && alignment == secp256k1PointKeccakAlignment then
         checkedSecp256k1PointKeccakTerm alignment values
+      else if opcode == "sha512" then do
+        let atoms ← alignment.getArr?
+        ensure (atoms.size ≤ 32)
+          "FAB SHA-512 alignment must contain 1 to 32 payload atoms"
+        let singleByteAtom := if atoms.size == 1 then
+          match atoms[0]!.getObjVal? "value" with
+          | .ok value => (stringField value "tag").toOption == some "bytes"
+          | .error _ => false
+          else false
+        if atoms.isEmpty || singleByteAtom then
+          checkedFixedByteHashTerm opcode alignment values
+        else do
+          let (descriptors, operands) ← checkedFabHashOperands alignment values
+          pure (sha512FabTerm descriptors operands)
       else checkedFixedByteHashTerm opcode alignment values
     let fact ← combine term 0 values
     defineResult state instruction {fact with valueType := byteValueType (if opcode == "sha512" then 64 else 32)}

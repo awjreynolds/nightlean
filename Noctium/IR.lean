@@ -92,6 +92,10 @@ inductive Expr : Ty → Type where
   | jubjubFromCoordinates (x y : Expr .native) : Expr .jubjubPoint
   /-- Hash an ordered, bounded list of Native values to a Jubjub subgroup point. -/
   | hashToCurve (values : List (Expr .native)) : Expr .jubjubPoint
+  /-- Hash one checked flat FAB payload to a Jubjub subgroup point. The
+  backends derive its ordered field representation from the checked layout. -/
+  | hashToCurveFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
+      (values : List (Sigma Expr)) : Expr .jubjubPoint
   /-- Canonical literals for the pinned foreign field families. -/
   | foreignBase (curve : Foreign.Curve) (value : Nat) : Expr (.foreign (.base curve))
   | foreignScalar (curve : Foreign.Curve) (value : Nat) : Expr (.foreign (.scalar curve))
@@ -132,6 +136,10 @@ inductive Expr : Ty → Type where
   checked layout rather than accepting a caller-provided alignment vector. -/
   | persistentHashFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
       (values : List (Sigma Expr)) : Expr (.bytes 32)
+  /-- SHA-512 over the pinned FAB binary representation of one checked flat
+  composite. The output keeps the standard 64-byte digest type. -/
+  | sha512Fab (environment : Types.CompositeEnv) (type : Types.CompositeType)
+      (values : List (Sigma Expr)) : Expr (.bytes 64)
   /-- Commit to a checked flat FAB payload using a Bytes32 opening prepended
   to its canonical binary encoding. -/
   | persistentCommitFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
@@ -163,6 +171,11 @@ def fabHashLayoutFields (layout : Types.Layout) : Except String (List (String ×
   | .structure _ fields => pure fields
   | .tuple items => pure (items.zipIdx.map fun (item, index) => (toString index, item))
   | _ => throw "mixed FAB hashing requires a flat structure or root tuple"
+
+def fabHashEncodedFieldCount (fields : List (String × Types.Layout)) : Nat :=
+  fields.foldl (fun count field => count + match field.2 with
+    | .bytes length .byteField => (length + 30) / 31
+    | _ => 1) 0
 
 theorem sizeOfSigmaExprHeadLt {ty : Ty} (value : Expr ty) (rest : List (Sigma Expr)) :
     sizeOf value < sizeOf (Sigma.mk ty value :: rest) := by
@@ -197,7 +210,7 @@ theorem sizeOfSigmaExprMemberLt {ty : Ty} {value : Expr ty}
   omega
 
 /-- Check the deliberately bounded mixed-FAB subset supported by the current
-  persistent hash operation: one flat named structure of Native, Bool,
+  mixed-FAB hash operations: one flat structure or tuple of Native, Bool,
   fixed-width unsigned integers, fixed Bytes values up to 32 bytes, and
   payload-free enums. Nested composites and payload enums fail closed. -/
 def validateFabHashLayout (environment : Types.CompositeEnv) (type : Types.CompositeType)
@@ -205,7 +218,7 @@ def validateFabHashLayout (environment : Types.CompositeEnv) (type : Types.Compo
   let checked ← (Types.checkedLayout Types.defaultLimits environment type).mapError (·.message)
   let fields ← fabHashLayoutFields checked.value
   unless fields.length > 0 && fields.length ≤ 32 && values.length == fields.length do
-    throw "mixed FAB persistent hash field count is outside the source limit or differs from its layout"
+    throw "mixed FAB field count is outside the source limit or differs from its layout"
   for (field, value) in fields.zip values do
     unless fabHashFieldMatches field.2 value do
       throw s!"unsupported or mismatched mixed FAB field '{field.1}'"
@@ -953,6 +966,10 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless length ≤ maxBytesLength do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
     value.validate caps env
+  | .sha512Fab compositeEnv type values => do
+    unless caps.sha512 do throw "target lacks qualified FAB SHA-512 support"
+    discard (validateFabHashLayout compositeEnv type values)
+    validateFabHashValues caps env values
   | .keccak256 (length := length) value => do
     unless caps.keccak256 do throw "target lacks qualified Keccak-256 support"
     unless length ≤ maxBytesLength do
@@ -1048,6 +1065,14 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless values.length ≤ Types.defaultLimits.maxVectorLength do
       throw s!"hash_to_curve input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
     for value in values do value.validate caps env
+  | .hashToCurveFab compositeEnv type values => do
+    unless caps.hashToCurve do throw "target lacks qualified hash_to_curve support"
+    unless caps.jubjub do throw "target lacks qualified Jubjub support"
+    let layout ← validateFabHashLayout compositeEnv type values
+    let fields ← fabHashLayoutFields layout
+    unless fabHashEncodedFieldCount fields ≤ Types.defaultLimits.maxVectorLength do
+      throw s!"hash_to_curve input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+    validateFabHashValues caps env values
   | .foreignBase curve value => do
     unless caps.foreignValues do throw "target lacks typed foreign-curve value support"
     unless value < curve.baseModulus do throw "foreign base-field constant is not canonical"

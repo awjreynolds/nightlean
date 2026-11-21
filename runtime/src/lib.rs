@@ -418,6 +418,16 @@ pub enum Expr {
         length: usize,
         value: Box<Expr>,
     },
+    #[serde(rename = "sha512Fab")]
+    Sha512Fab {
+        schema: Json,
+        values: Vec<FabHashInput>,
+    },
+    #[serde(rename = "hashToCurveFab")]
+    HashToCurveFab {
+        schema: Json,
+        values: Vec<FabHashInput>,
+    },
     Keccak256 {
         length: usize,
         value: Box<Expr>,
@@ -776,6 +786,23 @@ fn aligned_fab_payload(
     Ok(AlignedValue::concat(&aligned))
 }
 
+fn hash_to_curve_fab(
+    schema_json: &Json,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<Value> {
+    let payload = aligned_fab_payload(schema_json, values, env)?;
+    let mut fields = Vec::new();
+    payload.value_only_field_repr(&mut fields);
+    ensure!(
+        !fields.is_empty() && fields.len() <= MAX_HASH_TO_CURVE_FIELDS,
+        "FAB hash-to-curve field vector exceeds compiler limit"
+    );
+    Ok(Value::JubjubPoint(transient_crypto::hash::hash_to_curve(
+        fields.as_slice(),
+    )))
+}
+
 fn persistent_hash_fab(
     schema_json: &Json,
     values: &[FabHashInput],
@@ -1085,6 +1112,13 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
         Expr::Sha512 { length, value } => {
             Value::Bytes(sha2::Sha512::digest(evaluated_bytes(value, *length, env)?).to_vec())
         }
+        Expr::Sha512Fab { schema, values } => {
+            let preimage = zeroize::Zeroizing::new(
+                ValueReprAlignedValue(aligned_fab_payload(schema, values, env)?).binary_vec(),
+            );
+            Value::Bytes(sha2::Sha512::digest(preimage.as_slice()).to_vec())
+        }
+        Expr::HashToCurveFab { schema, values } => hash_to_curve_fab(schema, values, env)?,
         Expr::Keccak256 { length, value } => {
             Value::Bytes(sha3::Keccak256::digest(evaluated_bytes(value, *length, env)?).to_vec())
         }

@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+
+const [compactc, runtimeDirectory] = process.argv.slice(2);
+assert.ok(compactc && runtimeDirectory,
+  'usage: node tests/compact/jubjub-group-parity.mjs <compactc-0.36.1> <compact-runtime-0.21.0>');
+const compilerVersion = execFileSync(compactc, ['--version'], { encoding: 'utf8' }).trim();
+assert.match(compilerVersion, /^0\.36\.1 \(7fa3a117c/);
+const packageJson = JSON.parse(readFileSync(join(runtimeDirectory, 'package.json'), 'utf8'));
+assert.equal(packageJson.version, '0.21.0');
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const source = join(root, 'tests/compact/JubjubGroupParity.compact');
+const experiments = join(root, 'build/experiments/305');
+mkdirSync(experiments, { recursive: true });
+const scratch = mkdtempSync(join(experiments, 'compact-jubjub-group-parity-'));
+try {
+  const generated = join(scratch, 'compact');
+  const compile = spawnSync(compactc, ['--skip-zk', source, generated], { encoding: 'utf8' });
+  assert.equal(compile.status, 0, compile.stderr || compile.stdout);
+  const runtimeLink = join(generated, 'node_modules/@midnight-ntwrk/compact-runtime');
+  mkdirSync(dirname(runtimeLink), { recursive: true });
+  symlinkSync(runtimeDirectory, runtimeLink, 'dir');
+  const runtime = await import(pathToFileURL(join(runtimeDirectory, 'dist/index.js')).href);
+  const { pureCircuits } = await import(pathToFileURL(join(generated, 'contract/index.js')).href);
+
+  const point = runtime.ecMulGenerator(1n);
+  const identity = runtime.constructJubjubPoint(0n, 1n);
+  const scalar = 1n;
+  const generatedPoint = runtime.ecMulGenerator(scalar);
+  const multiplied = runtime.ecMul(point, scalar);
+  const sum = runtime.ecAdd(point, identity);
+  const negated = runtime.ecNeg(point);
+  const cancelled = runtime.ecAdd(point, negated);
+  const identityNegated = runtime.ecNeg(identity);
+  const result = pureCircuits.groupParity(point.x, point.y, scalar);
+  const expected = {
+    checkedX: point.x,
+    checkedY: point.y,
+    generatorX: generatedPoint.x,
+    generatorY: generatedPoint.y,
+    multipliedX: multiplied.x,
+    multipliedY: multiplied.y,
+    sumX: sum.x,
+    sumY: sum.y,
+    negatedX: negated.x,
+    negatedY: negated.y,
+    cancelledX: cancelled.x,
+    cancelledY: cancelled.y,
+    identityNegatedX: identityNegated.x,
+    identityNegatedY: identityNegated.y,
+    scalarResult: scalar,
+  };
+  assert.deepEqual(result, expected);
+  console.log(JSON.stringify({
+    fixture: 'JubjubGroupParity.groupParity',
+    compact: compilerVersion,
+    runtime: packageJson.version,
+    input: { pointX: point.x.toString(), pointY: point.y.toString(), rawScalar: scalar.toString() },
+    outputs: Object.fromEntries(Object.entries(result).map(([name, value]) => [name, value.toString()])),
+  }));
+} finally {
+  rmSync(scratch, { recursive: true, force: true });
+}

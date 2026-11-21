@@ -1,0 +1,21 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export pure circuit construct(amount: Uint<8>): [
+  Maybe<Uint<8>>,
+  Maybe<Uint<8>>,
+  Maybe<Boolean>,
+  Maybe<Boolean>,
+  Maybe<Field>,
+  Maybe<Field>,
+  Uint<8>
+] {
+  const presentUInt = some<Uint<8>>(amount);
+  const absentUInt = none<Uint<8>>();
+  const presentBool = some<Boolean>(true);
+  const absentBool = none<Boolean>();
+  const presentNative = some<Field>(17 as Field);
+  const absentNative = none<Field>();
+  const fallback = absentUInt.is_some ? absentUInt.value : 9 as Uint<8>;
+  return [presentUInt, absentUInt, presentBool, absentBool, presentNative, absentNative, fallback];
+}

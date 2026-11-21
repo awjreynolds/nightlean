@@ -3503,7 +3503,7 @@
       "layer": "standard-library",
       "surface": "Maybe",
       "noctiumStatus": "related-subset",
-      "notes": "Scalar native List heads return the typed Maybe shape. Matched Compact 0.36.1 and Noctium on ZKIR 3.2.1 UInt8 cases cover empty and one-item Lists. General Maybe values in other source positions and element families remain open.",
+      "notes": "Readable witness authoring constructs and projects typed Maybe values for Native, Bool and bounded UInt, with false and a canonical zero payload for none. Matched Compact 0.36.1 and native ZKIR 3.2.1 checks cover those scalar outputs. Scalar native List heads also return Maybe for UInt8. Other source positions and element families remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3517,6 +3517,11 @@
         "ABI"
       ],
       "observedEvidence": [
+        "Noctium/Authoring.lean",
+        "tests/ScalarMaybeAuthoring.lean",
+        "runtime/tests/scalar_maybe_authoring.rs",
+        "tests/compact/ScalarMaybeAuthoring.compact",
+        "tests/compact/scalar-maybe-authoring.mjs",
         "tests/NativeScalarListMaybe.lean",
         "runtime/tests/scalar_list_maybe.rs",
         "tests/compact/ListHeadMaybe.compact",
@@ -4167,8 +4172,8 @@
       "id": "C-STDLIB-SOME",
       "layer": "standard-library",
       "surface": "some",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "Readable witness authoring constructs typed Some values for Native, Bool and bounded UInt and returns checked aggregate fields. Paired Compact 0.36.1 and native ZKIR 3.2.1 checks cover the tag and payload. Other element families and nested uses remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4181,15 +4186,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Authoring.lean",
+        "tests/ScalarMaybeAuthoring.lean",
+        "runtime/tests/scalar_maybe_authoring.rs",
+        "tests/compact/ScalarMaybeAuthoring.compact",
+        "tests/compact/scalar-maybe-authoring.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-NONE",
       "layer": "standard-library",
       "surface": "none",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "Readable witness authoring constructs typed None values for Native, Bool and bounded UInt, zeroing the inactive payload. Paired Compact 0.36.1 and native ZKIR 3.2.1 checks cover those layouts. Other element families and nested uses remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4202,7 +4213,13 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Authoring.lean",
+        "tests/ScalarMaybeAuthoring.lean",
+        "runtime/tests/scalar_maybe_authoring.rs",
+        "tests/compact/ScalarMaybeAuthoring.compact",
+        "tests/compact/scalar-maybe-authoring.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -4445,8 +4462,8 @@
       "id": "C-STDLIB-SHA512",
       "layer": "standard-library",
       "surface": "sha512",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean supports fixed-byte SHA-512 and checked flat FAB values through the native instruction. A matched flat named record checks the canonical FAB bytes and two digests against Compact, and the Rust check rejects a mismatched byte wrapper. Recursive layouts and further host qualification remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4459,15 +4476,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ByteHashes.lean",
+        "runtime/tests/byte_hashes.rs",
+        "tests/Sha512Fab.lean",
+        "runtime/tests/sha512_fab.rs",
+        "tests/compact/sha512-fab.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-JUBJUBPOINT",
       "layer": "standard-library",
       "surface": "JubjubPoint",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Typed JubjubPoint construction, projection, group addition, negation, point multiplication and generator multiplication are matched for the exercised Jubjub path. The fixture uses the generator and identity with scalar one. Other curve families and broader scalar/point vectors remain unqualified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4480,7 +4503,12 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -4514,8 +4542,8 @@
       "id": "C-STDLIB-CONSTRUCTJUBJUBPOINT",
       "layer": "standard-library",
       "surface": "constructJubjubPoint",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Native coordinate inputs pass through checked Jubjub point construction and bind the resulting x/y coordinates. The paired fixture checks the valid generator and identity only, so invalid-coordinate rejection is not compared.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4528,15 +4556,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-JUBJUBPOINTX",
       "layer": "standard-library",
       "surface": "jubjubPointX",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Returns the x coordinate from checked typed Jubjub points. The paired fixture compares generator, identity, multiplication, addition and negation results.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4549,15 +4582,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-JUBJUBPOINTY",
       "layer": "standard-library",
       "surface": "jubjubPointY",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Returns the y coordinate from checked typed Jubjub points. The paired fixture compares generator, identity, multiplication, addition and negation results.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4570,7 +4608,12 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -4919,8 +4962,8 @@
       "id": "C-STDLIB-ECADD",
       "layer": "standard-library",
       "surface": "ecAdd",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The Jubjub overload matches addition with identity and addition of a point to its negation. Other curve/field overloads and broader inputs remain unqualified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4933,15 +4976,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-ECNEG",
       "layer": "standard-library",
       "surface": "ecNeg",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The Jubjub overload matches point negation and identity negation. Other curve overloads and broader point vectors remain unqualified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4954,15 +5002,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-ECMUL",
       "layer": "standard-library",
       "surface": "ecMul",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The Jubjub overload matches multiplication of a checked point by scalar one. Other curve/field overloads and broader scalar/point vectors remain unqualified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4975,15 +5028,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-ECMULGENERATOR",
       "layer": "standard-library",
       "surface": "ecMulGenerator",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The Jubjub overload matches generator multiplication by scalar one. Other curve/field overloads and broader scalar vectors remain unqualified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4996,7 +5054,12 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -5045,8 +5108,8 @@
       "id": "C-STDLIB-HASHTOCURVE",
       "layer": "standard-library",
       "surface": "hashToCurve",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean hashToCurveFab lowers checked flat FAB layouts to the native Jubjub hash-to-curve instruction. Two changed private payloads in the mixed named record fixture match Compact 0.36.1, including the Bytes32 field split and enum tag. The native checker rejects a changed private field in the transcript. Recursive layouts and other host paths remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5059,7 +5122,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/MixedFabHashToCurve.lean",
+        "runtime/tests/hash_to_curve_fab.rs",
+        "tests/compact/mixed-fab-hash-to-curve.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -5328,8 +5395,8 @@
       "id": "C-STDLIB-MINTSHIELDEDTOKEN",
       "layer": "standard-library",
       "surface": "mintShieldedToken",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean composes the native mint and recipient-specific Cell booking. Pinned Compact confirms the reference wallet recipient and Cell booking behavior. A funded Ledger 9 run checks the finalized commitment and index, wallet recovery and the stored qualified coin. Changed recipient and replay attempts leave state unchanged. Contract recipients and multi-output settlement need separate qualification.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5342,15 +5409,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ShieldedWalletMint.lean",
+        "tests/compact/explicit-booked-coin-recipients.mjs",
+        "runtime/tests/shielded_wallet_mint.rs",
+        "runtime/src/localnet/shielded_receive.rs",
+        "docs/development/shielded-wallet-mint-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-EVOLVENONCE",
       "layer": "standard-library",
       "surface": "evolveNonce",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean shieldedIndexedNonce takes a UInt128 index and Bytes32 nonce. Native 3.2.1 matches pinned Compact at index zero and UInt128 maximum, and drops the nonce's high byte before hashing. Source checks reject mismatched types and require disclosure of private-derived public results. Other source and host routes remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5363,7 +5436,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/IndexedShieldedNonce.lean",
+        "runtime/tests/indexed_shielded_nonce.rs",
+        "tests/compact/indexed-shielded-nonce.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

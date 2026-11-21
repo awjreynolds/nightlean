@@ -1,0 +1,13 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export struct Sha512FabPayload {
+  octets: Bytes<32>;
+  flag: Boolean;
+  counter: Uint<16>;
+  anchor: Field;
+}
+
+export circuit sha512Fab(payload: Sha512FabPayload): [Bytes<64>] {
+  return [sha512<Sha512FabPayload>(payload)];
+}

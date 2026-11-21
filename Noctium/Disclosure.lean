@@ -62,6 +62,7 @@ def origins (env : Environment) : Expr ty → Except String Origins
     for value in values do result := merge result (← origins env value)
     pure result
   | .persistentHashFab _ _ values => originsFabValues env values
+  | .sha512Fab _ _ values => originsFabValues env values
   | .persistentCommitFab _ _ opening values => do
     pure (merge (← origins env opening) (← originsFabValues env values))
   | .transientCommitFab _ _ opening values => do
@@ -82,6 +83,7 @@ def origins (env : Environment) : Expr ty → Except String Origins
     let mut result : Origins := []
     for value in values do result := merge result (← origins env value)
     pure result
+  | .hashToCurveFab _ _ values => originsFabValues env values
   | .foreignBase _ _ | .foreignScalar _ _ | .foreignPoint _ _ => pure []
   | .foreignEncodedField value _ => origins env value
   | .foreignUnary _ value | .foreignToBytes value => origins env value
