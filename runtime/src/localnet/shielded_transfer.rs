@@ -15,11 +15,103 @@ use coin_structure::{
 };
 use ledger::structure::GUARANTEED_SEGMENT;
 use onchain_runtime::state::{ContractState, StateValue};
-use rand::rngs::StdRng;
+use rand::{CryptoRng, Rng, rngs::StdRng};
 use serde_json::Value;
 use std::{collections::BTreeMap, future::pending};
-use transient_crypto::{commitment::PedersenRandomness, encryption, proofs::Proof};
+use transient_crypto::{
+    commitment::PedersenRandomness,
+    encryption,
+    merkle_tree::MerkleTreeDigest,
+    proofs::{Proof, ProofPreimage},
+};
 use zswap::{Input, Offer, Output, prove::ZswapResolver};
+
+pub(super) struct StagedContractInput {
+    pub(super) input: Input<ProofPreimage, Db>,
+    pub(super) commitment: Commitment,
+    pub(super) nullifier: Nullifier,
+    pub(super) merkle_tree_root: MerkleTreeDigest,
+}
+
+pub(super) struct StagedContractOutput {
+    pub(super) output: Output<ProofPreimage, Db>,
+    pub(super) commitment: Commitment,
+}
+
+/// Stage one exact live contract-owned coin for a native offer.
+///
+/// The current root, indexed leaf, recipient-specific commitment, and unused nullifier must all
+/// agree before the native input witness is created. The returned metadata is used by the host
+/// binder to compare the completed offer with the proved contract effects.
+pub(super) fn stage_contract_owned_input<R: Rng + CryptoRng + ?Sized>(
+    zswap: &zswap::ledger::State<Db>,
+    address: ContractAddress,
+    coin: &QualifiedInfo,
+    rng: &mut R,
+) -> Result<StagedContractInput> {
+    let info = Info::from(coin);
+    let commitment = info.commitment(&Recipient::Contract(address));
+    let nullifier = info.nullifier(&SenderEvidence::Contract(address));
+    let capacity = 1u64
+        .checked_shl(u32::from(zswap.coin_coms.height()))
+        .ok_or(Error::State)?;
+    let root = zswap.coin_coms.root().ok_or(Error::State)?;
+    check(
+        coin.mt_index < capacity
+            && coin.mt_index < zswap.first_free
+            && zswap.coin_coms_set.contains_key(&commitment)
+            && !zswap.nullifiers.contains_key(&nullifier)
+            && zswap.past_roots.contains(&root),
+        Error::State,
+    )?;
+    let (leaf_hash, owner) = zswap.coin_coms.index(coin.mt_index).ok_or(Error::State)?;
+    check(
+        leaf_hash == commitment.0 && owner.as_deref() == Some(&address),
+        Error::State,
+    )?;
+
+    let input = Input::<_, Db>::new_contract_owned(
+        rng,
+        coin,
+        Some(GUARANTEED_SEGMENT),
+        address,
+        &zswap.coin_coms,
+    )
+    .map_err(|_| Error::State)?;
+    check(
+        input.nullifier == nullifier
+            && input.merkle_tree_root == root
+            && input.contract_address.as_deref() == Some(&address)
+            && input.segment() == Some(GUARANTEED_SEGMENT),
+        Error::State,
+    )?;
+
+    Ok(StagedContractInput {
+        input,
+        commitment,
+        nullifier,
+        merkle_tree_root: root,
+    })
+}
+
+/// Stage one exact guaranteed contract-owned output for a native offer.
+pub(super) fn stage_contract_owned_output<R: Rng + CryptoRng + ?Sized>(
+    address: ContractAddress,
+    coin: &Info,
+    rng: &mut R,
+) -> Result<StagedContractOutput> {
+    let commitment = coin.commitment(&Recipient::Contract(address));
+    let output = Output::<_, Db>::new_contract_owned(rng, coin, Some(GUARANTEED_SEGMENT), address)
+        .map_err(|_| Error::State)?;
+    check(
+        output.coin_com == commitment
+            && output.contract_address.as_deref() == Some(&address)
+            && output.ciphertext.is_none()
+            && output.segment() == Some(GUARANTEED_SEGMENT),
+        Error::State,
+    )?;
+    Ok(StagedContractOutput { output, commitment })
+}
 
 struct BookedOutput {
     commitment: Commitment,
@@ -145,30 +237,14 @@ impl DevelopmentFunding<'_> {
         check(qualified_coin.nonce == nonce, Error::State)?;
 
         let info = Info::from(&qualified_coin);
-        let commitment = info.commitment(&Recipient::Contract(address));
-        let nullifier = info.nullifier(&SenderEvidence::Contract(address));
         let zswap = &snapshot.state.zswap;
-        let capacity = 1u64
-            .checked_shl(u32::from(zswap.coin_coms.height()))
-            .ok_or(Error::State)?;
-        check(
-            qualified_coin.mt_index < capacity
-                && qualified_coin.mt_index < zswap.first_free
-                && zswap.coin_coms_set.contains_key(&commitment)
-                && !zswap.nullifiers.contains_key(&nullifier)
-                && zswap
-                    .past_roots
-                    .contains(&zswap.coin_coms.root().ok_or(Error::State)?),
-            Error::State,
-        )?;
-        let (leaf_hash, owner) = zswap
-            .coin_coms
-            .index(qualified_coin.mt_index)
-            .ok_or(Error::State)?;
-        check(
-            leaf_hash == commitment.0 && owner.as_deref() == Some(&address),
-            Error::State,
-        )?;
+        let staged_input = stage_contract_owned_input(zswap, address, &qualified_coin, &mut rng)?;
+        let StagedContractInput {
+            input,
+            commitment,
+            nullifier,
+            merkle_tree_root: input_root,
+        } = staged_input;
 
         let prepared =
             PreparedProof::from_contract_witness_inputs(target, current, inputs, &mut rng)
@@ -188,14 +264,6 @@ impl DevelopmentFunding<'_> {
             Error::State,
         )?;
 
-        let input = Input::<_, Db>::new_contract_owned(
-            &mut rng,
-            &qualified_coin,
-            Some(GUARANTEED_SEGMENT),
-            address,
-            &zswap.coin_coms,
-        )
-        .map_err(|_| Error::State)?;
         let output_info = info.evolve_from(
             b"midnight:kernel:nonce_evolve",
             qualified_coin.value,
@@ -209,7 +277,6 @@ impl DevelopmentFunding<'_> {
             Some(recipient_encryption_key),
         )
         .map_err(|_| Error::State)?;
-        let input_root = input.merkle_tree_root;
         let output_commitment = output.coin_com;
         let offer = Offer::new(vec![input], vec![output], vec![]).ok_or(Error::State)?;
         let (_, indices) = zswap.try_apply(&offer, None).map_err(|_| Error::State)?;
@@ -325,39 +392,13 @@ impl DevelopmentFunding<'_> {
         let info = Info::from(&qualified_coin);
         check(send_amount > 0 && send_amount < info.value, Error::State)?;
         let change_amount = info.value.checked_sub(send_amount).ok_or(Error::State)?;
-        let commitment = info.commitment(&Recipient::Contract(address));
-        let nullifier = info.nullifier(&SenderEvidence::Contract(address));
         let zswap = &snapshot.state.zswap;
-        let capacity = 1u64
-            .checked_shl(u32::from(zswap.coin_coms.height()))
-            .ok_or(Error::State)?;
-        check(
-            qualified_coin.mt_index < capacity
-                && qualified_coin.mt_index < zswap.first_free
-                && zswap.coin_coms_set.contains_key(&commitment)
-                && !zswap.nullifiers.contains_key(&nullifier)
-                && zswap
-                    .past_roots
-                    .contains(&zswap.coin_coms.root().ok_or(Error::State)?),
-            Error::State,
-        )?;
-        let (leaf_hash, owner) = zswap
-            .coin_coms
-            .index(qualified_coin.mt_index)
-            .ok_or(Error::State)?;
-        check(
-            leaf_hash == commitment.0 && owner.as_deref() == Some(&address),
-            Error::State,
-        )?;
-
-        let input = Input::<_, Db>::new_contract_owned(
-            &mut rng,
-            &qualified_coin,
-            Some(GUARANTEED_SEGMENT),
-            address,
-            &zswap.coin_coms,
-        )
-        .map_err(|_| Error::State)?;
+        let StagedContractInput {
+            input,
+            commitment,
+            nullifier,
+            merkle_tree_root: input_root,
+        } = stage_contract_owned_input(zswap, address, &qualified_coin, &mut rng)?;
         let user_info = info.evolve_from(
             b"midnight:kernel:nonce_evolve",
             send_amount,
@@ -376,16 +417,11 @@ impl DevelopmentFunding<'_> {
             Some(recipient_encryption_key),
         )
         .map_err(|_| Error::State)?;
-        let change_output = Output::<_, Db>::new_contract_owned(
-            &mut rng,
-            &change_info,
-            Some(GUARANTEED_SEGMENT),
-            address,
-        )
-        .map_err(|_| Error::State)?;
-        let input_root = input.merkle_tree_root;
+        let StagedContractOutput {
+            output: change_output,
+            commitment: change_commitment,
+        } = stage_contract_owned_output(address, &change_info, &mut rng)?;
         let user_commitment = user_output.coin_com;
-        let change_commitment = change_output.coin_com;
         check(user_commitment != change_commitment, Error::State)?;
         let offer = Offer::new(vec![input], vec![user_output, change_output], vec![])
             .ok_or(Error::State)?;
@@ -538,6 +574,8 @@ mod tests {
         zkir::IrSource,
     };
     use anyhow::{Context, Result, ensure};
+    use base_crypto::time::{Duration as LedgerDuration, Timestamp};
+    use coin_structure::coin::{Info as CoinInfo, Nonce, ShieldedTokenType};
     use coin_structure::transfer::Recipient as CoinRecipient;
     use ledger::structure::Transaction;
     use rand::{SeedableRng, rngs::OsRng};
@@ -550,6 +588,69 @@ mod tests {
     };
     use transient_crypto::proofs::Zkir;
     use zswap::keys::SecretKeys;
+
+    #[test]
+    fn staged_contract_coin_witnesses_match_live_native_booking() {
+        let mut rng = StdRng::from_seed([0x5a; 32]);
+        let address = ContractAddress(HashOutput([0x21; 32]));
+        let coin = CoinInfo {
+            nonce: Nonce(HashOutput([0x31; 32])),
+            type_: ShieldedTokenType(HashOutput([0x41; 32])),
+            value: 17,
+        };
+        let staged_output = stage_contract_owned_output(address, &coin, &mut rng).unwrap();
+        assert_eq!(
+            staged_output.commitment,
+            coin.commitment(&Recipient::Contract(address))
+        );
+        assert_eq!(staged_output.output.coin_com, staged_output.commitment);
+        assert_eq!(
+            staged_output.output.contract_address.as_deref(),
+            Some(&address)
+        );
+        assert!(staged_output.output.ciphertext.is_none());
+
+        let initial = zswap::ledger::State::<Db>::new();
+        let offer = Offer::new(Vec::new(), vec![staged_output.output], Vec::new()).unwrap();
+        let (state, indices) = initial.try_apply(&offer, None).unwrap();
+        let index = *indices.get(&staged_output.commitment).unwrap();
+        let state =
+            state.post_block_update(Timestamp::from_secs(1), LedgerDuration::from_secs(3600));
+        let qualified = coin.qualify(index);
+
+        let staged_input =
+            stage_contract_owned_input(&state, address, &qualified, &mut rng).unwrap();
+        assert_eq!(
+            staged_input.commitment,
+            coin.commitment(&Recipient::Contract(address))
+        );
+        assert_eq!(
+            staged_input.nullifier,
+            coin.nullifier(&SenderEvidence::Contract(address))
+        );
+        assert_eq!(
+            staged_input.merkle_tree_root,
+            state.coin_coms.root().unwrap()
+        );
+        assert_eq!(staged_input.input.nullifier, staged_input.nullifier);
+        assert_eq!(staged_input.input.segment(), Some(GUARANTEED_SEGMENT));
+
+        let wrong_owner = ContractAddress(HashOutput([0x22; 32]));
+        assert!(stage_contract_owned_input(&state, wrong_owner, &qualified, &mut rng).is_err());
+        let wrong_coin = QualifiedInfo {
+            value: qualified.value + 1,
+            ..qualified
+        };
+        assert!(stage_contract_owned_input(&state, address, &wrong_coin, &mut rng).is_err());
+
+        let duplicate = Offer::new(
+            vec![staged_input.input.clone(), staged_input.input],
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap();
+        assert!(state.try_apply(&duplicate, None).is_err());
+    }
 
     async fn finalize(node: &Node, bound: &BoundTransaction) -> Result<FinalizedReceipt> {
         let sent = node

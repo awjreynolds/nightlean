@@ -38,6 +38,21 @@ jobs:
           lint: false
           use-mathlib-cache: false
           use-github-cache: false
+      - name: Check the installed Linux Lean toolchain layout
+        if: runner.os == 'Linux'
+        run: |
+          python3 - <<'PY'
+          import json
+          import runpy
+
+          measure = runpy.run_path("scripts/proofs/check-private-claim-artifacts.py")["toolchain_measurement"]()
+          assert "bin/ld.lld" in measure["identity"]["files"]
+          print(json.dumps({
+              "toolchainRoot": measure["root"],
+              "toolCount": len(measure["identity"]["files"]),
+              "toolchainSha256": measure["sha256"],
+          }, sort_keys=True))
+          PY
       - name: Build the POC compiler
         run: lake build noctium Noctium.Compiler Noctium.Foreign Noctium.Claim Noctium.Verification.RangeDedup
       - name: Check the private claim source-proof report
@@ -89,6 +104,7 @@ jobs:
           lake env lean tests/HostedLedgerWitness.lean
           lake env lean tests/TypedWitnessResultCodec.lean
           lake env lean tests/MerklePathRootNoLeafHash.lean
+          lake env lean tests/OwnPublicKeyWitness.lean
           lake env lean tests/LedgerWitnessTransform.lean
           lake env lean tests/StructuredLedgerWitness.lean
           lake env lean tests/StructuredTypedCells.lean
@@ -135,6 +151,7 @@ jobs:
           lake env lean tests/CounterCompare.lean
           lake env lean tests/NativeSet.lean
           lake env lean tests/NativeCaller.lean
+          lake env lean tests/NativeKernelContext.lean
           lake env lean tests/NativeCellReset.lean
           lake env lean tests/NativeStandaloneMints.lean
           lake env lean tests/ShieldedReceive.lean
@@ -147,6 +164,7 @@ jobs:
           lake env lean tests/ShieldedBurnAddress.lean
           lake env lean tests/QualifiedCoinCell.lean
           lake env lean tests/ShieldedCoinInfo.lean
+          lake env lean tests/ShieldedSendResult.lean
           lake env lean tests/QualifiedCoinSet.lean
           lake env lean tests/QualifiedCoinList.lean
           lake env lean tests/QualifiedCoinRecipient.lean
@@ -223,6 +241,8 @@ jobs:
         run: |
           lake build Noctium.Verification Noctium.Verification.ScalarNormalizationSoundness
           lake env lean tests/Verification.lean
+          lake env lean tests/SourceProofCoverage.lean
+          bash tests/private-claim-source-coverage.sh
       - name: Check readable private state source and disclosure
         run: |
           bash tests/private-authoring-cli.sh
