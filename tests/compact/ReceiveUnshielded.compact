@@ -1,0 +1,15 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export circuit receiveHelper(color: Bytes<32>, amount: Uint<128>, enabled: Boolean): [] {
+  if (disclose(enabled)) {
+    receiveUnshielded(disclose(color), disclose(amount));
+  }
+}
+
+export circuit primitive(color: Bytes<32>, amount: Uint<128>, enabled: Boolean): [] {
+  const token = left<Bytes<32>, Bytes<32>>(color);
+  if (disclose(enabled)) {
+    kernel.incUnshieldedInputs(disclose(token), disclose(amount));
+  }
+}

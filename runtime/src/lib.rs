@@ -418,6 +418,11 @@ pub enum Expr {
         length: usize,
         value: Box<Expr>,
     },
+    #[serde(rename = "sha512Fab")]
+    Sha512Fab {
+        schema: Json,
+        values: Vec<FabHashInput>,
+    },
     Keccak256 {
         length: usize,
         value: Box<Expr>,
@@ -1084,6 +1089,12 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
         }
         Expr::Sha512 { length, value } => {
             Value::Bytes(sha2::Sha512::digest(evaluated_bytes(value, *length, env)?).to_vec())
+        }
+        Expr::Sha512Fab { schema, values } => {
+            let preimage = zeroize::Zeroizing::new(
+                ValueReprAlignedValue(aligned_fab_payload(schema, values, env)?).binary_vec(),
+            );
+            Value::Bytes(sha2::Sha512::digest(preimage.as_slice()).to_vec())
         }
         Expr::Keccak256 { length, value } => {
             Value::Bytes(sha3::Keccak256::digest(evaluated_bytes(value, *length, env)?).to_vec())

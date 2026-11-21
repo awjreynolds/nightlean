@@ -1,6 +1,7 @@
 import Noctium.Frontend.Core
 import Noctium.Helpers.Wire
 import Noctium.Helpers.Iteration
+import Noctium.Types.Maybe
 
 namespace Noctium.Authoring
 
@@ -124,6 +125,8 @@ scoped syntax "map(" "[" nlexpr,* "]" "," "fun" ident* "=>" nlexpr ")" : nlexpr
 scoped syntax "fold(" nlexpr "," "[" nlexpr,* "]" "," "fun" ident* "=>" nlexpr ")" : nlexpr
 scoped syntax "encode(" ident "," nlexpr ")" : nlexpr
 scoped syntax "decode(" ident "," nlexpr ")" : nlexpr
+scoped syntax "some(" nlexpr ")" : nlexpr
+scoped syntax "none(" nltype ")" : nlexpr
 scoped syntax "field(" nlexpr "," ident ")" : nlexpr
 scoped syntax "elementAt(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "enumTag(" nlexpr ")" : nlexpr
@@ -187,6 +190,7 @@ private structure AuthoredOutput where
   span : SourceSpan
   ordinal : Nat
   source : LogicalAliasSource
+  nominalBytes32 : Option NominalBytes32 := none
 
 private def AuthoredOutput.layoutType (item : AuthoredOutput) : Types.CompositeType :=
   match item.value.type with
@@ -473,6 +477,8 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| disclose($value)) => s!"disclose({renderExpr value})"
   | `(nlexpr| encode($codec:ident, $value)) => s!"encode({codec.getId}, {renderExpr value})"
   | `(nlexpr| decode($codec:ident, $value)) => s!"decode({codec.getId}, {renderExpr value})"
+  | `(nlexpr| some($value)) => s!"some({renderExpr value})"
+  | `(nlexpr| none($type:nltype)) => s!"none({renderType type})"
   | `(nlexpr| field($value, $name:ident)) => s!"field({renderExpr value}, {name.getId})"
   | `(nlexpr| elementAt($value, $index)) => s!"elementAt({renderExpr value}, {renderExpr index})"
   | `(nlexpr| enumTag($value)) => s!"enumTag({renderExpr value})"
@@ -489,6 +495,9 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| sha512($value)) => s!"sha512({renderExpr value})"
   | `(nlexpr| keccak256($value)) => s!"keccak256({renderExpr value})"
   | `(nlexpr| bytes32($literal:str)) => s!"bytes32({(toJson literal.getString).compress})"
+  | `(nlexpr| nativeToken()) => "nativeToken()"
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    s!"tokenType({renderExpr domain}, {renderExpr contractAddress})"
   | `(nlexpr| bytes($length:num, $literal:str)) =>
     s!"bytes({length.getNat}, {(toJson literal.getString).compress})"
   | `(nlexpr| byteAt($value, $index:num)) =>
@@ -497,6 +506,8 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
     s!"persistentHashVector32([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| persistentHashFab($environment:ident, $type:ident, [$values,*])) =>
     s!"persistentHashFab({environment.getId}, {type.getId}, [{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
+  | `(nlexpr| sha512Fab($environment:ident, $type:ident, [$values,*])) =>
+    s!"sha512Fab({environment.getId}, {type.getId}, [{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| persistentCommitFab($environment:ident, $type:ident, $opening, [$values,*])) =>
     s!"persistentCommitFab({environment.getId}, {type.getId}, {renderExpr opening}, [{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| transientCommitFab($environment:ident, $type:ident, $opening, [$values,*])) =>
@@ -588,6 +599,7 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| upgradeFromNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
+  | `(nlexpr| some($value))
   | `(nlexpr| field($value, $_:ident))
   | `(nlexpr| enumTag($value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
@@ -597,9 +609,12 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| byteAt($value, $_:num)) => disclosedValues value
   | `(nlexpr| persistentHashVector32([$values,*]))
   | `(nlexpr| persistentHashFab($_:ident, $_:ident, [$values,*]))
+  | `(nlexpr| sha512Fab($_:ident, $_:ident, [$values,*]))
   | `(nlexpr| persistentHashNativeVector([$values,*]))
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.flatMap disclosedValues
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    disclosedValues domain ++ disclosedValues contractAddress
   | `(nlexpr| persistentCommitFab($_:ident, $_:ident, $opening, [$values,*]))
   | `(nlexpr| transientCommitFab($_:ident, $_:ident, $opening, [$values,*])) =>
     disclosedValues opening ++ values.getElems.toList.flatMap disclosedValues
@@ -651,6 +666,7 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| upgradeFromNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
+  | `(nlexpr| some($value))
   | `(nlexpr| field($value, $_:ident))
   | `(nlexpr| enumTag($value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
@@ -660,9 +676,12 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| byteAt($value, $_:num)) => inlineAssertions value
   | `(nlexpr| persistentHashVector32([$values,*]))
   | `(nlexpr| persistentHashFab($_:ident, $_:ident, [$values,*]))
+  | `(nlexpr| sha512Fab($_:ident, $_:ident, [$values,*]))
   | `(nlexpr| persistentHashNativeVector([$values,*]))
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.flatMap inlineAssertions
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    inlineAssertions domain ++ inlineAssertions contractAddress
   | `(nlexpr| persistentCommitFab($_:ident, $_:ident, $opening, [$values,*]))
   | `(nlexpr| transientCommitFab($_:ident, $_:ident, $opening, [$values,*])) =>
     inlineAssertions opening ++ values.getElems.toList.flatMap inlineAssertions
@@ -732,7 +751,13 @@ private def iterationProgram (stx : Syntax) (programName : String)
       } (state.codecs.map (·.2)) with
       | .ok program => pure program
       | .error message => throwErrorAt stx message
-  pure {program with witnesses := uniqueWitnesses (program.witnesses ++ signatures)}
+  let state ← get
+  pure {program with
+    composites := {
+      program.composites with
+      structures := (program.composites.structures ++ state.composites.structures).eraseDups
+      enumerations := (program.composites.enumerations ++ state.composites.enumerations).eraseDups},
+    witnesses := uniqueWitnesses (program.witnesses ++ signatures)}
 
 private def iterationEnvironment (env : SurfaceEnv)
     (staged : List (String × ResultType))
@@ -772,6 +797,57 @@ private def selectedCodec (name : TSyntax `ident) : ExprM (Helpers.Wire.Codec ×
   let some ((_, codec), index) := (← get).codecs.zipIdx.find? (fun (candidate, _) => candidate.1 == name.getId)
     | throwErrorAt name s!"add codec '{name.getId}' to the circuit's using clause"
   pure (codec, Helpers.Wire.codecName index)
+
+private def scalarMaybeType (programName : String) (stx : Syntax) (payloadType : Ty) :
+    ExprM Types.CompositeType := do
+  let typeId ← match Types.Maybe.scalarTypeId programName payloadType with
+    | .ok value => pure value
+    | .error message => throwErrorAt stx message
+  let environment ← match Types.Maybe.scalarEnvironment typeId payloadType with
+    | .ok value => pure value
+    | .error message => throwErrorAt stx message
+  let some declaration := environment.structures.head?
+    | throwErrorAt stx "scalar Maybe schema has no structure declaration"
+  let state ← get
+  if state.composites.enumerations.any (·.id == typeId) then
+    throwErrorAt stx s!"scalar Maybe type id '{typeId}' collides with an enum"
+  match state.composites.structures.find? (·.id == typeId) with
+  | some existing =>
+    unless existing.fields.map (fun field => (field.name, field.type)) ==
+        declaration.fields.map (fun field => (field.name, field.type)) do
+      throwErrorAt stx s!"scalar Maybe type id '{typeId}' collides with another structure"
+  | none =>
+    modify fun state => {state with composites := {
+      state.composites with
+      structures := state.composites.structures ++ [declaration]}}
+  pure (Types.Maybe.scalarType typeId)
+
+private def scalarMaybeZero : Ty → Option Noctium.Helpers.Term
+  | .native => some (.native 0)
+  | .bool => some (.bool _root_.Bool.false)
+  | .uint maximum => some (.uint maximum 0)
+  | _ => none
+
+private def nominalBytes32ForCodec? (codec : Helpers.Wire.Codec) :
+    Option NominalBytes32 :=
+  if codec.frameBytes != 32 then none else
+  match codec.payload with
+  | .structure id => do
+    let kind ← [NominalBytes32.contractAddress, .zswapCoinPublicKey].find? fun candidate =>
+      candidate.declarationId == id
+    let some declaration := codec.composites.structures.find? (·.id == id) | none
+    let [field] := declaration.fields | none
+    if field.name == "bytes" && field.type == .bytes 32 then some kind else none
+  | _ => none
+
+private partial def nominalBytes32OfOutput? (state : AuthoringExprState)
+    (source : TSyntax `nlexpr) : Option NominalBytes32 := do
+  match source with
+  | `(nlexpr| disclose($value)) => nominalBytes32OfOutput? state value
+  | `(nlexpr| encode($codecName:ident, $_value:nlexpr)) => do
+    let some (_, codec) := state.codecs.find? (·.1 == codecName.getId) | none
+        nominalBytes32ForCodec? codec
+  | _ => none
 
 private def lowerProjection (stx : Syntax) (value : Lowered)
     (projection : Types.Projection) : ExprM Lowered := do
@@ -820,6 +896,21 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     pure {type := .scalar .native, term := .native n.getNat}
   | `(nlexpr| true) => pure {type := .scalar .bool, term := .bool _root_.Bool.true}
   | `(nlexpr| false) => pure {type := .scalar .bool, term := .bool _root_.Bool.false}
+  | `(nlexpr| some($source)) => do
+    let value ← lowerExpr programName callPrefix env source
+    let .scalar payloadType := value.type
+      | throwErrorAt stx "some requires a Native, Bool, or UInt scalar"
+    let maybeType ← scalarMaybeType programName stx payloadType
+    pure (mergeLowered (.composite maybeType)
+      (.composite maybeType [.bool _root_.Bool.true, value.term]) [value])
+  | `(nlexpr| none($type:nltype)) => do
+    let payloadType ← liftM (readScalarTy type)
+    let maybeType ← scalarMaybeType programName stx payloadType
+    let zero ← match scalarMaybeZero payloadType with
+      | some zero => pure zero
+      | none => throwErrorAt type "none requires a Native, Bool, or UInt scalar"
+    pure (mergeLowered (.composite maybeType)
+      (.composite maybeType [.bool _root_.Bool.false, zero]) [])
   | `(nlexpr| uint($n:num)) => do
     match ScalarPolicy.validate (.uint n.getNat) with
     | .error message => throwErrorAt stx message
@@ -1061,6 +1152,10 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
       type := .scalar (.foreign (.point .curve25519))
       term := .foreignConstant (.point .curve25519) (Foreign.identityEncoding .curve25519)
     }
+  | `(nlexpr| nativeToken()) | `(nlexpr| tokenType($_:nlexpr, $_:nlexpr)) => do
+    let some expanded ← Noctium.expandTokenHelperSyntax stx
+      | throwErrorAt stx "token helper expansion failed"
+    lowerExpr programName callPrefix env expanded
   | `(nlexpr| bytes32($literal:str)) => do
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
@@ -1830,6 +1925,7 @@ private structure ReadableBody where
   statements : List Statement := []
   witnesses : List WitnessSignature := []
   observation : ObservationMetadata
+  composites : Types.CompositeEnv := {}
   logicalAliases : List LogicalAliasBinding := []
   nextLet : Nat := 0
   helperProgram : Option Helpers.Program := none
@@ -1850,12 +1946,14 @@ private def ReadableBody.lower (body : ReadableBody) (programName path : String)
     | none => lowerExpr programName ("s" ++ path) body.env source
   let (value, state) ← action.run
     {exprState with
+      composites := body.composites
       iterationProgram := body.helperProgram
       iterationWitnesses := body.witnesses
       usedIteration := body.requiresOutputViews
       nextLet := body.nextLet
       iterationParameters := body.iterationParameters}
   pure (value, {body with
+    composites := state.composites
     nextLet := state.nextLet
     helperProgram := state.iterationProgram
     requiresOutputViews := state.usedIteration
@@ -2091,9 +2189,11 @@ private partial def lowerReadableStatement (programName path : String)
       codecs := codecs ++ [(codecName.getId, codec)]
       resolvedCodecs := resolvedCodecs ++ [(source, codec)]
       codecTerms := codecTerms.push ⟨mkIdent source⟩
-    let composites := Helpers.Wire.compositeEnv {} (codecs.map (·.2))
-    let exprState : AuthoringExprState := {codecs, composites}
-    let mut sourceBody : ReadableBody := {observation := {entryName := exportName}}
+    let initialComposites := Helpers.Wire.compositeEnv {} (codecs.map (·.2))
+    let exprState : AuthoringExprState := {codecs, composites := initialComposites}
+    let mut sourceBody : ReadableBody := {
+      observation := {entryName := exportName}
+      composites := initialComposites}
     let mut parameters : List Parameter := []
     let mut inputs : List Input := []
     let mut aggregateInputs : List AggregateInput := []
@@ -2145,7 +2245,17 @@ private partial def lowerReadableStatement (programName path : String)
               | throwErrorAt id "scalar outputs require a type annotation"
             pure lowered
         let source := readableAliasSource value sourceExpr
-        authoredOutputs := authoredOutputs ++ [{name := valueName, value, span := outputSpan, ordinal, source}]
+        let nominalBytes32? := if value.type == .scalar (.bytes 32) then
+            nominalBytes32OfOutput? exprState sourceExpr
+          else none
+        authoredOutputs := authoredOutputs ++ [{
+          name := valueName
+          value := value
+          span := outputSpan
+          ordinal := ordinal
+          source := source
+          nominalBytes32 := nominalBytes32?
+        }]
         sourceBody := updatedBody.observe value [sourceExpr]
       | _ =>
         sourceBody ← lowerReadableStatement programNameText (toString ordinal) exprState codecTerms
@@ -2204,7 +2314,7 @@ private partial def lowerReadableStatement (programName path : String)
           | .scalar (.bytes length) =>
             pure ((List.range length).map fun index => .cast .native (.bytesAt (.ref bindingName) index))
           | .composite payload => do
-            let .ok layout := Types.compileType composites payload
+            let .ok layout := Types.compileType sourceBody.composites payload
               | throwErrorAt stx s!"invalid aggregate output layout for '{item.name}'"
             match Helpers.Iteration.flattenResult item.span item.value.type
                 layout.checked.value (.ref bindingName) with
@@ -2234,16 +2344,22 @@ private partial def lowerReadableStatement (programName path : String)
     let program : Program := match helperProgram with
       | none =>
         {declarations := [declaration], exports := [entryExport],
-          composites := compositeEnv, witnesses := witnesses}
+          composites := {
+            sourceBody.composites with
+            structures := (sourceBody.composites.structures ++ compositeEnv.structures).eraseDups
+            enumerations := (sourceBody.composites.enumerations ++ compositeEnv.enumerations).eraseDups},
+          witnesses := witnesses}
       | some program =>
         {program with
           declarations := (program.declarations.filter fun item =>
             item.id != ⟨0, 0⟩) ++ [declaration]
           exports := [entryExport]
           composites := {
-            program.composites with
-            structures := program.composites.structures ++ compositeEnv.structures
-            enumerations := program.composites.enumerations ++ compositeEnv.enumerations}
+            sourceBody.composites with
+            structures := (sourceBody.composites.structures ++ compositeEnv.structures ++
+              program.composites.structures).eraseDups
+            enumerations := (sourceBody.composites.enumerations ++ compositeEnv.enumerations ++
+              program.composites.enumerations).eraseDups},
           witnesses := witnesses}
     if helperProgram.isNone then
       match Helpers.Wire.attach program (codecs.map (·.2)) with
@@ -2255,6 +2371,8 @@ private partial def lowerReadableStatement (programName path : String)
         let value ← `(@Noctium.Expr.ref $(← tyTerm input.ty) $(stringTerm input.name))
         logicalEnv := logicalEnv ++ [(input.name, input.ty, value)]
       let mut logicalOutputAliases : List (String × Ty × Name) := []
+      let nominalBytes32Outputs := authoredOutputs.filterMap fun item =>
+        item.nominalBytes32.map fun nominal => (item.name, nominal)
       let defineAlias (item : AuthoredOutput) (ty : Ty) (value : TSyntax `term) : CommandElabM Name := do
         let aliasName := generatedName fullName s!"__logicalOutput_{item.ordinal}_{item.name}"
         if (← getEnv).contains aliasName then
@@ -2330,7 +2448,7 @@ private partial def lowerReadableStatement (programName path : String)
           | .unit => throwErrorAt stx "unexpected Unit circuit output"
         unless remaining.isEmpty do
           throwErrorAt stx "circuit output layout did not consume the compiled Native fields"
-      pure (logicalOutputAliases, registeredAggregates)
+      pure (logicalOutputAliases, registeredAggregates, nominalBytes32Outputs)
     let signatureTerms ← witnesses.mapM quoteSignature
     let signatureTerms := signatureTerms.toArray
     let inputTerms ← inputs.mapM fun input => inputTerm input.name input.ty input.visibility input.span
