@@ -578,6 +578,10 @@ inductive Effect where
   contract address read from ledger context. -/
   | receiveShieldedToMap (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
+  /-- Spend the exact coin record read from a Bytes32-keyed tree Map entry.
+  The backend derives native nullifier and output-commitment claims. -/
+  | spendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (recipient selfAddress : Expr (.bytes 32))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
       (isUnshielded : Expr .bool)
@@ -1268,6 +1272,21 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         amount.validate caps env
         selfAddress.validate caps env
         pure []
+      | .spendShieldedFromMap state nonce color amount recipient selfAddress => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown shielded coin map '{state}'"
+        let .tree (.map keyTy (.composite compositeEnv recordType)) := declaration.kind
+          | throw s!"shielded coin spend requires a root Bytes32-keyed tree Map '{state}'"
+        unless keyTy == .bytes 32 do
+          throw "shielded coin map key must be Bytes32"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        recipient.validate caps env
+        selfAddress.validate caps env
+        pure []
       | .incUnshieldedInputs color amount isUnshielded
       | .incUnshieldedOutputs color amount isUnshielded => do
         color.validate caps env
@@ -1515,7 +1534,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         let .composite compositeEnv foundType ← resolveTreeState decls state keys
           | throw "nested composite read must select a composite value"
         unless foundType == type do throw "nested composite read type mismatch"
-        let fields ← LedgerValueType.recordFields compositeEnv type
+        let fields ← match LedgerValueType.recordFields compositeEnv type with
+          | .ok fields => pure fields
+          | .error _ => LedgerValueType.shieldedCoinRecordFields compositeEnv type
         unless fields.map Prod.snd == destinations.map Prod.snd do
           throw "nested composite read destination count mismatch"
         unless uniqueNames (destinations.map Prod.fst) do throw "duplicate nested composite read destination"

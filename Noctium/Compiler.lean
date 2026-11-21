@@ -295,6 +295,12 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
       ("amount", nativeExpressionJson amount),
       ("commitment", nativeExpressionJson commitment)]
+  | .spendShieldedFromMap nonce color amount recipient nullifier outputCommitment => Json.mkObj [
+      ("op", toJson ("spendShieldedFromMap" : String)),
+      ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
+      ("amount", nativeExpressionJson amount), ("recipient", nativeExpressionJson recipient),
+      ("nullifier", nativeExpressionJson nullifier),
+      ("outputCommitment", nativeExpressionJson outputCommitment)]
   | .mintShielded domain amount => Json.mkObj [
       ("op", toJson ("mintShielded" : String)), ("domain", nativeExpressionJson domain),
       ("amount", nativeExpressionJson amount)]
@@ -369,6 +375,11 @@ private def effectJson : Effect → Json
       ("op", toJson ("receiveShieldedToMap" : String)), ("state", toJson state),
       ("nonce", expressionJson nonce), ("color", expressionJson color),
       ("amount", expressionJson amount), ("selfAddress", expressionJson selfAddress)]
+  | .spendShieldedFromMap state nonce color amount recipient selfAddress => Json.mkObj [
+      ("op", toJson ("spendShieldedFromMap" : String)), ("state", toJson state),
+      ("nonce", expressionJson nonce), ("color", expressionJson color),
+      ("amount", expressionJson amount), ("recipient", expressionJson recipient),
+      ("selfAddress", expressionJson selfAddress)]
   | .mintShielded domain amount => Json.mkObj [
       ("op", toJson ("mintShielded" : String)), ("domain", expressionJson domain),
       ("amount", expressionJson amount)]
