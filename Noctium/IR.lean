@@ -677,14 +677,32 @@ inductive Effect where
   from the transaction context. -/
   | insertShieldedCoinSet (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
+  /-- Insert a transaction-booked coin for an explicit wallet or contract
+  recipient into a qualified-record Set. The runtime gets its index from the
+  current transaction context. -/
+  | insertShieldedCoinSetTo (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (isContract : Expr .bool)
+      (recipient : Expr (.bytes 32))
   /-- Store a coin whose self-recipient commitment is already booked in the
   current transaction. The runtime obtains its Ledger index from context. -/
   | writeShieldedCoinCell (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
+  /-- Store a transaction-booked coin for an explicit wallet or contract
+  recipient in a qualified coin Cell. The runtime gets its index from the
+  current transaction context. -/
+  | writeShieldedCoinCellTo (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (isContract : Expr .bool)
+      (recipient : Expr (.bytes 32))
   /-- Push a transaction-booked self-recipient shielded coin to a root List.
   The backend obtains the coin's current transaction index from ledger context. -/
   | pushFrontCoin (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
+  /-- Push a transaction-booked coin for an explicit wallet or contract
+  recipient to a qualified coin List. The runtime gets its index from the
+  current transaction context. -/
+  | pushFrontCoinTo (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (isContract : Expr .bool)
+      (recipient : Expr (.bytes 32))
   /-- Spend the exact coin record read from a Bytes32-keyed tree Map entry.
   The backend derives native nullifier and output-commitment claims. -/
   | spendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
@@ -1247,8 +1265,10 @@ private def Constructor.validate (caps : Capabilities) (states : List StateDecl)
 private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
     .receiveShieldedToMap state .. | .insertShieldedCoinSet state .. |
+    .insertShieldedCoinSetTo state .. |
     .sendShieldedFromMap state .. |
-    .writeShieldedCoinCell state .. | .pushFrontCoin state .. |
+    .writeShieldedCoinCell state .. | .writeShieldedCoinCellTo state .. |
+    .pushFrontCoin state .. | .pushFrontCoinTo state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
     .emptyMapPath state .. | .setInsert state .. | .removePath state .. |
@@ -1452,6 +1472,19 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         amount.validate caps env
         selfAddress.validate caps env
         pure []
+      | .writeShieldedCoinCellTo state nonce color amount isContract recipient => do
+        if !caps.stateCells then throw "target lacks state cells"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown qualified shielded coin Cell '{state}'"
+        let .tree (.composite compositeEnv recordType) := declaration.kind
+          | throw s!"qualified shielded coin write requires a root composite Cell '{state}'"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        isContract.validate caps env
+        recipient.validate caps env
+        pure []
       | .pushFrontCoin state nonce color amount selfAddress => do
         if !caps.stateMaps then throw "target lacks state maps"
         let some declaration := decls.find? (·.name == state)
@@ -1464,6 +1497,19 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         amount.validate caps env
         selfAddress.validate caps env
         pure []
+      | .pushFrontCoinTo state nonce color amount isContract recipient => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown qualified shielded coin List '{state}'"
+        let .tree (.list compositeEnv recordType) := declaration.kind
+          | throw s!"qualified shielded coin push requires a root List '{state}'"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        isContract.validate caps env
+        recipient.validate caps env
+        pure []
       | .insertShieldedCoinSet state nonce color amount selfAddress => do
         if !caps.stateMaps then throw "target lacks state maps"
         let some declaration := decls.find? (·.name == state)
@@ -1475,6 +1521,19 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         color.validate caps env
         amount.validate caps env
         selfAddress.validate caps env
+        pure []
+      | .insertShieldedCoinSetTo state nonce color amount isContract recipient => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown qualified shielded coin Set '{state}'"
+        let .tree (.shieldedCoinSet compositeEnv recordType) := declaration.kind
+          | throw s!"qualified shielded coin insertion requires a root record Set '{state}'"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        isContract.validate caps env
+        recipient.validate caps env
         pure []
       | .spendShieldedFromMap state nonce color amount recipient selfAddress => do
         if !caps.stateMaps then throw "target lacks state maps"

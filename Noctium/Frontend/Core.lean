@@ -365,8 +365,11 @@ scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "receiveShieldedToMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "insertShieldedCoinSet" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "insertShieldedCoinSet" "(" ident "," nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "writeShieldedCoinCell" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "writeShieldedCoinCell" "(" ident "," nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "pushFrontCoin" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "pushFrontCoin" "(" ident "," nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "sendShieldedFromMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "relayShieldedImmediate" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
@@ -2483,6 +2486,27 @@ private def elaborateEffect (schema : List (String × StateKind))
         spans := state.spans.push span
         guards := state.guards.push noGuard}
     | `(nlupdate| insertShieldedCoinSet($storage:ident, $nonce:nlexpr,
+        $color:nlexpr, $amount:nlexpr, $isContract:nlexpr, $recipient:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "insertShieldedCoinSet must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "insertShieldedCoinSet must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .shieldedCoinSet environment recordType := treeSchema
+        | throwErrorAt storage "insertShieldedCoinSet requires a root QualifiedShieldedCoinInfo Set"
+      match LedgerValueType.shieldedCoinRecordFields environment recordType with
+      | .ok _ => pure ()
+      | .error message => throwErrorAt storage message
+      let nonce ← checkedExpression state.env nonce (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let isContract ← checkedExpression state.env isContract .bool
+      let recipient ← checkedExpression state.env recipient (.bytes 32)
+      let insertTerm ← `(Noctium.Effect.insertShieldedCoinSetTo
+        $(stringTerm storage.getId.toString) $nonce $color $amount $isContract $recipient)
+      state := {state with terms := state.terms.push insertTerm}
+    | `(nlupdate| insertShieldedCoinSet($storage:ident, $nonce:nlexpr,
         $color:nlexpr, $amount:nlexpr)) => do
       unless depth == 0 do
         throwErrorAt update "insertShieldedCoinSet must be unguarded"
@@ -2513,6 +2537,27 @@ private def elaborateEffect (schema : List (String × StateKind))
         spans := state.spans.push span
         guards := state.guards.push noGuard}
     | `(nlupdate| writeShieldedCoinCell($storage:ident, $nonce:nlexpr,
+        $color:nlexpr, $amount:nlexpr, $isContract:nlexpr, $recipient:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "writeShieldedCoinCell must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "writeShieldedCoinCell must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .composite environment recordType := treeSchema
+        | throwErrorAt storage "writeShieldedCoinCell requires a root qualified coin Cell"
+      match LedgerValueType.shieldedCoinRecordFields environment recordType with
+      | .ok _ => pure ()
+      | .error message => throwErrorAt storage message
+      let nonce ← checkedExpression state.env nonce (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let isContract ← checkedExpression state.env isContract .bool
+      let recipient ← checkedExpression state.env recipient (.bytes 32)
+      let writeTerm ← `(Noctium.Effect.writeShieldedCoinCellTo
+        $(stringTerm storage.getId.toString) $nonce $color $amount $isContract $recipient)
+      state := {state with terms := state.terms.push writeTerm}
+    | `(nlupdate| writeShieldedCoinCell($storage:ident, $nonce:nlexpr,
         $color:nlexpr, $amount:nlexpr)) => do
       unless depth == 0 do
         throwErrorAt update "writeShieldedCoinCell must be unguarded"
@@ -2542,6 +2587,27 @@ private def elaborateEffect (schema : List (String × StateKind))
         terms := state.terms.push writeTerm
         spans := state.spans.push span
         guards := state.guards.push noGuard}
+    | `(nlupdate| pushFrontCoin($storage:ident, $nonce:nlexpr,
+        $color:nlexpr, $amount:nlexpr, $isContract:nlexpr, $recipient:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "pushFrontCoin must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "pushFrontCoin must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .«list» environment recordType := treeSchema
+        | throwErrorAt storage "pushFrontCoin requires a root qualified coin List"
+      match LedgerValueType.shieldedCoinRecordFields environment recordType with
+      | .ok _ => pure ()
+      | .error message => throwErrorAt storage message
+      let nonce ← checkedExpression state.env nonce (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let isContract ← checkedExpression state.env isContract .bool
+      let recipient ← checkedExpression state.env recipient (.bytes 32)
+      let pushTerm ← `(Noctium.Effect.pushFrontCoinTo
+        $(stringTerm storage.getId.toString) $nonce $color $amount $isContract $recipient)
+      state := {state with terms := state.terms.push pushTerm}
     | `(nlupdate| pushFrontCoin($storage:ident, $nonce:nlexpr,
         $color:nlexpr, $amount:nlexpr)) => do
       unless depth == 0 do

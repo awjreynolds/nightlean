@@ -37,9 +37,17 @@ A funded Ledger 9 run stored one self-minted coin in a Map, root Cell, root
 Set, and one-element root List in the same call. The test compares the Map,
 Cell and Set records and the List head with the finalized contract-owned
 output, including the assigned index. It also checks the List's empty tail
-and length of one. Repeated List operations and broader recipient cases
-remain open.
+and length of one. Repeated List operations and finalized calls for other
+recipient types remain open.
 [Localnet receipt](shielded-coin-collections-localnet-receipt.json)
+
+The [explicit-recipient case](../../tests/compact/explicit-booked-coin-recipients.mjs)
+checks a booked wallet and a different contract through each collection.
+Noctium's [matching source](../../tests/QualifiedCoinRecipient.lean) binds the
+recipient tag and bytes to the ledger-allocated index. The native runtime
+checks all six emitted relation cases at index `41` and rejects a missing
+booking, a different address, or the same bytes under the other recipient tag.
+The native check uses a query context with prebooked outputs.
 
 The [pinned VM opcode source](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/onchain-vm/src/ops.rs)
 defines opcode names and immediate encoding. The pinned runtime exports the
