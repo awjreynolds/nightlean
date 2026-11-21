@@ -4,7 +4,7 @@ Compact 0.36.1 and runtime 0.21.0 reduce an explicit `Field as JubjubScalar`
 conversion modulo the Jubjub subgroup order before generator multiplication.
 The focused comparator checks raw values `7` and `q + 7`, where
 `q = 6554484396890773809930967563523245729705921265872317281365359162392183254199`.
-Both produce `7G` with coordinates:
+Both produce `7G` at the following coordinates.
 
 - x: `47805549206756120863994733988949966563868680443409072344285414365387721651928`
 - y: `10883866336127360287053583923937114185802477515052223349661086820822299756070`
@@ -12,12 +12,10 @@ Both produce `7G` with coordinates:
 Noctium already expresses this boundary with
 `jubjubScalarFromNative(raw)`. Its Lean evaluator and native runtime reduce the
 `Native` value modulo `q`, and the 3.2.1 relation checks the resulting scalar
-and point coordinates. The source conversion stays explicit. This does not
-change typed `JubjubScalar` input decoding, storage, equality, or signatures.
-The existing `runtime/tests/jubjub.rs` rejection for typed `q + 7` remains in
-place.
+and point coordinates. Typed `JubjubScalar` inputs still require a canonical
+subgroup scalar. The input check in `runtime/tests/jubjub.rs` rejects `q + 7`.
 
-Reproduce the source artifact and paired checks with:
+Run the artifact build and paired checks with the same pinned toolchain.
 
 ```sh
 lake build noctium
