@@ -24,7 +24,7 @@ use transient_crypto::{
     merkle_tree::MerkleTreeDigest,
     proofs::{Proof, ProofPreimage},
 };
-use zswap::{Input, Offer, Output, prove::ZswapResolver};
+use zswap::{Input, Offer, Output, Transient, prove::ZswapResolver};
 
 pub(super) struct StagedContractInput {
     pub(super) input: Input<ProofPreimage, Db>,
@@ -111,6 +111,31 @@ pub(super) fn stage_contract_owned_output<R: Rng + CryptoRng + ?Sized>(
         Error::State,
     )?;
     Ok(StagedContractOutput { output, commitment })
+}
+
+/// Stage a commitment and its spend inside one guaranteed offer.
+pub(super) fn stage_contract_owned_transient<R: Rng + CryptoRng + ?Sized>(
+    address: ContractAddress,
+    coin: &Info,
+    rng: &mut R,
+) -> Result<Transient<ProofPreimage, Db>> {
+    let StagedContractOutput { output, commitment } =
+        stage_contract_owned_output(address, coin, rng)?;
+    let transient = Transient::new_from_contract_owned_output(
+        rng,
+        &coin.qualify(0),
+        Some(GUARANTEED_SEGMENT),
+        output,
+    )
+    .map_err(|_| Error::State)?;
+    check(
+        transient.coin_com == commitment
+            && transient.nullifier == coin.nullifier(&SenderEvidence::Contract(address))
+            && transient.contract_address.as_deref() == Some(&address)
+            && transient.segment() == Some(GUARANTEED_SEGMENT),
+        Error::State,
+    )?;
+    Ok(transient)
 }
 
 struct BookedOutput {
@@ -650,6 +675,31 @@ mod tests {
         )
         .unwrap();
         assert!(state.try_apply(&duplicate, None).is_err());
+    }
+
+    #[test]
+    fn staged_transient_binds_same_offer_commitment_and_nullifier() {
+        let mut rng = StdRng::from_seed([0x5a; 32]);
+        let address = ContractAddress(HashOutput([0x21; 32]));
+        let coin = CoinInfo {
+            nonce: Nonce(HashOutput([0x31; 32])),
+            type_: ShieldedTokenType(HashOutput([0x41; 32])),
+            value: 17,
+        };
+        let commitment = coin.commitment(&Recipient::Contract(address));
+        let nullifier = coin.nullifier(&SenderEvidence::Contract(address));
+        let transient = stage_contract_owned_transient(address, &coin, &mut rng).unwrap();
+        assert_eq!(transient.coin_com, commitment);
+        assert_eq!(transient.nullifier, nullifier);
+        assert_eq!(transient.contract_address.as_deref(), Some(&address));
+        assert_eq!(transient.segment(), Some(GUARANTEED_SEGMENT));
+
+        let offer = Offer::new(vec![], vec![], vec![transient]).unwrap();
+        let initial = zswap::ledger::State::<Db>::new();
+        let (state, indices) = initial.try_apply(&offer, None).unwrap();
+        assert_eq!(*indices.get(&commitment).unwrap(), initial.first_free);
+        assert!(state.nullifiers.contains_key(&nullifier));
+        assert!(state.try_apply(&offer, None).is_err());
     }
 
     async fn finalize(node: &Node, bound: &BoundTransaction) -> Result<FinalizedReceipt> {
