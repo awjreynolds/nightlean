@@ -754,13 +754,11 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     evaluatePersistentHash ctx preimage
   | .persistentHashFab compositeEnv type values => do
     let layout ← validateFabHashLayout compositeEnv type values
-    let .structure _ fields := layout
-      | throw "mixed FAB persistent hash requires a named flat structure"
+    let fields ← fabHashLayoutFields layout
     evaluatePersistentHash ctx (← fabHashFieldsPreimage ctx env (fields.map Prod.snd) values)
   | .persistentCommitFab compositeEnv type opening values => do
     let layout ← validateFabHashLayout compositeEnv type values
-    let .structure _ fields := layout
-      | throw "mixed FAB persistent commitment requires a named flat structure"
+    let fields ← fabHashLayoutFields layout
     let opening ← opening.eval ctx env
     unless opening.length == 32 && opening.all (· ≤ 255) do
       throw "mixed FAB persistent commitment opening is not canonical Bytes32"
@@ -768,8 +766,7 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     evaluatePersistentHash ctx (opening ++ payload)
   | .transientCommitFab compositeEnv type opening values => do
     let layout ← validateFabHashLayout compositeEnv type values
-    let .structure _ fields := layout
-      | throw "mixed FAB transient commitment requires a named flat structure"
+    let fields ← fabHashLayoutFields layout
     let opening ← opening.eval ctx env
     if opening >= ctx.modulus then throw "noncanonical transient commitment opening"
     let payload ← fabCommitFieldSequence ctx env (fields.map Prod.snd) values

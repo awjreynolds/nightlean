@@ -1,0 +1,16 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export enum LeafMarker { Only }
+
+export circuit fabTuple(
+  payload: [Bytes<32>, Boolean, Uint<16>, LeafMarker, Field],
+  persistentOpening: Bytes<32>,
+  transientOpening: Field
+): [Bytes<32>, Bytes<32>, Field] {
+  return [
+    persistentHash<[Bytes<32>, Boolean, Uint<16>, LeafMarker, Field]>(payload),
+    persistentCommit<[Bytes<32>, Boolean, Uint<16>, LeafMarker, Field]>(payload, persistentOpening),
+    transientCommit<[Bytes<32>, Boolean, Uint<16>, LeafMarker, Field]>(payload, transientOpening)
+  ];
+}

@@ -929,9 +929,11 @@ private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
       rejectLowering message
       pure {values := []}
     | .ok compiled => do
-      let .structure _ fields := compiled
-        | rejectLowering "mixed FAB persistent hash requires a named flat structure"
-          pure {values := []}
+      let fields ← match fabHashLayoutFields compiled with
+        | .ok fields => pure fields
+        | .error message =>
+          rejectLowering message
+          pure []
       let operands ← lowerFabHashFields fields values
       let alignment := Json.arr (fields.map (fun field => fabHashAlignmentAtom field.2) |>.toArray)
       let result ← lowerPersistentHash ("fab:" ++ type.fingerprint environment) alignment operands
@@ -942,9 +944,11 @@ private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
       rejectLowering message
       pure {values := []}
     | .ok compiled => do
-      let .structure _ fields := compiled
-        | rejectLowering "mixed FAB persistent commitment requires a named flat structure"
-          pure {values := []}
+      let fields ← match fabHashLayoutFields compiled with
+        | .ok fields => pure fields
+        | .error message =>
+          rejectLowering message
+          pure []
       let openingBytes ← lowerBytes opening
       let (openingHighByte, openingLow31) ← alignedBytes32Fields openingBytes.values
       let payloadOperands ← lowerFabHashFields fields values
@@ -1138,9 +1142,11 @@ def lowerExpr : Expr ty → LowerM String
       rejectLowering message
       pure "0x00"
     | .ok compiled => do
-      let .structure _ fields := compiled
-        | rejectLowering "mixed FAB transient commitment requires a named flat structure"
-          pure "0x00"
+      let fields ← match fabHashLayoutFields compiled with
+        | .ok fields => pure fields
+        | .error message =>
+          rejectLowering message
+          pure []
       let opening ← lowerExpr opening
       let payload ← lowerFabHashFields fields values
       let operands := opening :: payload
