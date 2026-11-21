@@ -142,7 +142,16 @@ fn lazy_boolean_gates_skip_inactive_uint1_narrowing() {
             ("nestedResult".into(), json!(false)),
         ])
     );
-
+    assert_eq!(
+        inactive_narrowing.preimage.private_transcript,
+        vec![
+            Fr::from(0u64),
+            Fr::from(1u64),
+            Fr::from(0u64),
+            Fr::from(0u64),
+            Fr::from(2u64),
+        ]
+    );
     let nested_short_circuit = prepare(
         &plan,
         &lazy_boolean_inputs(false, true, true, true),
@@ -155,6 +164,18 @@ fn lazy_boolean_gates_skip_inactive_uint1_narrowing() {
     assert_eq!(
         nested_short_circuit.returns_json()["nestedResult"],
         json!(true)
+    );
+
+    let mut active_and = inactive_narrowing;
+    active_and.preimage.private_transcript[0] = Fr::from(1u64);
+    assert_eq!(
+        active_and.returns_json()["andResult"],
+        json!(false),
+        "the forged active input keeps the accepted public result"
+    );
+    assert!(
+        check(&active_and, &circuit).is_err(),
+        "native relation rejects active UInt1 narrowing even when the public result stays unchanged"
     );
 
     for (and_enabled, or_enabled, nested_outer, nested_inner) in [
