@@ -88,6 +88,13 @@ instance/type-node limits. It also exercises the issue46 batch specialization
 API, which processes one selected export set in sorted name order while sharing
 its helper and type caches.
 
+An ordinary circuit defined in another Lean module can serve as a contract
+entrypoint. Use the circuit's qualified name in `entry ... uses ...`.
+The compiler emits the selected circuit and applies its normal target and
+disclosure checks. The CLI fixture compares the entrypoint's ZKIR 3.2.1 bytes
+against the same definition in one file. Imported artifacts retain the existing
+unqualified metadata for source provenance. [CLI fixture](../../tests/cli.sh)
+
 The [native module fixture](../../tests/modules/Native.lean) specializes a
 helper and state with a natural and scalar type argument. Two update aliases
 for `(2, Native)` share the same circuit and field. The `againRead` entrypoint

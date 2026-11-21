@@ -973,7 +973,7 @@
       "layer": "language",
       "surface": "Modules, imports, exports, includes",
       "noctiumStatus": "subset",
-      "notes": "Namespace and visibility behavior, top-level exports, generic modules.",
+      "notes": "Namespace and visibility behavior, top-level exports, generic modules, and explicit ordinary circuit imports. A two-file 3.2.1 CLI case selects one qualified circuit and matches the single-file entrypoint's ZKIR bytes. Source provenance qualification for imported artifacts remains open.",
       "source": [
         "reference"
       ],
@@ -994,6 +994,7 @@
         "evidence": [
           "tests/Modules.lean",
           "tests/modules/check.sh",
+          "tests/cli.sh",
           "tests/compact/ModuleLedger.compact",
           "docs/development/modules.md",
           "docs/development/module-ledger-localnet-receipts.json",
@@ -5464,8 +5465,8 @@
       "id": "C-STDLIB-SENDUNSHIELDED",
       "layer": "standard-library",
       "surface": "sendUnshielded",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean composes a standard unshielded send from the native output, spend claim, contract identity and guarded input effects. The pinned Compact comparator and native checker agree on seven-unit sends to the current contract, another contract and a user with the current contract's raw address bytes. Only the first credits the input. Full equivalence remains open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5478,7 +5479,13 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeUnshieldedSend.lean",
+        "tests/compact/UnshieldedSend.compact",
+        "tests/compact/unshielded-send.mjs",
+        "runtime/tests/native_unshielded_send.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
