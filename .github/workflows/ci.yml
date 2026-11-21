@@ -86,6 +86,7 @@ jobs:
           lake env lean tests/ImpactEffectBoundaries.lean
           lake env lean tests/HostedLedgerWitness.lean
           lake env lean tests/TypedWitnessResultCodec.lean
+          lake env lean tests/MerklePathRootNoLeafHash.lean
           lake env lean tests/LedgerWitnessTransform.lean
           lake env lean tests/StructuredLedgerWitness.lean
           lake env lean tests/StructuredTypedCells.lean
@@ -110,6 +111,7 @@ jobs:
           lake env lean tests/HashToCurve.lean
           lake env lean tests/ForeignTransport.lean
           lake env lean tests/ForeignPointLiterals.lean
+          lake env lean tests/SecpProjections.lean
           lake env lean tests/ForeignOperations.lean
           lake env lean tests/ForeignFieldNegInv.lean
           lake env lean tests/ForeignStorage.lean
@@ -141,11 +143,13 @@ jobs:
           lake env lean tests/ShieldedMapPartialSpend.lean
           lake env lean tests/ShieldedImmediateRelay.lean
           lake env lean tests/IndexedShieldedNonce.lean
+          lake env lean tests/ShieldedBurnAddress.lean
           lake env lean tests/QualifiedCoinCell.lean
           lake env lean tests/QualifiedCoinSet.lean
           lake env lean tests/QualifiedCoinList.lean
           lake env lean tests/QualifiedCoinRecipient.lean
           lake env lean tests/NominalShieldedRecipients.lean
+          lake env lean tests/TypedPublicAddress.lean
           lake env lean tests/NativeTaggedSettlement.lean
           lake env lean tests/NativeUnshieldedSend.lean
           lake env lean tests/ReceiveUnshielded.lean
@@ -222,3 +226,5 @@ jobs:
           bash tests/disclosure-cli.sh
       - name: Check module identity and re-export disclosure
         run: bash tests/modules/check.sh
+      - name: Check source target compatibility
+        run: bash tests/source-target-requirement.sh

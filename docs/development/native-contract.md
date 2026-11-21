@@ -24,6 +24,14 @@ The bootstrap builds the official independent ZKIR 3.2.0 CLI from pinned source 
 
 ## Compile the actual Lean source
 
+Place a target requirement before the contract declarations in any source file that needs a specific profile.
+
+```lean
+set_option noctium.requiredTarget "midnight-ledger-9-zkir-3.2.1"
+```
+
+Use `--target profiles/midnight-ledger-9-zkir-3.2.1-target.json` for both `noctium check` and `noctium compile`. A mismatched or unknown requirement fails before artifact publication.
+
 ```sh
 .lake/build/bin/noctium compile examples/PrivateClaim.lean --output build/native-claim/source
 /private/tmp/noctium-native-zkir/bin/zkir compile build/native-claim/source/PrivateClaim.claim.zkir build/native-claim/claim.prover build/native-claim/claim.verifier

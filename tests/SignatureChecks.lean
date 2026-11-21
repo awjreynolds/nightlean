@@ -1,5 +1,6 @@
 import Noctium.Frontend
 import Noctium.Disclosure
+import Noctium.Backend.Zkir
 
 open scoped Noctium
 open Noctium
@@ -50,6 +51,78 @@ end
 #guard match Disclosure.circuit signatureChecksValues with
   | .ok _ => Bool.true
   | .error _ => Bool.false
+
+private def secp256k1Signature : Crypto.Secp256k1EcdsaSignature := {
+  r := Expr.ref "kR"
+  s := Expr.ref "kS"
+}
+
+private def secp256r1Signature : Crypto.Secp256r1EcdsaSignature := {
+  r := Expr.ref "pR"
+  s := Expr.ref "pS"
+}
+
+private def jubjubSignature : Crypto.JubjubSchnorrSignature := {
+  announcement := Expr.ref "jAnnouncement"
+  response := Expr.ref "jResponse"
+}
+
+private def ed25519Signature : Crypto.Ed25519Signature := {
+  r := Expr.ref "edR"
+  s := Expr.ref "edS"
+}
+
+private def signatureRelation (useRecords : _root_.Bool) : Circuit := {
+  name := "signatureRecordRelation"
+  inputs := signatureChecksValues.inputs
+  outputs := [
+    {name := "kValid", ty := .bool, value := Expr.disclose {} <|
+      if useRecords then
+        Crypto.Secp256k1EcdsaSignature.verify (Expr.ref "kDigest") secp256k1Signature
+          (Expr.ref "kKey")
+      else Crypto.secp256k1EcdsaVerify (Expr.ref "kDigest") (Expr.ref "kR")
+          (Expr.ref "kS") (Expr.ref "kKey")},
+    {name := "pValid", ty := .bool, value := Expr.disclose {} <|
+      if useRecords then
+        Crypto.Secp256r1EcdsaSignature.verify (Expr.ref "pDigest") secp256r1Signature
+          (Expr.ref "pKey")
+      else Crypto.secp256r1EcdsaVerify (Expr.ref "pDigest") (Expr.ref "pR")
+          (Expr.ref "pS") (Expr.ref "pKey")},
+    {name := "jValid", ty := .bool, value := Expr.disclose {} <|
+      if useRecords then
+        Crypto.JubjubSchnorrSignature.verify [Expr.ref "jMessage0", Expr.ref "jMessage1"]
+          jubjubSignature (Expr.ref "jKey")
+      else Crypto.jubjubSchnorrVerify [Expr.ref "jMessage0", Expr.ref "jMessage1"]
+          (Expr.ref "jAnnouncement") (Expr.ref "jResponse") (Expr.ref "jKey")},
+    {name := "edValid", ty := .bool, value := Expr.disclose {} <|
+      if useRecords then
+        Crypto.Ed25519Signature.verify (Expr.ref "edEmpty" : Expr (.bytes 0)) ed25519Signature
+          (Expr.ref "edKey")
+      else Crypto.ed25519Verify (Expr.ref "edEmpty" : Expr (.bytes 0)) (Expr.ref "edR") (Expr.ref "edS")
+          (Expr.ref "edKey")}
+  ]
+}
+
+#guard match Backend.Zkir.lowerCircuit (signatureRelation Bool.true),
+    Backend.Zkir.lowerCircuit (signatureRelation Bool.false) with
+  | .ok records, .ok scalars => records == scalars
+  | _, _ => Bool.false
+
+private def p256SignatureR : Expr (.foreign (.scalar .secp256r1)) := Expr.ref "pR"
+
+/--
+error: Type mismatch
+  p256SignatureR
+has type
+  Expr (Ty.foreign (Foreign.Kind.scalar Foreign.Curve.secp256r1))
+but is expected to have type
+  Expr (Ty.foreign (Foreign.Kind.scalar Foreign.Curve.secp256k1))
+-/
+#guard_msgs in
+private def wrongCurveSignature : Crypto.Secp256k1EcdsaSignature := {
+  r := p256SignatureR
+  s := Expr.ref "kS"
+}
 
 #guard match Disclosure.circuit {
   name := "undisclosedSignatureResult"

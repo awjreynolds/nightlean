@@ -1050,8 +1050,8 @@
       "id": "C-LANG-PRAGMA",
       "layer": "language",
       "surface": "Version pragmas and compatibility declarations",
-      "noctiumStatus": "missing",
-      "notes": "Equivalent explicit Noctium compatibility target, without Compact syntax or toolchain dependency.",
+      "noctiumStatus": "subset",
+      "notes": "A file-level Lean option declares an exact Midnight target profile. Normal check and compile accept the matching target and reject a mismatch or an unknown name before publishing artifacts. Version ranges and imported-library requirements remain unverified.",
       "source": [
         "reference"
       ],
@@ -1059,7 +1059,10 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/source-target-requirement.sh",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -3558,134 +3561,8 @@
       "id": "C-STDLIB-JUBJUBSCHNORRSIGNATURE",
       "layer": "standard-library",
       "surface": "JubjubSchnorrSignature",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
-      "source": [
-        "stdlib",
-        "stdlibSource",
-        "v3Source",
-        "natives",
-        "v3Natives"
-      ],
-      "requiredEvidence": [
-        "SEM",
-        "ZK",
-        "ABI"
-      ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
-    },
-    {
-      "id": "C-STDLIB-SECP256K1ECDSASIGNATURE",
-      "layer": "standard-library",
-      "surface": "Secp256k1EcdsaSignature",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
-      "source": [
-        "stdlib",
-        "stdlibSource",
-        "v3Source",
-        "natives",
-        "v3Natives"
-      ],
-      "requiredEvidence": [
-        "SEM",
-        "ZK",
-        "ABI"
-      ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
-    },
-    {
-      "id": "C-STDLIB-SECP256R1ECDSASIGNATURE",
-      "layer": "standard-library",
-      "surface": "Secp256r1EcdsaSignature",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
-      "source": [
-        "stdlib",
-        "stdlibSource",
-        "v3Source",
-        "natives",
-        "v3Natives"
-      ],
-      "requiredEvidence": [
-        "SEM",
-        "ZK",
-        "ABI"
-      ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
-    },
-    {
-      "id": "C-STDLIB-ED25519SIGNATURE",
-      "layer": "standard-library",
-      "surface": "Ed25519Signature",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
-      "source": [
-        "stdlib",
-        "stdlibSource",
-        "v3Source",
-        "natives",
-        "v3Natives"
-      ],
-      "requiredEvidence": [
-        "SEM",
-        "ZK",
-        "ABI"
-      ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
-    },
-    {
-      "id": "C-STDLIB-MERKLETREEDIGEST",
-      "layer": "standard-library",
-      "surface": "MerkleTreeDigest",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
-      "source": [
-        "stdlib",
-        "stdlibSource",
-        "v3Source",
-        "natives",
-        "v3Natives"
-      ],
-      "requiredEvidence": [
-        "SEM",
-        "ZK",
-        "ABI"
-      ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
-    },
-    {
-      "id": "C-STDLIB-MERKLETREEPATHENTRY",
-      "layer": "standard-library",
-      "surface": "MerkleTreePathEntry",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
-      "source": [
-        "stdlib",
-        "stdlibSource",
-        "v3Source",
-        "natives",
-        "v3Natives"
-      ],
-      "requiredEvidence": [
-        "SEM",
-        "ZK",
-        "ABI"
-      ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
-    },
-    {
-      "id": "C-STDLIB-MERKLETREEPATH",
-      "layer": "standard-library",
-      "surface": "MerkleTreePath",
-      "noctiumStatus": "related-subset",
-      "notes": "The shielded role example uses a checked depth-20 Bytes32 path with a native sibling and a Boolean direction per step. The provider ABI binds the exact codec. Other depths and leaf types need separate evidence.",
+      "noctiumStatus": "subset",
+      "notes": "The Lean signature record carries JubjubPoint announcement and Native response. Its verifier call emits the same native relation as passing the typed components individually. Portable aggregate signature input and output remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3699,6 +3576,158 @@
         "ABI"
       ],
       "observedEvidence": [
+        "Noctium/Crypto/Signatures.lean",
+        "tests/SignatureChecks.lean"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256K1ECDSASIGNATURE",
+      "layer": "standard-library",
+      "surface": "Secp256k1EcdsaSignature",
+      "noctiumStatus": "subset",
+      "notes": "The Lean signature record carries two Secp256k1 Scalar fields. Its verifier call emits the same native relation as passing the typed components individually. Portable aggregate signature input and output remain unverified.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "Noctium/Crypto/Signatures.lean",
+        "tests/SignatureChecks.lean"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256R1ECDSASIGNATURE",
+      "layer": "standard-library",
+      "surface": "Secp256r1EcdsaSignature",
+      "noctiumStatus": "subset",
+      "notes": "The Lean signature record carries two Secp256r1 Scalar fields. Its verifier call emits the same native relation as passing the typed components individually. Portable aggregate signature input and output remain unverified.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "Noctium/Crypto/Signatures.lean",
+        "tests/SignatureChecks.lean"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-ED25519SIGNATURE",
+      "layer": "standard-library",
+      "surface": "Ed25519Signature",
+      "noctiumStatus": "subset",
+      "notes": "The Lean signature record carries a Curve25519 Point and Scalar. Its verifier call emits the same native relation as passing the typed components individually. Portable aggregate signature input and output remain unverified.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "Noctium/Crypto/Signatures.lean",
+        "tests/SignatureChecks.lean"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERKLETREEDIGEST",
+      "layer": "standard-library",
+      "surface": "MerkleTreeDigest",
+      "noctiumStatus": "subset",
+      "notes": "The shared Lean Merkle digest schema carries one Native field. A depth-two fixture consumes nested digest witnesses and matches the exact pinned Compact root.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "Noctium/Types/MerklePath.lean",
+        "tests/MerklePathRootNoLeafHash.lean",
+        "runtime/tests/merkle_path_types.rs",
+        "tests/compact/merkle-path-root-no-leaf-hash.mjs"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERKLETREEPATHENTRY",
+      "layer": "standard-library",
+      "surface": "MerkleTreePathEntry",
+      "noctiumStatus": "subset",
+      "notes": "The shared Lean path entry has a nested Native digest and checked Bool direction. The paired depth-two fixture matches mixed left/right order and rejects a malformed direction or wrong path length at the provider boundary.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "Noctium/Types/MerklePath.lean",
+        "tests/MerklePathRootNoLeafHash.lean",
+        "runtime/tests/merkle_path_types.rs",
+        "tests/compact/merkle-path-root-no-leaf-hash.mjs"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERKLETREEPATH",
+      "layer": "standard-library",
+      "surface": "MerkleTreePath",
+      "noctiumStatus": "subset",
+      "notes": "Lean uses the shared fixed-depth Bytes32 path schema in the native-checked depth-two fixture and the existing depth-20 shielded role case. The former matches the pinned Compact root and rejects malformed witness shapes. Other leaf types and broader host coverage remain open.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "Noctium/Types/MerklePath.lean",
+        "tests/MerklePathRootNoLeafHash.lean",
+        "runtime/tests/merkle_path_types.rs",
+        "tests/compact/merkle-path-root-no-leaf-hash.mjs",
         "tests/TypedWitnessResultCodec.lean",
         "docs/development/shielded-role-gate.md"
       ],
@@ -3826,8 +3855,8 @@
       "id": "C-STDLIB-USERADDRESS",
       "layer": "standard-library",
       "surface": "UserAddress",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A named UserAddress wire codec supplies a nominal Bytes32 binding to the unshielded spend effect. Lean rejects a shielded key or contract address in the user branch.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3840,15 +3869,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/TypedPublicAddress.lean",
+        "tests/NativeUnshieldedSend.lean",
+        "tests/compact/unshielded-send.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-PUBLICADDRESS",
       "layer": "standard-library",
       "surface": "PublicAddress",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Typed user and contract constructors bind a fixed recipient tag before lowering. The two authored effects emit the same operations as the existing native-checked raw tag cases. This scope covers unshielded spend arguments, with aggregate transport and other operations still open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3861,7 +3894,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/TypedPublicAddress.lean",
+        "tests/NativeUnshieldedSend.lean",
+        "tests/compact/unshielded-send.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -4616,8 +4653,8 @@
       "id": "C-STDLIB-SECP256K1POINT",
       "layer": "standard-library",
       "surface": "Secp256k1Point",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean Secp256k1 generator input and return match the pinned Compact point and its compressed native host value. The fixture also rejects a point carrying the other curve tag in the Secp256k1 slot.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4630,15 +4667,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256K1BASE",
       "layer": "standard-library",
       "surface": "Secp256k1Base",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Typed Secp256k1 Base values returned by Lean affine projections match both pinned Compact generator coordinates in canonical little-endian host bytes.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4651,15 +4694,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256K1SCALAR",
       "layer": "standard-library",
       "surface": "Secp256k1Scalar",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A representative canonical Secp256k1 Scalar passes through Lean source, the native relation and the Rust return codec with the pinned Compact value and field role.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4672,15 +4721,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256K1POINTX",
       "layer": "standard-library",
       "surface": "secp256k1PointX",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean curveX projects the typed Secp256k1 generator to the exact pinned Compact x-coordinate. The return keeps the curve Base type.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4693,15 +4748,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignOperations.lean",
+        "runtime/tests/foreign_operations.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256K1POINTY",
       "layer": "standard-library",
       "surface": "secp256k1PointY",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean curveY projects the typed Secp256k1 generator to the exact pinned Compact y-coordinate. The return keeps the curve Base type.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4714,15 +4775,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignOperations.lean",
+        "runtime/tests/foreign_operations.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256R1POINT",
       "layer": "standard-library",
       "surface": "Secp256r1Point",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean Secp256r1 generator input and return match the pinned Compact point and its compressed native host value. The fixture also rejects a point carrying the other curve tag in the Secp256k1 slot.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4735,15 +4802,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256R1BASE",
       "layer": "standard-library",
       "surface": "Secp256r1Base",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Typed Secp256r1 Base values returned by Lean affine projections match both pinned Compact generator coordinates in canonical little-endian host bytes.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4756,15 +4829,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256R1SCALAR",
       "layer": "standard-library",
       "surface": "Secp256r1Scalar",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A representative canonical Secp256r1 Scalar passes through Lean source, the native relation and the Rust return codec with the pinned Compact value and field role.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4777,15 +4856,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignTransport.lean",
+        "runtime/tests/foreign_transport.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256R1POINTX",
       "layer": "standard-library",
       "surface": "secp256r1PointX",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean curveX projects the typed Secp256r1 generator to the exact pinned Compact x-coordinate. The return keeps the curve Base type.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4798,15 +4883,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignOperations.lean",
+        "runtime/tests/foreign_operations.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256R1POINTY",
       "layer": "standard-library",
       "surface": "secp256r1PointY",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean curveY projects the typed Secp256r1 generator to the exact pinned Compact y-coordinate. The return keeps the curve Base type.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4819,7 +4910,13 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/SecpProjections.lean",
+        "runtime/tests/secp_projections.rs",
+        "tests/compact/secp-projections.mjs",
+        "tests/ForeignOperations.lean",
+        "runtime/tests/foreign_operations.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -5451,8 +5548,8 @@
       "id": "C-STDLIB-SHIELDEDBURNADDRESS",
       "layer": "standard-library",
       "surface": "shieldedBurnAddress",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean constructs the canonical wallet branch with a zero Bytes32 key. The source fixture matches the pinned Compact value and rejects using the burn key as a contract relay recipient. This covers constructing the address, with settlement and the general recipient union still open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5465,7 +5562,10 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ShieldedBurnAddress.lean",
+        "tests/compact/indexed-shielded-nonce.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
