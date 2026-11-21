@@ -377,6 +377,7 @@ scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupd
 scoped syntax "sendShieldedFromMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "relayShieldedImmediate" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "receiveUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedInputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedOutputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "claimUnshieldedCoinSpend" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
@@ -2868,6 +2869,12 @@ private def elaborateEffect (schema : List (String × StateKind))
       let domain ← checkedExpression state.env domain (.bytes 32)
       let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
       let term ← `(Noctium.Effect.mintUnshielded $domain $amount)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| receiveUnshielded($color:nlexpr, $amount:nlexpr)) => do
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint balanceMaximum)
+      let term ← `(Noctium.Effect.incUnshieldedInputs $color $amount
+        (Noctium.Expr.bool Bool.true))
       state := {state with terms := state.terms.push term}
     | `(nlupdate| incUnshieldedInputs($color:nlexpr, $amount:nlexpr, $isUnshielded:nlexpr)) => do
       let color ← checkedExpression state.env color (.bytes 32)
