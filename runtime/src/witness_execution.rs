@@ -1384,3 +1384,6 @@ mod range_ledger_tests;
 
 #[cfg(all(test, feature = "zkir-321"))]
 mod iteration_ledger_tests;
+
+#[cfg(all(test, feature = "zkir-321"))]
+mod wallet_key_tests;

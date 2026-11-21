@@ -5582,8 +5582,8 @@
       "id": "C-STDLIB-OWNPUBLICKEY",
       "layer": "standard-library",
       "surface": "ownPublicKey",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A typed named Lean witness reads the caller-supplied wallet key through the in-process provider ABI. The native session checks the nominal ZswapCoinPublicKey record and Bytes32 width. It matches the pinned Compact synthetic key and the source rejects publication without disclosure. The key is context data. Ownership and signing have separate checks.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5596,7 +5596,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/OwnPublicKeyWitness.lean",
+        "runtime/src/witness_execution/wallet_key_tests.rs",
+        "tests/compact/own-public-key.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
