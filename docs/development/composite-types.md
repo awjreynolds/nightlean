@@ -98,3 +98,24 @@ index, and `insertLeafDefault claims at position` to write a hashed default.
 These use the declared FAB byte layout and the ledger leaf hash. The explicit
 `insertHash` and `insertHashIndex` forms accept a precomputed digest.
 [Source example](../../tests/TypedMerkleLeaves.lean)
+
+A Merkle leaf can also use a flat named record of these scalar types.
+
+```lean
+merkleTree claims : 2 of struct ClaimLeaf {
+  tag : Bytes 3
+  approved : Bool
+  count : UInt 16
+}
+```
+
+Pass the fields in declaration order using `insertLeaf claims := fields(...)`
+or the indexed form. Disclose each private field at the write. The indexed
+default hashes a record of the field defaults. The checked source layout limits
+the full leaf preimage to 1,024 bytes, including the hash domain. Nested
+composites and curve-valued leaf fields remain open.
+[Record example](../../tests/RecordMerkleLeaves.lean)
+
+A standalone JubjubPoint leaf hashes its two canonical field coordinates with
+the same ledger leaf domain. Its indexed default uses the curve identity.
+[Source fixture](../../tests/JubjubMerkleLeaves.lean)
