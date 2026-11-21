@@ -263,6 +263,7 @@ scoped syntax "serialize(" nlexpr "," num ")" : nlexpr
 scoped syntax "deserialize(" nltype "," nlexpr ")" : nlexpr
 scoped syntax "byteAt(" nlexpr "," num ")" : nlexpr
 scoped syntax "degradeToNative(" nlexpr ")" : nlexpr
+scoped syntax "upgradeFromNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarFromNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarToNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubMulGenerator(" nlexpr ")" : nlexpr
@@ -801,6 +802,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| toBytes32($value)) => hasPartialScalar value
   | `(nlexpr| byteAt($value, $_:num)) => hasPartialScalar value
   | `(nlexpr| degradeToNative($value)) => hasPartialScalar value
+  | `(nlexpr| upgradeFromNative($value)) => hasPartialScalar value
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
   | `(nlexpr| jubjubMulGenerator($value))
@@ -1115,6 +1117,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| copyValue($value)) => do
     let (ty, value) ← expression env value
     pure (ty, ← `(Noctium.Expr.copyValue $value))
+  | `(nlexpr| upgradeFromNative($value)) => do
+    let value ← expected env value .native
+    pure (.bytes 32, ← `(Noctium.Wire.upgradeFromNative $value))
   | `(nlexpr| reverseBytes($value)) => do
     let (valueTy, value) ← expression env value
     let .bytes _ := valueTy
