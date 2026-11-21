@@ -166,3 +166,71 @@ fn derived_keys_elgamal_and_ecdh_memo_match_raw_sha256_preimages() {
         }
     }
 }
+
+#[test]
+#[ignore = "requires fresh Issue70DerivedCrypto artifacts in NOCTIUM_ISSUE70_ARTIFACTS"]
+fn source_generated_outputs_match_pinned_compact_crypto_vectors() {
+    // OpenZeppelin Compact Contracts f85f1a23685c6bbedfc8c2589ae3aa128aff7c46:
+    // EcdhMask.test.ts fixes the ECDH memo fields. The ElGamal.test.ts fixture
+    // fixes the public `elgamal-ek-A` bytes; its account ID and tagged scalar
+    // below were independently evaluated with Compact Runtime 0.21.0.
+    let directory = std::path::PathBuf::from(
+        std::env::var_os("NOCTIUM_ISSUE70_ARTIFACTS")
+            .expect("set NOCTIUM_ISSUE70_ARTIFACTS to fresh Lean outputs"),
+    );
+    let plan: Plan = serde_json::from_slice(
+        &std::fs::read(directory.join("Issue70DerivedCrypto.referenceVectors.impact.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    let circuit = IrSource::load(
+        std::fs::read(directory.join("Issue70DerivedCrypto.referenceVectors.zkir"))
+            .unwrap()
+            .as_slice(),
+    )
+    .unwrap();
+    let initial = create_state(&plan, &BTreeMap::from([("records".into(), json!([]))])).unwrap();
+    let execution = prepare(
+        &plan,
+        &BTreeMap::new(),
+        &initial,
+        &ledger::structure::INITIAL_PARAMETERS,
+        coin_structure::contract::ContractAddress::default(),
+    )
+    .unwrap();
+    check(&execution, &circuit).unwrap();
+
+    let account_id: [u8; 32] =
+        hex::decode("1d6fbde974afdb88bda3bae6e6dc2073b030adf2f05c9054d97b5d8faa35aae4")
+            .unwrap()
+            .try_into()
+            .unwrap();
+    assert_eq!(
+        execution.returns_json(),
+        BTreeMap::from([
+            ("accountId".into(), bytes(&account_id)),
+            (
+                "encryptionScalar".into(),
+                json!(
+                    "250322812713579579621899596562153863259832695080365813512919770294328632064"
+                ),
+            ),
+            (
+                "ephemeralX".into(),
+                json!(
+                    "29744007854499136538279777804045376227924513599493318762246204369493933045815"
+                ),
+            ),
+            (
+                "ephemeralY".into(),
+                json!(
+                    "2604409624680019572520314011984821445135836579833696274586703556773097648664"
+                ),
+            ),
+            (
+                "ciphertext".into(),
+                json!("92943607126214901997092911019500281461782473933829915198787051090573790098"),
+            ),
+        ])
+    );
+}

@@ -65,6 +65,8 @@ Derived random scalars must be nonzero. Production seed freshness and secrecy
 remain wallet responsibilities.
 The deterministic seeds in the native fixture are public test data.
 
+The focused reference check compares Noctium's account ID and domain-prefixed ElGamal scalar with results from Compact Runtime 0.21.0 on OpenZeppelin's public `elgamal-ek-A` fixture. The same check compares the ECDH memo's two ephemeral coordinates and masked amount with OpenZeppelin's fixed ciphertext at the pinned revision. The Noctium case runs the generated ZKIR through Midnight's native checker. [Noctium fixture](../../runtime/tests/derived_crypto.rs) · [OpenZeppelin ElGamal test](https://github.com/OpenZeppelin/compact-contracts/blob/f85f1a23685c6bbedfc8c2589ae3aa128aff7c46/contracts/src/crypto/test/ElGamal.test.ts) · [OpenZeppelin memo vector](https://github.com/OpenZeppelin/compact-contracts/blob/f85f1a23685c6bbedfc8c2589ae3aa128aff7c46/contracts/src/crypto/test/EcdhMask.test.ts)
+
 The native lifecycle case registers two wallets, mints to the first wallet's
 pending pool, sweeps, transfers to the second wallet's pending pool, then burns
 two from the sender. Alice ends with five spendable, Bob with five pending and
