@@ -23,6 +23,7 @@ abbrev Scalar := Expr .native
 
 inductive Aligned where
   | field (value : Scalar)
+  | foreignKey (kind : Foreign.Kind) (value : Expr (.foreign kind))
   | bit (value : Bool)
   | bitExpr (value : Expr .bool)
   | bytes32 (value : Expr (.bytes 32))
@@ -35,6 +36,19 @@ private def alignedByteChunkCount (length : Nat) : Nat := (length + 30) / 31
 
 private def alignedByteChunkWidth (length chunkIndex : Nat) : Nat :=
   min 31 (length - chunkIndex * 31)
+
+private def foreignNativeFields : (kind : Foreign.Kind) → Expr (.foreign kind) → List Scalar
+  | kind, value => (List.range kind.encodedFieldCount).map fun index =>
+      .foreignEncodedField value index
+
+private def nativeFieldSequence (values : List Scalar) : List Scalar :=
+  [.native values.length] ++ List.replicate values.length (.native (Field.modulus - 2)) ++ values
+
+private def natBytes (n : Nat) : List Nat := if n == 0 then [] else go n (n.log2 / 8 + 1)
+where
+  go (n : Nat) : Nat → List Nat
+    | 0 => []
+    | fuel + 1 => n % 256 :: go (n / 256) fuel
 
 inductive Op where
   | dup
@@ -128,6 +142,7 @@ private def accumulateTokenFields (slot : Nat) (key encodedAmount : List Scalar)
 transient-crypto/src/fab.rs. Map-key alignment follows the declared key type. -/
 def Aligned.fields : Aligned → List Scalar
   | .field value => [.native 1, .native (Field.modulus - 2), value]
+  | .foreignKey kind value => nativeFieldSequence (foreignNativeFields kind value)
   | .bit value => [.native 1, .native 1, .native (if value then 1 else 0)]
   | .bitExpr value => [.native 1, .native 1,
       .select value (.native 1) (.native 0)]
@@ -136,8 +151,7 @@ def Aligned.fields : Aligned → List Scalar
   | .bytes 0 value => [.native 1, .letE "_noctium_empty_bytes" value (.native 0)]
   | .bytes length value => [.native 1, .native length] ++
       (List.range (alignedByteChunkCount length)).map (.bytesField value)
-  | .nativeFields values => [.native values.length] ++
-      List.replicate values.length (.native (Field.modulus - 2)) ++ values
+  | .nativeFields values => nativeFieldSequence values
   | .counter value => [.native 1, .native 8, .cast .native value]
 
 private def mintFieldGroups (slot : Nat) (domain : Expr (.bytes 32))
@@ -746,7 +760,8 @@ private def nativeAligned : (ty : Ty) → Expr ty → Except String Aligned
   | .uint _, value => pure (.field (.cast .native value))
   | .bytes 32, value => pure (.bytes32 value)
   | .bytes length, value => pure (.bytes length value)
-  | .jubjubScalar, _ | .jubjubPoint, _ | .foreign _, _ => throw "opaque values require explicit encoding projections"
+  | .foreign kind, value => pure (.foreignKey kind value)
+  | .jubjubScalar, _ | .jubjubPoint, _ => throw "opaque values require explicit encoding projections"
 
 private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
   match ty with
@@ -756,9 +771,17 @@ private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
   | .bytes _ => throw "Bytes32 is read through byte alignment"
   | .jubjubScalar | .jubjubPoint | .foreign _ => throw "opaque inputs use reserved Native projections"
 
-private def foreignNativeFields : (kind : Foreign.Kind) → Expr (.foreign kind) → List Scalar
-  | kind, value => (List.range kind.encodedFieldCount).map fun index =>
-      .foreignEncodedField value index
+private def pushKey : Aligned → Op
+  | .foreignKey kind value =>
+    .pushFields (Lean.Json.str kind.sourceName) (foreignNativeFields kind value) false
+  | value => .push value false
+
+private def keyValueJson (kind : Foreign.Kind) (value : Expr (.foreign kind))
+    (ctx : EvalContext) (env : EvalEnv) : Except String Lean.Json := do
+  let fields ← Foreign.encodeValue kind (← value.eval ctx env)
+  pure (Lean.Json.arr (fields.toArray.map fun field =>
+    Lean.Json.arr ((natBytes field).toArray.map Lean.toJson))
+  )
 
 private def storageWriteValue : (ty : Ty) → Expr ty → Except String Op
   | .foreign kind, value =>
@@ -812,14 +835,14 @@ private def pathWriteOps (slot : Nat) (keys : List Aligned) (value : List Op)
   let (parents, finalKey) ← splitPath keys
   let levels := keys.length + 1
   if levels >= 16 then throw "nested map insertion exceeds native Ins depth"
-  pure ([.indexPath slot true parents, .push finalKey] ++ value ++ [.insert levels])
+  pure ([.indexPath slot true parents, pushKey finalKey] ++ value ++ [.insert levels])
 
 private def pathWriteCompositeOps (slot : Nat) (keys : List Aligned)
     (schema : Lean.Json) (values : List Scalar) : Except String (List Op) := do
   let (parents, finalKey) ← splitPath keys
   let levels := keys.length + 1
   if levels >= 16 then throw "nested map insertion exceeds native Ins depth"
-  pure ([.indexPath slot true parents, .push finalKey,
+  pure ([.indexPath slot true parents, pushKey finalKey,
     .pushFields schema values true, .insert levels])
 
 private def stateSlot (state : List StateDecl) (name : String) : Except String Nat :=
@@ -1019,6 +1042,15 @@ private def totalizeActivityValue (guard : Expr .bool) (avoid : List String)
   let name := freshActivityName (avoid ++ expressionNames guard ++ expressionNames value)
   .letE name guard (Noctium.GuardedExpression.totalize (.ref name) value)
 
+private def totalizeActivityKey (guard : Expr .bool) (avoid : List String) :
+    (ty : Ty) → Expr ty → Expr ty
+  | .foreign kind, value =>
+    let name := freshActivityName (avoid ++ expressionNames guard ++ expressionNames value)
+    .letE name guard (.select (.ref name)
+      (Noctium.GuardedExpression.totalize (.ref name) value)
+      (Noctium.GuardedExpression.zeroValue (.foreign kind)))
+  | _, value => totalizeActivityValue guard avoid value
+
 private def totalizePathKeys (condition : Expr .bool) (keys : List PathKey) : List PathKey :=
   let avoid := pathExpressionNames keys
   keys.map fun key => match key with
@@ -1047,6 +1079,8 @@ private def totalizePathKeys (condition : Expr .bool) (keys : List PathKey) : Li
       let guardedValue := Noctium.GuardedExpression.totalize (.ref guardName) value
       .mk (.bytes length) (.letE guardName condition (.select (.ref guardName) guardedValue
         (.bytesLiteral length (List.replicate length 0))))
+    | .mk (.foreign kind) value =>
+      .mk (.foreign kind) (totalizeActivityKey condition avoid (.foreign kind) value)
     | .mk ty value =>
       let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
       .mk ty (.letE guardName condition (Noctium.GuardedExpression.totalize (.ref guardName) value))
@@ -1163,7 +1197,7 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let readName := s!"_noctium_absence_{plan.reads.length}"
     pure { plan with
       operations := plan.operations ++ [
-        .dup, .index slot, .push key, .member, .popeq (.bit false)]
+        .dup, .index slot, pushKey key, .member, .popeq (.bit false)]
       reads := plan.reads ++ [{name := readName, ty := .bool}]
       guards := plan.guards ++ [.eq (.ref readName : Expr .bool) (.bool false)] }
   | .writeCell name ty value =>
@@ -1176,7 +1210,7 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let key ← nativeAligned _ key
     let value ← storageWriteValue ty value
     pure {plan with operations := plan.operations ++ [
-      .index slot true, .push key,
+      .index slot true, pushKey key,
       value, .insert 2]}
   | .readMap name destination _ ty key => do
     let slot ← stateSlot state name
@@ -1192,7 +1226,7 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let key ← nativeAligned _ key
     pure { plan with
       operations := plan.operations ++ [
-        .dup, .index slot, .push key, .member,
+        .dup, .index slot, pushKey key, .member,
         .popeq (.bitExpr (.ref destination))]
       reads := plan.reads ++ [{name := destination, ty := .bool}] }
   | .readPath name destination keys ty => do
@@ -1263,9 +1297,9 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .removePath name keys => do
     let slot ← stateSlot state name
     let some declaration := state.find? (·.name == name)
-      | throw s!"unknown tree state '{name}'"
-    let .tree schema := declaration.kind
-      | throw s!"state '{name}' is not a recursive map"
+      | throw s!"unknown map or set state '{name}'"
+    let some schema := declaration.kind.pathSchema
+      | throw s!"state '{name}' is not a map or set"
     schema.removalPath keys
     let alignedKeys ← nativePathKeys keys
     pure {plan with operations := plan.operations ++ [.mapRemove slot alignedKeys]}
@@ -1290,7 +1324,7 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let (parents, finalKey) ← splitPath keys
     pure {plan with
       operations := plan.operations ++ [
-        .dup, .indexPath slot false parents, .push finalKey, .member,
+        .dup, .indexPath slot false parents, pushKey finalKey, .member,
         .popeq (.bitExpr (.ref destination))]
       reads := plan.reads ++ [{name := destination, ty := .bool}]}
   | .insertPath name keys ty value | .writePath name keys ty value => do
@@ -1351,7 +1385,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     | some condition, .writeMap name keyTy valueTy key value =>
       let avoid := expressionNames key ++ expressionNames value
       pure (.writeMap name keyTy valueTy
-        (totalizeActivityValue condition avoid key)
+        (totalizeActivityKey condition avoid keyTy key)
         (totalizeActivityValue condition avoid value))
     | some condition, .claimContractCall address entryPointHash commitment =>
       let avoid := expressionNames address ++ expressionNames entryPointHash ++
@@ -1406,10 +1440,10 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
         (totalizeActivityValue condition (expressionNames deadline) deadline))
     | some condition, .readMap name destination keyTy valueTy key =>
       pure (.readMap name destination keyTy valueTy
-        (totalizeActivityValue condition (expressionNames key) key))
+        (totalizeActivityKey condition (expressionNames key) keyTy key))
     | some condition, .readMember name destination keyTy valueTy key =>
       pure (.readMember name destination keyTy valueTy
-        (totalizeActivityValue condition (expressionNames key) key))
+        (totalizeActivityKey condition (expressionNames key) keyTy key))
     | some condition, .readPath name destination keys ty =>
       pure (.readPath name destination (totalizePathKeys condition keys) ty)
     | some condition, .readCompositePath name destination keys type destinations =>
@@ -1768,7 +1802,7 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let name := s!"_noctium_absence_{plan.reads.length}"
     plan := { plan with
       operations := plan.operations ++ [
-        .dup, .index slot, .push key, .member, .popeq (.bit false)]
+        .dup, .index slot, pushKey key, .member, .popeq (.bit false)]
       reads := plan.reads ++ [{name, ty := .bool}]
       guards := plan.guards ++ [.eq (.ref name : Expr .bool) (.bool false)] }
   | .writeCell name ty value =>
@@ -1781,7 +1815,7 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let key ← nativeAligned _ key
     let value ← storageWriteValue ty value
     plan := {plan with operations := plan.operations ++ [
-      .index slot true, .push key,
+      .index slot true, pushKey key,
       value, .insert 2]}
   | .readMap name destination _ ty key => do
     let slot ← stateSlot state name
@@ -1797,7 +1831,7 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let key ← nativeAligned _ key
     plan := { plan with
       operations := plan.operations ++ [
-        .dup, .index slot, .push key, .member,
+        .dup, .index slot, pushKey key, .member,
         .popeq (.bitExpr (.ref destination))]
       reads := plan.reads ++ [{name := destination, ty := .bool}] }
   | .readPath name destination keys ty => do
@@ -1886,7 +1920,7 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let (parents, finalKey) ← splitPath keys
     plan := {plan with
       operations := plan.operations ++ [
-        .dup, .indexPath slot false parents, .push finalKey, .member,
+        .dup, .indexPath slot false parents, pushKey finalKey, .member,
         .popeq (.bitExpr (.ref destination))]
       reads := plan.reads ++ [{name := destination, ty := .bool}]}
   | .insertPath name keys ty value | .writePath name keys ty value => do
@@ -1934,9 +1968,9 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .removePath name keys => do
     let slot ← stateSlot state name
     let some declaration := state.find? (·.name == name)
-      | throw s!"unknown tree state '{name}'"
-    let .tree schema := declaration.kind
-      | throw s!"state '{name}' is not a recursive map"
+      | throw s!"unknown map or set state '{name}'"
+    let some schema := declaration.kind.pathSchema
+      | throw s!"state '{name}' is not a map or set"
     schema.removalPath keys
     let alignedKeys ← nativePathKeys keys
     plan := {plan with operations := plan.operations ++ [.mapRemove slot alignedKeys]}
@@ -2025,18 +2059,15 @@ The plan is not deployable until its fields are bound by the relation producer. 
 def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan :=
   (lowerWithEffectBoundaries state entry).map Prod.fst
 
-private def natBytes (n : Nat) : List Nat := if n == 0 then [] else go n (n.log2 / 8 + 1)
-where
-  go (n : Nat) : Nat → List Nat
-    | 0 => []
-    | fuel + 1 => n % 256 :: go (n / 256) fuel
-
 /-- JSON value atoms must be hydrated into Uint8Array by the ledger JS adapter. -/
 def Aligned.toJson (ctx : EvalContext) (env : EvalEnv) (value : Aligned) : Except String Lean.Json := do
   let (atoms, alignment) ← match value with
     | .field expression => do
       pure (Lean.toJson [natBytes (← expression.eval ctx env)],
         Lean.Json.mkObj [("tag", Lean.toJson ("field" : String))])
+    | .foreignKey kind expression => do
+      let atoms ← keyValueJson kind expression ctx env
+      pure (atoms, Lean.Json.mkObj [("tag", Lean.toJson ("field" : String))])
     | .bit b => pure (Lean.toJson [natBytes (if b then 1 else 0)],
         Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)), ("length", Lean.toJson (1 : Nat))])
     | .bitExpr expression => pure (Lean.toJson [natBytes (if ← expression.eval ctx env then 1 else 0)],
@@ -2056,9 +2087,12 @@ def Aligned.toJson (ctx : EvalContext) (env : EvalEnv) (value : Aligned) : Excep
       let value ← expression.eval ctx env
       pure (Lean.toJson [natBytes value], Lean.Json.mkObj [
         ("tag", Lean.toJson ("bytes" : String)), ("length", Lean.toJson (8 : Nat))])
-  pure (Lean.Json.mkObj [("value", atoms),
-    ("alignment", Lean.Json.arr #[Lean.Json.mkObj [
-      ("tag", Lean.toJson ("atom" : String)), ("value", alignment)]])])
+  let alignmentSegments := match value with
+    | .foreignKey kind _ => Lean.Json.arr (Array.replicate kind.encodedFieldCount
+        (Lean.Json.mkObj [("tag", Lean.toJson ("atom" : String)), ("value", alignment)]))
+    | _ => Lean.Json.arr #[Lean.Json.mkObj [
+        ("tag", Lean.toJson ("atom" : String)), ("value", alignment)]]
+  pure (Lean.Json.mkObj [("value", atoms), ("alignment", alignmentSegments)])
 
 def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Json
   | .dup => pure (Lean.Json.mkObj [("dup", Lean.Json.mkObj [("n", Lean.toJson (0 : Nat))])])

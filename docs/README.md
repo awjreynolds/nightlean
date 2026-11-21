@@ -69,7 +69,7 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 - [Anonymous operators, map and fold](development/iteration.md), staged Lean source construction with lexical captures, strict sequence evaluation and ordered typed providers.
 - [Guarded typed witnesses](development/guarded-witnesses.md), conditional providers, canonical skipped slots and sparse static call bindings.
 - [Jubjub ledger storage](development/jubjub-storage.md), checked scalar/point values across cells, maps and nested leaves.
-- [Nested foreign ledger state](development/foreign-trees.md), typed scalar leaves, parent creation, guarded defaults and preserved sibling entries.
+- [Foreign ledger state](development/foreign-trees.md), typed scalar leaves and keys, explicit parent creation, guarded defaults and preserved sibling entries.
 - [Curve25519 types](development/curve25519.md), prime-order Edwards points, distinct scalar encoding, typed operations and point storage.
 - [Foreign-field implementation plan](designs/foreign-types.md), delivered Secp slices and remaining Curve25519, storage and assurance work.
 - [Resumable native preparation](development/native-preparation-cursor.md), checked ledger reads before private inputs arrive, with one ordered native executor.

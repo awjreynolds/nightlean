@@ -1287,28 +1287,125 @@ fn path_field_count(plan: &Plan, slot: u32, keys: &[PathPart]) -> Result<usize> 
             part.alignment == key_alignment(&ty),
             "map path key alignment mismatch"
         );
-        fields += match part.alignment.as_str() {
-            "field" | "bit" => 3,
-            "bytes32" => 4,
-            _ => bail!("unsupported path alignment"),
-        };
+        fields += ledger_key_aligned_field_count(&ty);
     }
     Ok(fields)
 }
 
-fn ledger_key_type(value: &Json) -> Result<ScalarType> {
+pub(crate) fn ledger_key_type(value: &Json) -> Result<ScalarType> {
     let ty = ScalarType::parse(
         value
             .as_str()
             .ok_or_else(|| anyhow!("invalid ledger key schema"))?,
     )?;
-    reject_unqualified_foreign_storage(&ty)?;
     reject_jubjub_map_key(&ty)?;
     ensure!(
         !matches!(&ty, ScalarType::Bytes(_)),
         "only Bytes32 byte map keys are supported"
     );
     Ok(ty)
+}
+
+fn ledger_key_aligned_field_count(ty: &ScalarType) -> usize {
+    match ty {
+        ScalarType::Bytes32 => 4,
+        #[cfg(feature = "zkir-321")]
+        ScalarType::Foreign(ty) => 1 + 2 * ty.native_type().encoded_len(),
+        _ => 3,
+    }
+}
+
+fn validate_ledger_key_value(ty: &ScalarType, value: &Value) -> Result<()> {
+    value.validate()?;
+    #[cfg(feature = "zkir-321")]
+    if matches!(ty, ScalarType::Foreign(_)) || matches!(value, Value::Foreign(_)) {
+        ensure!(value.scalar_type() == *ty, "map key type mismatch");
+    }
+    let _ = ty;
+    Ok(())
+}
+
+#[cfg(feature = "zkir-321")]
+fn foreign_key_projection<'a>(expressions: &'a [Expr], ty: &ScalarType) -> Result<&'a Expr> {
+    let ScalarType::Foreign(ty) = ty else {
+        bail!("foreign key projections require a foreign type")
+    };
+    ensure!(
+        expressions.len() == ty.native_type().encoded_len(),
+        "typed foreign key field count mismatch"
+    );
+    let mut source = None;
+    for (expected_index, expression) in expressions.iter().enumerate() {
+        let Expr::ForeignEncodedField { value, index } = expression else {
+            bail!("foreign key fields must use canonical foreign projections")
+        };
+        ensure!(
+            *index == expected_index,
+            "foreign key projections are not in canonical order"
+        );
+        if let Some(source) = source {
+            ensure!(
+                value.as_ref() == source,
+                "foreign key projections use different source values"
+            );
+        } else {
+            source = Some(value.as_ref());
+        }
+    }
+    source.ok_or_else(|| anyhow!("foreign key requires encoded fields"))
+}
+
+#[cfg(feature = "zkir-321")]
+fn validate_foreign_key_pushes(plan: &Plan) -> Result<()> {
+    let mut previous_index = None;
+    for operation in &plan.operations {
+        let (instruction, guard) = match operation {
+            Instruction::Guarded { guard, operation } => (operation.as_ref(), Some(guard)),
+            operation => (operation, None),
+        };
+        match instruction {
+            Instruction::Index {
+                slot, key: None, ..
+            } => previous_index = Some((*slot, 0, guard)),
+            Instruction::IndexPath { slot, keys, .. } => {
+                previous_index = Some((*slot, keys.len(), guard))
+            }
+            Instruction::PushFields {
+                storage: false,
+                expressions,
+                schema,
+                ..
+            } => {
+                if let Some(name) = typed_scalar_schema_token(schema) {
+                    let ty = ScalarType::parse(name)?;
+                    if matches!(&ty, ScalarType::Foreign(_)) {
+                        foreign_key_projection(expressions, &ty)?;
+                        let (slot, parents, index_guard) =
+                            previous_index.take().ok_or_else(|| {
+                                anyhow!("foreign map key push requires an indexed path")
+                            })?;
+                        ensure!(
+                            index_guard == guard,
+                            "foreign map key guard differs from its indexed path"
+                        );
+                        let expected = map_path_key_types(plan, slot, parents + 1)?
+                            .pop()
+                            .ok_or_else(|| anyhow!("invalid foreign map key schema"))?;
+                        ensure!(
+                            expected == ty,
+                            "foreign map key type differs from state schema"
+                        );
+                    } else {
+                        previous_index = None;
+                    }
+                } else {
+                    previous_index = None;
+                }
+            }
+            _ => previous_index = None,
+        }
+    }
+    Ok(())
 }
 
 fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usize>> {
@@ -1507,7 +1604,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
             slot, key: Some(_), ..
         } => {
             let key_type = map_key_type(plan, *slot)?;
-            6 + value_fields(key_alignment(&key_type))?
+            4 + ledger_key_aligned_field_count(&key_type)
         }
         Instruction::IndexPath { slot, keys, .. } => path_field_count(plan, *slot, keys)?,
         Instruction::ListLength { .. }
@@ -1713,17 +1810,7 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         .and_then(Json::as_array)
         .filter(|parts| parts.len() == 2)
         .ok_or_else(|| anyhow!("invalid state tree map schema"))?;
-    let key = ScalarType::parse(
-        parts[0]
-            .as_str()
-            .ok_or_else(|| anyhow!("invalid state tree key type"))?,
-    )?;
-    reject_unqualified_foreign_storage(&key)?;
-    reject_jubjub_map_key(&key)?;
-    ensure!(
-        !matches!(key, ScalarType::Bytes(_)),
-        "only Bytes32 byte map keys are supported"
-    );
+    ledger_key_type(&parts[0])?;
     validate_tree_schema(&parts[1], depth + 1)
 }
 
@@ -2068,6 +2155,8 @@ fn validate_environment_schema(plan: &Plan) -> Result<()> {
         "duplicate input name"
     );
     call_input_header(&plan.circuit.inputs, &plan.call_inputs)?;
+    #[cfg(feature = "zkir-321")]
+    validate_foreign_key_pushes(plan)?;
     let mut output_names = BTreeSet::new();
     for output in &plan.circuit.outputs {
         ensure!(
@@ -2407,13 +2496,7 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
                         .all(|t| t.as_str().is_some_and(|t| ScalarType::parse(t).is_ok())),
                 "unsupported map schema"
             );
-            let key_type = ScalarType::parse(types[0].as_str().unwrap())?;
-            reject_unqualified_foreign_storage(&key_type)?;
-            reject_jubjub_map_key(&key_type)?;
-            ensure!(
-                !matches!(key_type, ScalarType::Bytes(_)),
-                "only Bytes32 byte map keys are supported"
-            );
+            ledger_key_type(&types[0])?;
             ensure!(
                 value.as_array().is_some_and(|a| a.is_empty()),
                 "initial map must be explicitly empty"
@@ -2941,7 +3024,9 @@ fn native_index(
             part.alignment == key_alignment(&ty),
             "map path key alignment mismatch"
         );
-        let value = aligned(&evaluate(&part.expression, env)?, &part.alignment)?;
+        let key = evaluate(&part.expression, env)?;
+        validate_ledger_key_value(&ty, &key)?;
+        let value = aligned(&key, &part.alignment)?;
         path.push(Key::Value(
             value
                 .clone()
@@ -4329,7 +4414,9 @@ impl PreparationCursor {
                     .as_ref()
                     .map(|key| {
                         let key_type = map_key_type(plan, *slot)?;
-                        aligned(&evaluate(key, &env)?, key_alignment(&key_type))
+                        let value = evaluate(key, &env)?;
+                        validate_ledger_key_value(&key_type, &value)?;
+                        aligned(&value, key_alignment(&key_type))
                     })
                     .transpose()?;
                 let mut path = vec![Key::Value(
@@ -4365,12 +4452,20 @@ impl PreparationCursor {
                 storage,
                 expression,
                 alignment,
-            } => Op::Push {
-                storage: *storage,
-                value: StateValue::Cell(Sp::new(aligned(&evaluate(expression, &env)?, alignment)?))
-                    .try_into_checked()
-                    .map_err(|_| anyhow!("invalid native pushed value"))?,
-            },
+            } => {
+                let value = evaluate(expression, &env)?;
+                #[cfg(feature = "zkir-321")]
+                ensure!(
+                    !matches!(&value, Value::Foreign(_)),
+                    "foreign pushes require a typed field schema"
+                );
+                Op::Push {
+                    storage: *storage,
+                    value: StateValue::Cell(Sp::new(aligned(&value, alignment)?))
+                        .try_into_checked()
+                        .map_err(|_| anyhow!("invalid native pushed value"))?,
+                }
+            }
             Instruction::PushFields {
                 storage,
                 expressions,
@@ -4382,11 +4477,28 @@ impl PreparationCursor {
                         expressions.len() == typed_scalar_field_count(&ty)?,
                         "typed storage field count mismatch"
                     );
-                    let fields = expressions
-                        .iter()
-                        .map(|expression| evaluate(expression, &env)?.field())
-                        .collect::<Result<Vec<_>>>()?;
-                    let value = decode_typed_scalar(&ty, &fields)?;
+                    let value = {
+                        #[cfg(feature = "zkir-321")]
+                        if !*storage && matches!(&ty, ScalarType::Foreign(_)) {
+                            let value = evaluate(foreign_key_projection(expressions, &ty)?, &env)?;
+                            validate_ledger_key_value(&ty, &value)?;
+                            value
+                        } else {
+                            let fields = expressions
+                                .iter()
+                                .map(|expression| evaluate(expression, &env)?.field())
+                                .collect::<Result<Vec<_>>>()?;
+                            decode_typed_scalar(&ty, &fields)?
+                        }
+                        #[cfg(not(feature = "zkir-321"))]
+                        {
+                            let fields = expressions
+                                .iter()
+                                .map(|expression| evaluate(expression, &env)?.field())
+                                .collect::<Result<Vec<_>>>()?;
+                            decode_typed_scalar(&ty, &fields)?
+                        }
+                    };
                     Op::Push {
                         storage: *storage,
                         value: StateValue::Cell(Sp::new(aligned_storage_cell(&value)?))
@@ -4485,6 +4597,11 @@ impl PreparationCursor {
                     }
                 }
                 let value = evaluate(expression, &env)?;
+                #[cfg(feature = "zkir-321")]
+                ensure!(
+                    !matches!(&value, Value::Foreign(_)),
+                    "foreign comparisons require a typed field schema"
+                );
                 if !env.contains_key(&read.name) {
                     env.insert(read.name.clone(), value.clone());
                     produced.push(read.name.clone());

@@ -134,6 +134,7 @@ private abbrev nativeExpressionJson {ty : Ty} : Expr ty → Json :=
 private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json) :=
   match value with
   | .field expression => [("alignment", toJson ("field" : String)), ("expression", nativeExpressionJson expression)]
+  | .foreignKey _ expression => [("alignment", toJson ("field" : String)), ("expression", nativeExpressionJson expression)]
   | .bit b => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson (.bool b))]
   | .bitExpr expression => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson expression)]
   | .bytes32 expression => [("alignment", toJson ("bytes32" : String)), ("expression", nativeExpressionJson expression)]
@@ -146,6 +147,7 @@ private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json)
 private def alignedExpressionJson (value : Backend.Impact.Aligned) : Json :=
   match value with
   | .field expression => nativeExpressionJson expression
+  | .foreignKey _ expression => nativeExpressionJson expression
   | .bit value => nativeExpressionJson (.bool value)
   | .bitExpr expression => nativeExpressionJson expression
   | .bytes32 expression => nativeExpressionJson expression
