@@ -2,6 +2,29 @@ import Noctium.IR
 
 namespace Noctium.Crypto
 
+/-! Compact-compatible typed records used to pass signature components as one value.
+The fields retain their curve-specific Lean expression types. -/
+
+structure JubjubSchnorrSignature where
+  announcement : Expr .jubjubPoint
+  response : Expr .native
+  deriving Repr
+
+structure Secp256k1EcdsaSignature where
+  r : Expr (.foreign (.scalar .secp256k1))
+  s : Expr (.foreign (.scalar .secp256k1))
+  deriving Repr
+
+structure Secp256r1EcdsaSignature where
+  r : Expr (.foreign (.scalar .secp256r1))
+  s : Expr (.foreign (.scalar .secp256r1))
+  deriving Repr
+
+structure Ed25519Signature where
+  r : Expr (.foreign (.point .curve25519))
+  s : Expr (.foreign (.scalar .curve25519))
+  deriving Repr
+
 private def ecdsaVerify (curve : Foreign.Curve) (msgHash : Expr (.bytes 32))
     (r s : Expr (.foreign (.scalar curve)))
     (pk : Expr (.foreign (.point curve))) : Expr .bool := Id.run do
@@ -27,10 +50,26 @@ def secp256k1EcdsaVerify (msgHash : Expr (.bytes 32))
     (pk : Expr (.foreign (.point .secp256k1))) : Expr .bool :=
   ecdsaVerify .secp256k1 msgHash r s pk
 
+namespace Secp256k1EcdsaSignature
+
+def verify (msgHash : Expr (.bytes 32)) (signature : Secp256k1EcdsaSignature)
+    (pk : Expr (.foreign (.point .secp256k1))) : Expr .bool :=
+  secp256k1EcdsaVerify msgHash signature.r signature.s pk
+
+end Secp256k1EcdsaSignature
+
 def secp256r1EcdsaVerify (msgHash : Expr (.bytes 32))
     (r s : Expr (.foreign (.scalar .secp256r1)))
     (pk : Expr (.foreign (.point .secp256r1))) : Expr .bool :=
   ecdsaVerify .secp256r1 msgHash r s pk
+
+namespace Secp256r1EcdsaSignature
+
+def verify (msgHash : Expr (.bytes 32)) (signature : Secp256r1EcdsaSignature)
+    (pk : Expr (.foreign (.point .secp256r1))) : Expr .bool :=
+  secp256r1EcdsaVerify msgHash signature.r signature.s pk
+
+end Secp256r1EcdsaSignature
 
 def jubjubSchnorrVerify (msg : List (Expr .native))
     (announcement : Expr .jubjubPoint) (response : Expr .native)
@@ -44,6 +83,14 @@ def jubjubSchnorrVerify (msg : List (Expr .native))
   let identity := Expr.jubjubFromCoordinates (.native 0) (.native 1)
   let nonIdentity := Expr.eq (.eq pk identity) (.bool false)
   return .assertE nonIdentity (.eq lhs rhs)
+
+namespace JubjubSchnorrSignature
+
+def verify (msg : List (Expr .native)) (signature : JubjubSchnorrSignature)
+    (pk : Expr .jubjubPoint) : Expr .bool :=
+  jubjubSchnorrVerify msg signature.announcement signature.response pk
+
+end JubjubSchnorrSignature
 
 def ed25519Verify {length : Nat} (msg : Expr (.bytes length))
     (r : Expr (.foreign (.point .curve25519)))
@@ -64,6 +111,14 @@ def ed25519Verify {length : Nat} (msg : Expr (.bytes length))
   let x : Expr (.foreign (.base .curve25519)) := .foreignUnary (.x .curve25519) pk
   let nonIdentity := .eq (.eq x (.foreignBase .curve25519 0)) (.bool false)
   return .assertE nonIdentity (.eq lhs rhs)
+
+namespace Ed25519Signature
+
+def verify {length : Nat} (msg : Expr (.bytes length)) (signature : Ed25519Signature)
+    (pk : Expr (.foreign (.point .curve25519))) : Expr .bool :=
+  ed25519Verify msg signature.r signature.s pk
+
+end Ed25519Signature
 
 def secp256k1EthereumAddress (pk : Expr (.foreign (.point .secp256k1))) : Expr (.bytes 20) :=
   let x : Expr (.foreign (.base .secp256k1)) := .foreignUnary (.x .secp256k1) pk
