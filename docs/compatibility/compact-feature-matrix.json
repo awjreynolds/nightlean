@@ -4995,8 +4995,8 @@
       "id": "C-STDLIB-NEG",
       "layer": "standard-library",
       "surface": "neg",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean foreignNeg lowering matches pinned Compact for the base and scalar fields of Secp256k1, Secp256r1 and Curve25519. A native 3.2.1 fixture checks one nonzero value and zero for each field. ABI and full semantic coverage remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5009,15 +5009,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ForeignFieldNegInv.lean",
+        "runtime/tests/foreign_field_neg_inv.rs",
+        "tests/compact/foreign-field-neg-inv.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-INV",
       "layer": "standard-library",
       "surface": "inv",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean foreignInv lowering matches pinned Compact for the base and scalar fields of Secp256k1, Secp256r1 and Curve25519. The native 3.2.1 fixture checks one nonzero inverse per field and rejects each active zero inverse. ABI and full semantic coverage remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5030,7 +5034,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ForeignFieldNegInv.lean",
+        "runtime/tests/foreign_field_neg_inv.rs",
+        "tests/compact/foreign-field-neg-inv.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
