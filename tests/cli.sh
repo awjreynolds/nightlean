@@ -157,10 +157,19 @@ noctium_contract ImportedCircuitContract where
 end
 LEAN
 env LEAN_PATH="$scratch/imports:$PWD/.lake/build/lib/lean" \
-  "$cli" compile "$scratch/imported.lean" --output "$scratch/imported-output"
+  "$cli" compile "$scratch/imported.lean" --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --output "$scratch/imported-output"
 test -f "$scratch/imported-output/ImportedCircuitLibrary.claimRelation.zkir"
 test -f "$scratch/imported-output/ImportedCircuitContract.claim.impact.json"
 test ! -e "$scratch/imported-output/ImportedCircuitLibrary.unusedRelation.zkir"
+{
+  cat "$scratch/imports/ImportedCircuitLibrary.lean"
+  sed -n '/^noctium_contract /,$p' "$scratch/imported.lean"
+} > "$scratch/combined.lean"
+"$cli" compile "$scratch/combined.lean" --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --output "$scratch/combined-output"
+cmp "$scratch/imported-output/ImportedCircuitContract.claim.zkir" \
+  "$scratch/combined-output/ImportedCircuitContract.claim.zkir"
 node - "$scratch/imported-output/noctium.json" <<'JS'
 const fs = require('node:fs');
 const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
