@@ -319,6 +319,7 @@ scoped syntax "map" ident ":" nltype "=>" nltype : nlstate
 scoped syntax "counter" ident : nlstate
 declare_syntax_cat nlcompositefield
 scoped syntax ident ":" nltype : nlcompositefield
+scoped syntax "cell" ident ":" "struct" ident "{" nlcompositefield* "}" : nlstate
 declare_syntax_cat nlmerklespec
 scoped syntax num ("of" nltype)? : nlmerklespec
 scoped syntax num "of" "struct" ident "{" nlcompositefield* "}" : nlmerklespec
@@ -360,6 +361,7 @@ scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdat
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "receiveShieldedToMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "writeShieldedCoinCell" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "sendShieldedFromMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "relayShieldedImmediate" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
@@ -2441,6 +2443,36 @@ private def elaborateEffect (schema : List (String × StateKind))
         terms := state.terms.push relayTerm
         spans := state.spans.push span
         guards := state.guards.push noGuard}
+    | `(nlupdate| writeShieldedCoinCell($storage:ident, $nonce:nlexpr,
+        $color:nlexpr, $amount:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "writeShieldedCoinCell must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "writeShieldedCoinCell must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .composite environment recordType := treeSchema
+        | throwErrorAt storage "writeShieldedCoinCell requires a root qualified coin Cell"
+      match LedgerValueType.shieldedCoinRecordFields environment recordType with
+      | .ok _ => pure ()
+      | .error message => throwErrorAt storage message
+      let nonce ← checkedExpression state.env nonce (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let addressName := s!"noctium_coin_cell_address_{state.terms.size}"
+      unless state.env.all (fun binding => binding.1 != addressName) do
+        throwErrorAt update "reserved writeShieldedCoinCell binding collides with an existing read"
+      let addressTerm ← `(Noctium.Effect.readContractAddress $(stringTerm addressName))
+      state := {state with terms := state.terms.push addressTerm}
+      state ← bindReadName state addressName addressName (.bytes 32)
+      let selfAddress ← `(@Noctium.Expr.ref (Noctium.Ty.bytes 32) $(stringTerm addressName))
+      let writeTerm ← `(Noctium.Effect.writeShieldedCoinCell
+        $(stringTerm storage.getId.toString) $nonce $color $amount $selfAddress)
+      let noGuard ← `(none)
+      state := {state with
+        terms := state.terms.push writeTerm
+        spans := state.spans.push span
+        guards := state.guards.push noGuard}
     | `(nlupdate| receiveShieldedToMap($storage:ident, $nonce:nlexpr,
         $color:nlexpr, $amount:nlexpr)) => do
       unless depth == 0 do
@@ -3181,6 +3213,16 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
       if let some (id, _, _, ty) := merkle then
         merkleLeafTypes := (id.getId.toString, ty) :: merkleLeafTypes
       let (id, kind, term) ← if let some (id, kind, term, _) := merkle then pure (id, kind, term) else match state with
+        | `(nlstate| cell $id:ident : struct $record:ident { $recordFields:nlcompositefield* }) => do
+          let contractName := (← getCurrNamespace) ++ name.getId
+          let (environment, compositeType, environmentTerm, compositeTypeTerm) ←
+            elaborateNamedRecord contractName record recordFields state
+          match LedgerValueType.shieldedCoinRecordFields environment compositeType with
+          | .ok _ => pure ()
+          | .error message => throwErrorAt state message
+          let valueSchema := LedgerValueType.composite environment compositeType
+          let valueTerm ← `(Noctium.LedgerValueType.composite $environmentTerm $compositeTypeTerm)
+          pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
         | `(nlstate| sealed cell $id:ident : OpaqueString) =>
           pure (id, StateKind.opaqueString, ← `(Noctium.StateKind.opaqueString))
         | `(nlstate| sealed cell $id:ident : $ty:nltype) => do
