@@ -1178,6 +1178,8 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       throw "reference evaluator cannot determine the booked shielded coin index"
     | .writeShieldedCoinCell .. =>
       throw "reference evaluator cannot determine the booked shielded coin index"
+    | .pushFrontCoin .. =>
+      throw "reference evaluator cannot determine the booked shielded coin index"
     | .spendShieldedFromMap .. =>
       throw "reference evaluator cannot determine the native shielded spend commitment"
     | .sendShieldedFromMap .. =>
@@ -1499,6 +1501,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           throw "reference evaluator cannot determine the booked shielded coin index"
         | .writeShieldedCoinCell .. =>
           throw "reference evaluator cannot determine the booked shielded coin index"
+        | .pushFrontCoin .. =>
+          throw "reference evaluator cannot determine the booked shielded coin index"
         | .spendShieldedFromMap .. =>
           throw "reference evaluator cannot determine the native shielded spend commitment"
         | .sendShieldedFromMap .. =>
@@ -1743,7 +1747,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .mintUnshielded .. | .incUnshieldedInputs .. | .incUnshieldedOutputs .. |
             .claimUnshieldedCoinSpend .. | .emitEvent .. |
             .insertPath .. | .writePath .. |
-            .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
+            .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. | .pushFrontCoin .. |
             .listPopFront .. | .listReset .. | .setInsert .. | .removePath .. => pure ()
         | .readPath _ destination _ ty =>
           let zero : ty.Denote := match ty with

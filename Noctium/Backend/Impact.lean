@@ -147,6 +147,9 @@ inductive Op where
   | merkleTreeResetHistoryAt (slot depth : Nat) (keys : List Aligned)
   | listHead (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List LedgerFieldExpr)
   | listPushFront (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List LedgerFieldExpr)
+  | listPushFrontCoin (slot : Nat) (keys : List Aligned) (schema : Lean.Json)
+      (nonce color : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 128 - 1)))
+      (commitment : Expr (.bytes 32))
   | listPopFront (slot : Nat) (keys : List Aligned)
   | listReset (slot : Nat) (keys : List Aligned)
   | mapRemove (slot : Nat) (keys : List Aligned)
@@ -326,6 +329,43 @@ private def receiveShieldedFieldGroups (slot : Nat) (nonce color : Expr (.bytes 
 
 private def listIndexFields (index : Nat) : List Scalar :=
   [.native 0x50, .native 1, .native 1, .native index]
+
+private def shieldedCoinInfoFields (nonce color : Expr (.bytes 32))
+    (amount : Expr (.uint (2 ^ 128 - 1))) : List Scalar :=
+  [.native 3, .native 32, .native 32, .native 16,
+    .bytesField nonce 0, .bytesField nonce 1,
+    .bytesField color 0, .bytesField color 1, .cast .native amount]
+
+/-- Ledger 9 list prepend with a transaction-local qualified index. The new
+node precedes the zero key so cached Ins pops key and node in VM order. -/
+private def listPushFrontCoinFieldGroups (slot : Nat) (keys : List Aligned)
+    (nonce color : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 128 - 1)))
+    (commitment : Expr (.bytes 32)) : List (List Scalar) :=
+  let pushU8 (value : Nat) : List Scalar :=
+    [.native 0x10, .native 1, .native 1, .native 1, .native value]
+  [ [.native (0x70 + keys.length), .native 1, .native 1, .native slot] ++
+      keys.flatMap Aligned.fields
+  , [.native 0x30]
+  , listIndexFields 2
+  , [.native 0x0e, .native 1]
+  , [.native 0x11, .native 51, .native 0, .native 0, .native 0]
+  , pushU8 0
+  , [.native (0x30 + 7 + keys.length * 2)]
+  , [.native 0x10, .native 1] ++ (Aligned.bytes32 commitment).fields
+  , [.native 0x61, .native 1, .native 1, .native 1, .native (Field.modulus - 1)]
+  , [.native 0x10, .native 1] ++ shieldedCoinInfoFields nonce color amount
+  , [.native 0x40]
+  , [.native 0x17, .native 91]
+  , [.native 0xa1]
+  , [.native 0x40]
+  , pushU8 2
+  , [.native 0x40]
+  , [.native 0xa1]
+  , [.native 0x40]
+  , pushU8 1
+  , [.native 0x40]
+  , [.native (0xa0 + keys.length + 2)]
+  ]
 
 private def mapIsEmptyFieldGroups (slot : Nat) (keys : List Aligned)
     (destination : String) : List (List Scalar) :=
@@ -644,6 +684,8 @@ def Op.fields : Op → List Scalar
       [.native 0x40, .native 0x10, .native 1, .native 1, .native 1, .native 2] ++
       [.native 0x40, .native 0x91, .native 0x40, .native 0x10, .native 1,
         .native 1, .native 1, .native 1, .native 0x40, .native (0x90 + keys.length + 2)]
+  | .listPushFrontCoin slot keys _ nonce color amount commitment =>
+      (listPushFrontCoinFieldGroups slot keys nonce color amount commitment).flatten
   | .listPopFront slot keys =>
       indexPathFields slot true keys ++ [.native 0x30] ++ listIndexFields 2 ++
       [.native 0x0f, .native 1, .native 0x0b] ++ listIndexFields 1 ++
@@ -755,6 +797,8 @@ def Op.fieldGroups : Op → List (List Scalar)
         [.native 0x0e, .native 1], listRecordNodePushFields values, [.native 0x40],
         listU8CellPushFields 2, [.native 0x40], [.native 0x91], [.native 0x40],
         listU8CellPushFields 1, [.native 0x40], [.native (0x90 + keys.length + 2)]]
+  | .listPushFrontCoin slot keys _ nonce color amount commitment =>
+      listPushFrontCoinFieldGroups slot keys nonce color amount commitment
   | .listPopFront slot keys =>
       [indexPathFields slot true keys, [.native 0x30], listIndexFields 2,
         [.native 0x0f, .native 1], [.native 0x0b], listIndexFields 1,
@@ -1137,6 +1181,19 @@ private def resolveListState (state : List StateDecl) (name : String)
   let .tree schema := declaration.kind | throw s!"state '{name}' is not a recursive tree"
   schema.listPath keys
 
+private def pushFrontCoinOp (state : List StateDecl) (name : String)
+    (nonce color : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 128 - 1)))
+    (selfAddress : Expr (.bytes 32)) : Except String Op := do
+  let slot ← stateSlot state name
+  if slot > 255 then throw "qualified shielded coin List index exceeds native u8 range"
+  let (environment, recordType, fields) ← resolveListState state name []
+  let expectedFields ← LedgerValueType.shieldedCoinRecordFields environment recordType
+  unless fields == expectedFields do
+    throw "qualified shielded coin List must use the exact shielded coin record"
+  let schema ← listElementOperationSchema environment recordType
+  let commitment := shieldedCoinDigest "midnight:zswap-cc[v1]" 0 nonce color amount selfAddress
+  pure (.listPushFrontCoin slot [] schema nonce color amount commitment)
+
 private def mapSizeOp (state : List StateDecl) (name destination : String)
     (keys : List PathKey) : Except String Op := do
   let slot ← stateSlot state name
@@ -1463,6 +1520,9 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let commitment := shieldedCoinDigest "midnight:zswap-cc[v1]" 0 nonce color amount selfAddress
     pure {plan with operations := plan.operations ++ [
       .writeShieldedCoinCell slot nonce color amount commitment]}
+  | .pushFrontCoin stateName nonce color amount selfAddress => do
+    let operation ← pushFrontCoinOp state stateName nonce color amount selfAddress
+    pure {plan with operations := plan.operations ++ [operation]}
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>
     pure {plan with operations := plan.operations ++ [
       spendShieldedOp nonce color amount recipient selfAddress]}
@@ -2116,6 +2176,9 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let commitment := shieldedCoinDigest "midnight:zswap-cc[v1]" 0 nonce color amount selfAddress
     plan := {plan with operations := plan.operations ++ [
       .writeShieldedCoinCell slot nonce color amount commitment]}
+  | .pushFrontCoin stateName nonce color amount selfAddress => do
+    let operation ← pushFrontCoinOp state stateName nonce color amount selfAddress
+    plan := {plan with operations := plan.operations ++ [operation]}
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>
     plan := {plan with operations := plan.operations ++ [
       spendShieldedOp nonce color amount recipient selfAddress]}
@@ -2559,6 +2622,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .receiveShieldedToMap .. => throw "shielded coin receive uses its dedicated native-plan operation JSON"
   | .insertShieldedCoinSet .. => throw "qualified shielded coin Set insertion uses its dedicated native-plan operation JSON"
   | .writeShieldedCoinCell .. => throw "shielded coin Cell write uses its dedicated native-plan operation JSON"
+  | .listPushFrontCoin .. => throw "qualified shielded coin List push uses its dedicated native-plan operation JSON"
   | .spendShieldedFromMap .. => throw "shielded coin spend uses its dedicated native-plan operation JSON"
   | .sendShieldedFromMap .. => throw "shielded coin send uses its dedicated native-plan operation JSON"
   | .relayShieldedImmediate .. => throw "shielded coin relay uses its dedicated native-plan operation JSON"
