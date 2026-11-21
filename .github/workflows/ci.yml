@@ -3,7 +3,13 @@ name: POC compiler checks
 on:
   push:
     branches: [main]
+    paths-ignore: &docs-only-paths
+      - '*.md'
+      - 'docs/**/*.md'
+      - 'docs/**/*.png'
+      - 'docs/**/*.svg'
   pull_request:
+    paths-ignore: *docs-only-paths
   workflow_dispatch:
 
 permissions:
