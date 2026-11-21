@@ -5293,8 +5293,8 @@
       "id": "C-STDLIB-SENDIMMEDIATESHIELDED",
       "layer": "standard-library",
       "surface": "sendImmediateShielded",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "A pinned Compact runner checks a full-value receive-and-relay with a destination call commitment. The native host finalizes one five-unit Relay transient and equal-value Destination output on Ledger 9.1.0.1, and rejects a wrong recipient and color. Other amounts and call shapes remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5307,7 +5307,14 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/compact/ShieldedCoinMap.compact",
+        "tests/compact/shielded-coin-map.mjs",
+        "tests/ShieldedImmediateRelay.lean",
+        "runtime/src/localnet/shielded_relay.rs",
+        "docs/development/shielded-immediate-relay-localnet-receipt.json",
+        "docs/development/compact-shielded-coin-map.md"
+      ],
       "equivalence": "unverified"
     },
     {
