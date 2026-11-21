@@ -2,6 +2,10 @@ import Noctium.Verification.ScalarNormalization
 namespace Noctium.Verification.ScalarNormalization
 open Backend.Native NativeRelation
 
+private theorem scalarType_notOpaque {ty : Ty} (supported : ScalarType ty) :
+    ty.isOpaqueBytes = false := by
+  cases supported <;> rfl
+
 /-- Every name admitted by source type checking has an actual value and alias.
 No source execution or compiler-preservation conclusion is assumed. -/
 structure TypedEnvironment (hash : Hash) (inputs : Assignment)
@@ -14,7 +18,6 @@ theorem TypedEnvironment.cons (hash : Hash) (inputs : Assignment)
     (aliases : AliasEnvironment) (values : EvalEnv) (types : TypeEnv)
     (environment : TypedEnvironment hash inputs aliases values types)
     (name : String) (ty : Ty) (value : ty.Denote) (term : Term)
-    (scalarType : ScalarType ty)
     (canonical : Canonical ty value)
     (meaning : interpret hash inputs term = sourceScalar? ty value) :
     TypedEnvironment hash inputs ((name, term) :: aliases) ((name, Value.pack ty value) :: values)
@@ -310,7 +313,8 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
         (target.isJubjub || source.isJubjub || target.isForeign || source.isForeign) = false := by
       cases sourceType <;> cases targetType <;> simp [Ty.isBytes, Ty.isJubjub, Ty.isForeign]
     rw [scalarGuards.1, scalarGuards.2] at valid
-    simp only [Bool.false_eq_true, if_false] at valid
+    simp only [scalarType_notOpaque sourceType, scalarType_notOpaque targetType,
+      Bool.or_false, Bool.false_eq_true, if_false] at valid
     change Except.bind (target.validate {poseidon2 := true})
       (fun _ => expression.validate {poseidon2 := true} types) = .ok () at valid
     rw [except_unit_bind] at valid
@@ -379,7 +383,7 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     obtain ⟨resultBody, eb, bc, bq, bm⟩ := ib ((name, source) :: types) ((name, vn.term) :: aliases)
       ((name, Value.pack source result) :: values)
       (environment.cons hash inputs aliases values types name source result vn.term
-        sourceScalar vc vm) bn valid.2 nb br
+        vc vm) bn valid.2 nb br
     apply normalized_success (ty := ty) ctx hash implementation inputs aliases values environment.aliases _
       (ScalarExpression.letE name expression body sourceScalar valueSupported bodySupported) _
       (by simp only [normalize, nv, bind, Except.bind, nb]; rfl) resultBody
@@ -429,7 +433,8 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     simp only [Expr.validate] at valid
     have scalarKinds : ty.isBytes = false ∧ ty.isJubjub = false ∧ ty.isForeign = false := by
       cases scalarType <;> simp [Ty.isBytes, Ty.isJubjub, Ty.isForeign]
-    simp only [scalarKinds.1, scalarKinds.2.1, scalarKinds.2.2, Bool.false_eq_true, if_false] at valid
+    simp only [scalarKinds.1, scalarKinds.2.1, scalarKinds.2.2, scalarType_notOpaque scalarType,
+      Bool.or_false, Bool.false_eq_true, if_false] at valid
     change Except.bind (a.validate {poseidon2 := true} types)
       (fun _ => b.validate {poseidon2 := true} types) = .ok () at valid
     rw [except_unit_bind] at valid
@@ -450,7 +455,8 @@ theorem normalize_sound (ctx : EvalContext) (hash : Hash)
     simp only [Expr.validate] at valid
     have scalarKinds : ty.isBytes = false ∧ ty.isJubjub = false ∧ ty.isForeign = false := by
       cases scalarType <;> simp [Ty.isBytes, Ty.isJubjub, Ty.isForeign]
-    simp only [scalarKinds.1, scalarKinds.2.1, scalarKinds.2.2, Bool.false_eq_true, if_false] at valid
+    simp only [scalarKinds.1, scalarKinds.2.1, scalarKinds.2.2, scalarType_notOpaque scalarType,
+      Bool.or_false, Bool.false_eq_true, if_false] at valid
     change Except.bind (c.validate {poseidon2 := true} types)
       (fun _ => Except.bind (a.validate {poseidon2 := true} types)
         (fun _ => b.validate {poseidon2 := true} types)) = .ok () at valid

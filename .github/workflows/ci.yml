@@ -190,7 +190,7 @@ jobs:
               --no-default-features --features zkir-321 --test effect_blocks
       - name: Check source proof registration
         run: |
-          lake build Noctium.Verification
+          lake build Noctium.Verification Noctium.Verification.ScalarNormalizationSoundness
           lake env lean tests/Verification.lean
       - name: Check readable private state source and disclosure
         run: |
