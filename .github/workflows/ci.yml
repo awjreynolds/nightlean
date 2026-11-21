@@ -61,6 +61,7 @@ jobs:
           lake env lean tests/Sha512Fab.lean
           lake env lean tests/Issue70HashPreimages.lean
           lake env lean tests/Issue70Jubjub.lean
+          lake env lean tests/JubjubGroupParity.lean
           lake env lean tests/JubjubScalarBoundary.lean
           lake env lean tests/Issue70DerivedCrypto.lean
           lake env lean tests/NativeInverse.lean

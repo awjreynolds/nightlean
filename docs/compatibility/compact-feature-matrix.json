@@ -4464,8 +4464,8 @@
       "id": "C-STDLIB-JUBJUBPOINT",
       "layer": "standard-library",
       "surface": "JubjubPoint",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Typed JubjubPoint construction, projection, group addition, negation, point multiplication and generator multiplication are matched for the exercised Jubjub path. The fixture uses the generator and identity with scalar one. Other curve families and broader scalar/point vectors remain unqualified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4478,7 +4478,12 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -4512,8 +4517,8 @@
       "id": "C-STDLIB-CONSTRUCTJUBJUBPOINT",
       "layer": "standard-library",
       "surface": "constructJubjubPoint",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Native coordinate inputs pass through checked Jubjub point construction and bind the resulting x/y coordinates. The paired fixture checks the valid generator and identity only, so invalid-coordinate rejection is not compared.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4526,15 +4531,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-JUBJUBPOINTX",
       "layer": "standard-library",
       "surface": "jubjubPointX",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Returns the x coordinate from checked typed Jubjub points. The paired fixture compares generator, identity, multiplication, addition and negation results.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4547,15 +4557,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-JUBJUBPOINTY",
       "layer": "standard-library",
       "surface": "jubjubPointY",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Returns the y coordinate from checked typed Jubjub points. The paired fixture compares generator, identity, multiplication, addition and negation results.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4568,7 +4583,12 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -4917,8 +4937,8 @@
       "id": "C-STDLIB-ECADD",
       "layer": "standard-library",
       "surface": "ecAdd",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The Jubjub overload matches addition with identity and addition of a point to its negation. Other curve/field overloads and broader inputs remain unqualified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4931,15 +4951,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-ECNEG",
       "layer": "standard-library",
       "surface": "ecNeg",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The Jubjub overload matches point negation and identity negation. Other curve overloads and broader point vectors remain unqualified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4952,15 +4977,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-ECMUL",
       "layer": "standard-library",
       "surface": "ecMul",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The Jubjub overload matches multiplication of a checked point by scalar one. Other curve/field overloads and broader scalar/point vectors remain unqualified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4973,15 +5003,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-ECMULGENERATOR",
       "layer": "standard-library",
       "surface": "ecMulGenerator",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The Jubjub overload matches generator multiplication by scalar one. Other curve/field overloads and broader scalar vectors remain unqualified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4994,7 +5029,12 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/JubjubGroupParity.lean",
+        "tests/compact/JubjubGroupParity.compact",
+        "tests/compact/jubjub-group-parity.mjs",
+        "runtime/tests/jubjub_group_parity.rs"
+      ],
       "equivalence": "unverified"
     },
     {
