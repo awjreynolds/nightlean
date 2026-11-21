@@ -14,6 +14,12 @@ This comparison uses Compact 0.36.1, language 0.28, and the selected Noctium tar
 
 [Compact language and compiler](https://github.com/LFDT-Minokawa/compact/tree/7fa3a117c5e7efe9d2c51da04263e5f0b3509144) · [Feature-level evidence and gaps](compact-feature-matrix.json) · [Noctium assurance scope](../designs/architecture.md#assurance-boundaries)
 
+### Ledger collection gaps
+
+The feature register links implemented Map, Set, List and Counter paths to their source and checks. General Map default insertion, qualified shielded-coin insertion, and read-only SDK collection iterators remain open. [Expression-valued Counter updates](https://github.com/awjreynolds/noctium/issues/178) · [Lists of scalar values](https://github.com/awjreynolds/noctium/issues/179)
+
+Compact's List head returns `Maybe<T>`. Noctium's `headOrDefault` binds presence and typed defaults, while strict `head` requires a nonempty List. The scoped native examples cover Noctium's result shapes. Matched reference checks are still required for equivalence. [Pinned ledger ADT reference](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/ledger-adt.mdx) · [Noctium List examples](../development/native-lists.md)
+
 ## Witness execution targets
 
 ✓ marks a documented execution path. The Compact column covers generated interfaces. An n/a entry refers to a compiler output target. The Noctium column names the qualification for each host.

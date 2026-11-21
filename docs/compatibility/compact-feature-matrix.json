@@ -2072,8 +2072,8 @@
       "id": "C-ADT-COUNTER-DECREMENT",
       "layer": "language-ledger",
       "surface": "Counter.decrement",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Standalone and nested Bytes8 Counters support decrement by a compile-time u32 immediate and reject UInt64 underflow. The declared Compact Uint<16> expression form remains open.",
       "source": [
         "adt"
       ],
@@ -2082,15 +2082,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeCounter.lean",
+        "runtime/tests/native_counter.rs",
+        "docs/development/native-counter.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-COUNTER-INCREMENT",
       "layer": "language-ledger",
       "surface": "Counter.increment",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Standalone and nested Bytes8 Counters support increment by a compile-time u32 immediate and reject UInt64 overflow. Inactive updates skip path access and mutation. The declared Compact Uint<16> expression form remains open.",
       "source": [
         "adt"
       ],
@@ -2099,15 +2103,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeCounter.lean",
+        "runtime/tests/native_counter.rs",
+        "docs/development/native-counter.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-COUNTER-LESSTHAN",
       "layer": "language-ledger",
       "surface": "Counter.lessThan",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Native strict comparison with a UInt64 expression works on standalone and nested Bytes8 Counters. Reads observe earlier updates. Equality and inactive reads bind false. Active missing or malformed values reject.",
       "source": [
         "adt"
       ],
@@ -2116,15 +2124,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/CounterCompare.lean",
+        "runtime/tests/counter_compare.rs",
+        "docs/development/native-counter.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-COUNTER-READ",
       "layer": "language-ledger",
       "surface": "Counter.read",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Reads the UInt64 value of a standalone or nested Bytes8 Counter, including earlier updates in the same entrypoint. An inactive read binds zero. The host ledger getter remains unqualified.",
       "source": [
         "adt"
       ],
@@ -2133,15 +2145,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeCounter.lean",
+        "runtime/tests/native_counter.rs",
+        "docs/development/native-counter.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-COUNTER-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "Counter.resetToDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Reset writes the Bytes8 UInt64 zero value to a standalone Counter or a nested leaf. It also initializes an absent leaf under existing parents. Inactive reset skips mutation.",
       "source": [
         "adt"
       ],
@@ -2150,7 +2166,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeCounter.lean",
+        "runtime/tests/native_counter.rs",
+        "docs/development/native-counter.md"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2158,7 +2178,7 @@
       "layer": "language-ledger",
       "surface": "Set.insert",
       "noctiumStatus": "subset",
-      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Duplicate insertion preserves cardinality. Native members store Null.",
+      "notes": "Ordered insertion into standalone or map-nested Sets. The matched Native-parent and Bytes32-member case covers duplicate insertion and a finalized localnet insertion. A separate native fixture covers Curve25519Point members. Qualified shielded-coin insertion uses a separate method.",
       "source": [
         "adt"
       ],
@@ -2172,7 +2192,9 @@
         "tests/compact/native-set.mjs",
         "runtime/tests/native_set.rs",
         "docs/development/native-contract.md",
-        "docs/development/native-set-localnet-receipt.json"
+        "docs/development/native-set-localnet-receipt.json",
+        "tests/ForeignKeys.lean",
+        "runtime/tests/foreign_keys.rs"
       ],
       "equivalence": "unverified"
     },
@@ -2181,7 +2203,7 @@
       "layer": "language-ledger",
       "surface": "Set.insertCoin",
       "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "notes": "Qualified shielded-coin insertion requires a coin index allocated in the current transaction. Noctium supports ordinary Set insertion and has no qualified-coin insertion route.",
       "source": [
         "adt"
       ],
@@ -2198,7 +2220,7 @@
       "layer": "language-ledger",
       "surface": "Set.isEmpty",
       "noctiumStatus": "subset",
-      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. The native comparison binds the Boolean predicate. An inactive read skips the selected path.",
+      "notes": "Binds native Boolean emptiness for a standalone or map-nested Set. The matched case uses Bytes32 members and a Native parent. An inactive read binds false and skips path access. The host ledger method remains unqualified.",
       "source": [
         "adt"
       ],
@@ -2220,7 +2242,7 @@
       "layer": "language-ledger",
       "surface": "Set.member",
       "noctiumStatus": "subset",
-      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Reads selected member presence through the recursive ledger path.",
+      "notes": "Reads ordered member presence from standalone and nested Sets. The matched case uses Bytes32 members and Native parent keys. The native foreign-key case also covers Curve25519Point members. The host ledger method remains unqualified.",
       "source": [
         "adt"
       ],
@@ -2233,7 +2255,9 @@
         "tests/NativeSet.lean",
         "tests/compact/native-set.mjs",
         "runtime/tests/native_set.rs",
-        "docs/development/native-contract.md"
+        "docs/development/native-contract.md",
+        "tests/ForeignKeys.lean",
+        "runtime/tests/foreign_keys.rs"
       ],
       "equivalence": "unverified"
     },
@@ -2242,7 +2266,7 @@
       "layer": "language-ledger",
       "surface": "Set.remove",
       "noctiumStatus": "subset",
-      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Removing an absent member preserves the set.",
+      "notes": "Removes Bytes32 members in the matched standalone and nested case. An absent member leaves the Set unchanged. A separate native fixture exercises removal of Curve25519Point members. General composite member keys remain open.",
       "source": [
         "adt"
       ],
@@ -2255,7 +2279,9 @@
         "tests/NativeSet.lean",
         "tests/compact/native-set.mjs",
         "runtime/tests/native_set.rs",
-        "docs/development/native-contract.md"
+        "docs/development/native-contract.md",
+        "tests/ForeignKeys.lean",
+        "runtime/tests/foreign_keys.rs"
       ],
       "equivalence": "unverified"
     },
@@ -2264,7 +2290,7 @@
       "layer": "language-ledger",
       "surface": "Set.resetToDefault",
       "noctiumStatus": "subset",
-      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Clearing a nested set preserves sibling collections.",
+      "notes": "Clears an ordinary standalone or nested Set. The matched Bytes32 member case preserves sibling Sets. The Curve25519Point fixture also initializes a missing Set under an existing map.",
       "source": [
         "adt"
       ],
@@ -2277,7 +2303,9 @@
         "tests/NativeSet.lean",
         "tests/compact/native-set.mjs",
         "runtime/tests/native_set.rs",
-        "docs/development/native-contract.md"
+        "docs/development/native-contract.md",
+        "tests/ForeignKeys.lean",
+        "runtime/tests/foreign_keys.rs"
       ],
       "equivalence": "unverified"
     },
@@ -2286,7 +2314,7 @@
       "layer": "language-ledger",
       "surface": "Set.size",
       "noctiumStatus": "subset",
-      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Reads the number of distinct members as UInt64.",
+      "notes": "Binds the UInt64 count of distinct members after mutation. The matched case covers standalone and nested Sets with Bytes32 members and a Native parent key. The host ledger method remains unqualified.",
       "source": [
         "adt"
       ],
@@ -2308,7 +2336,7 @@
       "layer": "host-ledger-view",
       "surface": "Set.[Symbol.iterator]",
       "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "notes": "Compact exposes this method through TypeScript ledger views. Noctium has no matching host Set iterator in the public SDK.",
       "source": [
         "adt"
       ],
@@ -2324,7 +2352,7 @@
       "layer": "language-ledger",
       "surface": "Map.insert",
       "noctiumStatus": "subset",
-      "notes": "Native/Bool subset only. Compact ADT value layout and method equivalence unverified.",
+      "notes": "Source upserts ordered scalar entries and writes checked records. Native examples cover Bytes32 keys, structured Native updates, qualified foreign keys, and mixed Native, Bytes32 and JubjubPoint records on direct and nested paths. Generic ADT values and all Compact overloads remain open.",
       "source": [
         "adt"
       ],
@@ -2334,9 +2362,14 @@
         "LEDGER"
       ],
       "observedEvidence": [
-        "Noctium/IR.lean",
-        "Noctium/Backend/Impact.lean",
-        "docs/development/native-localnet.md"
+        "tests/Issue69Bytes32Map.lean",
+        "runtime/tests/bytes32_map.rs",
+        "tests/StructuredMaps.lean",
+        "runtime/tests/structured_maps.rs",
+        "tests/MixedLedgerRecord.lean",
+        "runtime/tests/mixed_ledger_record.rs",
+        "tests/ForeignKeys.lean",
+        "runtime/tests/foreign_keys.rs"
       ],
       "equivalence": "unverified",
       "structuredMapUpdate": {
@@ -2361,7 +2394,7 @@
       "layer": "language-ledger",
       "surface": "Map.insertCoin",
       "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "notes": "Qualified shielded-coin insertion requires a coin index allocated in the current transaction. Ordinary Noctium Map upsert has no qualified-coin insertion route.",
       "source": [
         "adt"
       ],
@@ -2377,8 +2410,8 @@
       "id": "C-ADT-MAP-INSERTDEFAULT",
       "layer": "language-ledger",
       "surface": "Map.insertDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Explicit emptyMap assignment initializes or replaces a nested Map under an existing parent. Noctium also has typed reset forms for selected ADTs. Generic insertDefault for arbitrary Map value types remains open.",
       "source": [
         "adt"
       ],
@@ -2387,7 +2420,12 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/Issue69NestedCounter.lean",
+        "runtime/tests/nested_counter.rs",
+        "tests/MixedLedgerRecord.lean",
+        "runtime/tests/mixed_ledger_record.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2395,7 +2433,7 @@
       "layer": "language-ledger",
       "surface": "Map.isEmpty",
       "noctiumStatus": "subset",
-      "notes": "Native Boolean collection emptiness. The guarded Set fixture also checks the empty and populated outer Native-keyed map in Lean, Compact 0.36.1 and the native runtime.",
+      "notes": "Binds native Boolean emptiness for a direct or nested Map path. The matched Set fixture also checks the empty and populated outer Native-keyed Map. Inactive queries bind false without accessing the path. The host ledger method remains unqualified.",
       "source": [
         "adt"
       ],
@@ -2407,7 +2445,8 @@
       "observedEvidence": [
         "tests/NativeSet.lean",
         "tests/compact/native-set.mjs",
-        "runtime/tests/native_set.rs"
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
       ],
       "equivalence": "unverified"
     },
@@ -2415,8 +2454,8 @@
       "id": "C-ADT-MAP-LOOKUP",
       "layer": "language-ledger",
       "surface": "Map.lookup",
-      "noctiumStatus": "missing",
-      "notes": "IR has readMap, but native lowerer explicitly rejects map value reads.",
+      "noctiumStatus": "subset",
+      "notes": "Reads ordered scalar or checked record values from an existing direct or nested Map key. Native evidence includes Bytes32 keys, guarded Native reads, and mixed Native, Bytes32 and JubjubPoint records. An active missing read rejects. Callers use membership and guards for defaults. ADT-valued lookup results and the host ledger method remain open.",
       "source": [
         "adt"
       ],
@@ -2425,7 +2464,14 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/Issue69Bytes32Map.lean",
+        "runtime/tests/bytes32_map.rs",
+        "tests/StructuredMaps.lean",
+        "runtime/tests/structured_maps.rs",
+        "tests/MixedLedgerRecord.lean",
+        "runtime/tests/mixed_ledger_record.rs"
+      ],
       "equivalence": "unverified",
       "structuredMapUpdate": {
         "checkedOn": "2026-11-18",
@@ -2448,8 +2494,8 @@
       "id": "C-ADT-MAP-MEMBER",
       "layer": "language-ledger",
       "surface": "Map.member",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Binds Boolean presence on direct and nested Map paths and observes earlier writes. Native cases cover Bytes32 and qualified foreign keys and a guarded structured Native upsert. Inactive queries bind false. The host ledger method remains unqualified.",
       "source": [
         "adt"
       ],
@@ -2458,7 +2504,14 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/Issue69Bytes32Map.lean",
+        "runtime/tests/bytes32_map.rs",
+        "tests/StructuredMaps.lean",
+        "runtime/tests/structured_maps.rs",
+        "tests/ForeignKeys.lean",
+        "runtime/tests/foreign_keys.rs"
+      ],
       "equivalence": "unverified",
       "structuredMapUpdate": {
         "checkedOn": "2026-11-18",
@@ -2481,8 +2534,8 @@
       "id": "C-ADT-MAP-REMOVE",
       "layer": "language-ledger",
       "surface": "Map.remove",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Removes a leaf on a typed direct or nested Map path. An absent final key leaves the map unchanged, an absent parent rejects, and a false guard skips access. Native evidence covers nested Bytes32-keyed records and direct or nested foreign-keyed scalar maps.",
       "source": [
         "adt"
       ],
@@ -2491,15 +2544,21 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeMapRemove.lean",
+        "runtime/tests/native_map_remove.rs",
+        "docs/development/native-map-remove.md",
+        "tests/ForeignKeys.lean",
+        "runtime/tests/foreign_keys.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-MAP-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "Map.resetToDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Reset lowers to native empty-map replacement for a standalone or nested Map. Nested emptyMap insertion exercises the same effect in the native fixtures. A dedicated reference comparison for clearing a populated Map remains open.",
       "source": [
         "adt"
       ],
@@ -2508,15 +2567,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Frontend/Core.lean",
+        "Noctium/Backend/Impact.lean",
+        "tests/Issue69NestedCounter.lean",
+        "runtime/tests/nested_counter.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-MAP-SIZE",
       "layer": "language-ledger",
       "surface": "Map.size",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "The source size statement and native Map or Set size operation bind UInt64. Inactive queries bind zero. The existing checker fixture exercises the shared operation on Sets. Dedicated Map size comparison and host qualification remain open.",
       "source": [
         "adt"
       ],
@@ -2525,7 +2589,12 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Frontend/Core.lean",
+        "Noctium/Backend/Impact.lean",
+        "tests/NativeSet.lean",
+        "runtime/tests/native_set.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2533,7 +2602,7 @@
       "layer": "host-ledger-view",
       "surface": "Map.[Symbol.iterator]",
       "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "notes": "Compact exposes this method through TypeScript ledger views. Noctium has no matching host Map iterator in the public SDK.",
       "source": [
         "adt"
       ],
@@ -2548,8 +2617,8 @@
       "id": "C-ADT-LIST-HEAD",
       "layer": "language-ledger",
       "surface": "List.head",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Standalone and nested named-record Lists support strict head and headOrDefault. Strict head rejects empty Lists. headOrDefault binds presence and fields, with zero Native and Bytes32 values and the Jubjub identity for empty or inactive reads. Compact returns Maybe<T>. Scalar List elements and the host ledger getter remain open.",
       "source": [
         "adt"
       ],
@@ -2558,15 +2627,21 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/OptionalListHead.lean",
+        "runtime/tests/optional_list_head.rs",
+        "tests/MixedLedgerRecord.lean",
+        "runtime/tests/mixed_ledger_record.rs",
+        "docs/development/native-lists.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-LIST-ISEMPTY",
       "layer": "language-ledger",
       "surface": "List.isEmpty",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "related-subset",
+      "notes": "The checked UInt64 length supports an explicit comparison with zero. The optional head route already predicates its head read on nonzero length. Dedicated List isEmpty syntax and matched host and circuit checks remain open.",
       "source": [
         "adt"
       ],
@@ -2575,15 +2650,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/OptionalListHead.lean",
+        "runtime/tests/optional_list_head.rs",
+        "docs/development/native-lists.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-LIST-LENGTH",
       "layer": "language-ledger",
       "surface": "List.length",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Reads UInt64 length from standalone or nested Lists of checked named records. Reads observe earlier prepends, pops and resets. A guarded inactive read binds zero without path access. General element types and the host length method remain open.",
       "source": [
         "adt"
       ],
@@ -2592,15 +2671,21 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeList.lean",
+        "runtime/tests/native_list.rs",
+        "docs/development/native-lists.md",
+        "tests/OptionalListHead.lean",
+        "runtime/tests/optional_list_head.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-LIST-POPFRONT",
       "layer": "language-ledger",
       "surface": "List.popFront",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Removes a nonempty standalone or nested named-record List head and preserves the tail. Noctium checks and rejects an empty pop in the VM. Ordered mixed-record pop is also covered. Scalar List elements and matched Compact empty-pop behavior remain open.",
       "source": [
         "adt"
       ],
@@ -2609,15 +2694,21 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeList.lean",
+        "runtime/tests/native_list.rs",
+        "docs/development/native-lists.md",
+        "tests/MixedLedgerRecord.lean",
+        "runtime/tests/mixed_ledger_record.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-LIST-PUSHFRONT",
       "layer": "language-ledger",
       "surface": "List.pushFront",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Prepends a named record to a standalone or nested List with explicit disclosure for private fields and activity. Evidence covers Native-only records and a mixed Native, Bytes32 and JubjubPoint record. Scalar elements and general aggregate shapes remain open.",
       "source": [
         "adt"
       ],
@@ -2626,7 +2717,13 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeList.lean",
+        "runtime/tests/native_list.rs",
+        "docs/development/native-lists.md",
+        "tests/MixedLedgerRecord.lean",
+        "runtime/tests/mixed_ledger_record.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2634,7 +2731,7 @@
       "layer": "language-ledger",
       "surface": "List.pushFrontCoin",
       "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "notes": "Qualified shielded-coin insertion requires a coin index allocated in the current transaction. The current List prepend accepts checked named records. The coin-valued method remains open.",
       "source": [
         "adt"
       ],
@@ -2650,8 +2747,8 @@
       "id": "C-ADT-LIST-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "List.resetToDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Reset writes the empty native List sentinel. It clears standalone and nested named-record Lists and initializes absent List leaves under existing parents. The focused Native-record case preserves sibling paths. General element types remain open.",
       "source": [
         "adt"
       ],
@@ -2660,7 +2757,13 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeList.lean",
+        "runtime/tests/native_list.rs",
+        "docs/development/native-lists.md",
+        "tests/OptionalListHead.lean",
+        "runtime/tests/optional_list_head.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2668,7 +2771,7 @@
       "layer": "host-ledger-view",
       "surface": "List.[Symbol.iterator]",
       "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "notes": "Compact exposes this method through TypeScript ledger views. Noctium has no matching ordered host List iterator in the public SDK.",
       "source": [
         "adt"
       ],
