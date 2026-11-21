@@ -392,8 +392,8 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     pure {term := foreignConstantTerm (.base curve) (← Foreign.encodeField (.base curve) value)}
   | .foreignScalar curve value => do
     pure {term := foreignConstantTerm (.scalar curve) (← Foreign.encodeField (.scalar curve) value)}
-  | .foreignIdentity curve =>
-    pure {term := foreignConstantTerm (.point curve) (Foreign.identityEncoding curve)}
+  | .foreignPoint curve value => do
+    pure {term := foreignConstantTerm (.point curve) (← Foreign.encodePoint curve value)}
   | .foreignEncodedField (kind := kind) value index => do
     unless index < kind.encodedFieldCount do throw "foreign encoding projection index is out of range"
     let normalized ← normalize env value

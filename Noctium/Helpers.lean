@@ -1228,17 +1228,6 @@ private abbrev PartialTermInfo := TermInfo (Option ResultType)
 private def combine {Ty : Type} (ty : Ty) (children : List (TermInfo Ty)) (effects : Effects := []) : TermInfo Ty :=
   {ty, calls := children.flatMap (·.calls), effects := (children.flatMap (·.effects) ++ effects).eraseDups, guarded := children.any (·.guarded)}
 
-/-- Validate the source's deliberately narrow foreign literal surface. Base and
-scalar values use the canonical two-limb encoding. Point literals currently
-admit only the canonical identity encoding. -/
-private def decodeForeignConstant (kind : Foreign.Kind) (encoding : List Nat) : Except String (Option Nat) := do
-  match kind with
-  | .base _ | .scalar _ => some <$> Foreign.decodeField kind encoding
-  | .point curve => do
-    unless encoding == Foreign.identityEncoding curve do
-      throw "foreign point literals currently support only the canonical identity"
-    pure none
-
 private def partialSubtype (source : Option ResultType) (target : ResultType) : Bool :=
   match source with
   | none => true
@@ -1366,7 +1355,7 @@ private def inferPartialTerm (fuel : Nat) (program : Program) (scope : Nat)
       pure {ty := some (.scalar (.bytes 32))}
     | .foreignConstant kind encoding => do
       liftError span ((Ty.foreign kind).validate Capabilities.crypto)
-      discard (decodeForeignConstant kind encoding |>.mapError fun message => {span, message})
+      discard (Foreign.decodeValue kind encoding |>.mapError fun message => {span, message})
       pure {ty := some (.scalar (.foreign kind))}
     | .bytes operation arguments => do
       let (expected, result) ← (operation.signature arguments.length).mapError fun message =>
@@ -1807,6 +1796,11 @@ structure Lowered where
 private def scalarValue {ty : Ty} (value : Expr ty) : Lowered :=
   { ty := .scalar ty, scalar := ⟨ty, value⟩ }
 
+private def foreignConstantExpr : (kind : Foreign.Kind) → kind.Denote → Expr (.foreign kind)
+  | .base curve, value => .foreignBase curve value
+  | .scalar curve, value => .foreignScalar curve value
+  | .point curve, value => .foreignPoint curve value
+
 private def unitValue : Lowered := {ty := .unit, scalar := ⟨.bool, .bool true⟩}
 
 private def components (value : Lowered) : List Scalar :=
@@ -1861,7 +1855,7 @@ private def typedExpr (span : SourceSpan) (target : Ty) (value : Lowered) : Exce
 
 private partial def expressionUsesName (name : String) : Expr ty → Bool
   | .native _ | .bool _ | .uint _ _ | .bytesLiteral _ _ | .bytes32Literal _
-  | .foreignBase _ _ | .foreignScalar _ _ => false
+  | .foreignBase _ _ | .foreignScalar _ _ | .foreignPoint _ _ => false
   | .bytesField value _ | .bytesAt value _ | .reverseBytes value | .sliceBytes value _ _
   | .sha256 value | .sha512 value | .keccak256 value | .persistentHash32 value | .reverseBytes32 value
   | .persistentHashNative value | .toBytes32 value | .fromBytes32 value | .fromBytes value
@@ -1888,6 +1882,7 @@ private partial def expressionUsesName (name : String) : Expr ty → Bool
 
 private partial def expressionIsTotal (env : TypeEnv) : Expr ty → Bool
   | .native _ | .bool _ | .uint _ _ => true
+  | .foreignPoint curve point => Foreign.pointValid curve point
   | .bytesLiteral length values =>
     length ≤ maxBytesLength && values.length == length && values.all (· ≤ 255)
   | .bytes32Literal values => values.length == 32 && values.all (· ≤ 255)
@@ -2399,12 +2394,8 @@ mutual
       pure {result with constraints := values.flatMap (·.constraints) ++ result.constraints}
     | .bytes32Literal bytes => pure (scalarValue (Expr.bytes32Literal bytes))
     | .foreignConstant kind encoding => do
-      let decoded ← liftD (decodeForeignConstant kind encoding |>.mapError fun message => {span, message})
-      match kind, decoded with
-        | .base curve, some number => pure (scalarValue (Expr.foreignBase curve number))
-        | .scalar curve, some number => pure (scalarValue (Expr.foreignScalar curve number))
-        | .point curve, none => pure (scalarValue (Expr.foreignIdentity curve))
-        | _, _ => liftD (fail span "invalid checked foreign constant shape")
+      let decoded ← liftD (Foreign.decodeValue kind encoding |>.mapError fun message => {span, message})
+      pure (scalarValue (foreignConstantExpr kind decoded))
     | .bytesAt value index => do
       let value ← lowerTerm program scope env span value
       let .scalar (.bytes length) := value.ty

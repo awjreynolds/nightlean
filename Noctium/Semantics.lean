@@ -547,7 +547,7 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     if value < curve.baseModulus then pure value else .error "foreign base-field constant is not canonical"
   | .foreignScalar curve value =>
     if value < curve.scalarModulus then pure value else .error "foreign scalar constant is not canonical"
-  | .foreignIdentity _ => pure .identity
+  | .foreignPoint curve value => checkedForeignPoint curve value
   | .foreignEncodedField (kind := kind) value index => do
     let encoded ← Foreign.encodeValue kind (← value.eval ctx env)
     match encoded[index]? with

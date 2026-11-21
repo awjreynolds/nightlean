@@ -86,7 +86,7 @@ private def expressionJson : Expr ty → Json
       ("values", toJson (values.map expressionJson))]
   | .foreignBase curve value => foreignConstantJson (.base curve) value
   | .foreignScalar curve value => foreignConstantJson (.scalar curve) value
-  | .foreignIdentity curve => foreignConstantJson (.point curve) .identity
+  | .foreignPoint curve value => foreignConstantJson (.point curve) value
   | .foreignEncodedField (kind := kind) value index => Json.mkObj [
       ("tag", toJson ("foreignEncodedField" : String)),
       ("value", expressionJson value), ("index", toJson index)]

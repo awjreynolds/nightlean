@@ -36,9 +36,10 @@ def nativeModulus : Nat :=
 mutual
 private def checkConstants : Expr ty → Except String Unit
   | .native n => if n < nativeModulus then pure () else throw "noncanonical Native constant"
-  | .bool _ | .ref _ | .foreignIdentity _ => pure ()
+  | .bool _ | .ref _ => pure ()
   | .foreignBase curve value => discard (Foreign.encodeField (.base curve) value)
   | .foreignScalar curve value => discard (Foreign.encodeField (.scalar curve) value)
+  | .foreignPoint curve value => discard (Foreign.encodePoint curve value)
   | .foreignEncodedField value _ | .foreignUnary _ value | .foreignToBytes value
   | .foreignFromBytes _ value => checkConstants value
   | .foreignBinary _ left right => do checkConstants left; checkConstants right
@@ -879,7 +880,7 @@ def lowerExpr : Expr ty → LowerM String
     lowerForeignFromBytes kind length (← lowerBytes value)
   | .foreignBase curve value => lowerForeignConstant (.base curve) (Foreign.encodeField (.base curve) value)
   | .foreignScalar curve value => lowerForeignConstant (.scalar curve) (Foreign.encodeField (.scalar curve) value)
-  | .foreignIdentity curve => lowerForeignConstant (.point curve) (.ok (Foreign.identityEncoding curve))
+  | .foreignPoint curve value => lowerForeignConstant (.point curve) (Foreign.encodePoint curve value)
   | .foreignEncodedField (kind := kind) value index => do
     let value ← lowerExpr value
     let fields ← encodeForeign kind value

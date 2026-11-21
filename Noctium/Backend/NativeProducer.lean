@@ -405,7 +405,9 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       let values ← encoding.toList.mapM fun item => do immediate (← item.getStr?)
       match kind with
       | .base _ | .scalar _ => discard (Foreign.decodeField kind values)
-      | .point curve => ensure (values == Foreign.identityEncoding curve) "only identity foreign point constants are qualified"
+      | .point curve => do
+        let point ← Foreign.decodePoint curve values
+        ensure ((← Foreign.encodePoint curve point) == values) "foreign point constant encoding is not canonical"
       defineResult state instruction {
         term := foreignConstantTerm kind values
         maximum := 0
