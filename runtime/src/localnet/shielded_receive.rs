@@ -445,7 +445,8 @@ mod tests {
                     "value": "0",
                     "mtIndex": "0"
                 },
-                "registry": []
+                "registry": [],
+                "coinList": []
             }}))?;
             let target = WitnessContractTarget::from_state_config(
                 ContractBundleSet::new(vec![bundle])?,
@@ -592,6 +593,7 @@ mod tests {
             let map_slot = slot("pot")?;
             let cell_slot = slot("held")?;
             let set_slot = slot("registry")?;
+            let list_slot = slot("coinList")?;
             let Some(StateValue::Map(coins)) = slots.get(map_slot) else {
                 anyhow::bail!("expected coin Map");
             };
@@ -621,6 +623,37 @@ mod tests {
                 matches!(coin_set.get(&qualified), Some(marker) if matches!(*marker, StateValue::Null)),
                 "finalized Set does not contain the Ledger-assigned qualified coin"
             );
+            let Some(StateValue::Array(coin_list)) = slots.get(list_slot) else {
+                anyhow::bail!("expected qualified coin List");
+            };
+            ensure!(coin_list.len() == 3, "invalid qualified coin List node");
+            let Some(StateValue::Cell(list_head)) = coin_list.get(0) else {
+                anyhow::bail!("expected qualified coin List head");
+            };
+            ensure!(
+                **list_head == qualified,
+                "finalized List head does not contain the Ledger-assigned qualified coin"
+            );
+            let Some(StateValue::Array(list_tail)) = coin_list.get(1) else {
+                anyhow::bail!("expected qualified coin List tail");
+            };
+            ensure!(
+                list_tail.len() == 3,
+                "invalid qualified coin List tail node"
+            );
+            ensure!(
+                matches!(list_tail.get(0), Some(StateValue::Null))
+                    && matches!(list_tail.get(1), Some(StateValue::Null))
+                    && matches!(list_tail.get(2), Some(StateValue::Cell(length)) if **length == AlignedValue::from(0u64)),
+                "qualified coin List contains unexpected tail entries"
+            );
+            let Some(StateValue::Cell(list_length)) = coin_list.get(2) else {
+                anyhow::bail!("expected qualified coin List length");
+            };
+            ensure!(
+                **list_length == AlignedValue::from(1u64),
+                "qualified coin List does not contain exactly one value"
+            );
             ensure!(
                 finalized
                     .state
@@ -643,6 +676,7 @@ mod tests {
                     "mapCoinMatchesFinalizedOutput": true,
                     "cellCoinMatchesFinalizedOutput": true,
                     "setCoinMatchesFinalizedOutput": true,
+                    "listCoinHeadMatchesFinalizedOutput": true,
                     "stateSha256": artifacts::digest(&finalized_contract.bytes),
                     "k": circuit.k(),
                     "rejected": ["missingOffer", "mismatchedOffer"]
