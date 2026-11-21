@@ -307,16 +307,36 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
       ("amount", nativeExpressionJson amount),
       ("commitment", nativeExpressionJson commitment)]
+  | .insertShieldedCoinSetTo slot nonce color amount isContract recipient commitment => Json.mkObj [
+      ("op", toJson ("insertShieldedCoinSetTo" : String)), ("slot", toJson slot),
+      ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
+      ("amount", nativeExpressionJson amount), ("isContract", nativeExpressionJson isContract),
+      ("recipient", nativeExpressionJson recipient),
+      ("commitment", nativeExpressionJson commitment)]
   | .writeShieldedCoinCell slot nonce color amount commitment => Json.mkObj [
       ("op", toJson ("writeShieldedCoinCell" : String)), ("slot", toJson slot),
       ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
       ("amount", nativeExpressionJson amount),
+      ("commitment", nativeExpressionJson commitment)]
+  | .writeShieldedCoinCellTo slot nonce color amount isContract recipient commitment => Json.mkObj [
+      ("op", toJson ("writeShieldedCoinCellTo" : String)), ("slot", toJson slot),
+      ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
+      ("amount", nativeExpressionJson amount), ("isContract", nativeExpressionJson isContract),
+      ("recipient", nativeExpressionJson recipient),
       ("commitment", nativeExpressionJson commitment)]
   | .listPushFrontCoin slot keys schema nonce color amount commitment => Json.mkObj [
       ("op", toJson ("listPushFrontCoin" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
       ("schema", schema), ("nonce", nativeExpressionJson nonce),
       ("color", nativeExpressionJson color), ("amount", nativeExpressionJson amount),
+      ("commitment", nativeExpressionJson commitment)]
+  | .listPushFrontCoinTo slot keys schema nonce color amount isContract recipient commitment => Json.mkObj [
+      ("op", toJson ("listPushFrontCoinTo" : String)), ("slot", toJson slot),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
+      ("schema", schema), ("nonce", nativeExpressionJson nonce),
+      ("color", nativeExpressionJson color), ("amount", nativeExpressionJson amount),
+      ("isContract", nativeExpressionJson isContract),
+      ("recipient", nativeExpressionJson recipient),
       ("commitment", nativeExpressionJson commitment)]
   | .spendShieldedFromMap nonce color amount recipient nullifier outputCommitment => Json.mkObj [
       ("op", toJson ("spendShieldedFromMap" : String)),
@@ -420,14 +440,29 @@ private def effectJson : Effect → Json
       ("op", toJson ("insertShieldedCoinSet" : String)), ("state", toJson state),
       ("nonce", expressionJson nonce), ("color", expressionJson color),
       ("amount", expressionJson amount), ("selfAddress", expressionJson selfAddress)]
+  | .insertShieldedCoinSetTo state nonce color amount isContract recipient => Json.mkObj [
+      ("op", toJson ("insertShieldedCoinSetTo" : String)), ("state", toJson state),
+      ("nonce", expressionJson nonce), ("color", expressionJson color),
+      ("amount", expressionJson amount), ("isContract", expressionJson isContract),
+      ("recipient", expressionJson recipient)]
   | .writeShieldedCoinCell state nonce color amount selfAddress => Json.mkObj [
       ("op", toJson ("writeShieldedCoinCell" : String)), ("state", toJson state),
       ("nonce", expressionJson nonce), ("color", expressionJson color),
       ("amount", expressionJson amount), ("selfAddress", expressionJson selfAddress)]
+  | .writeShieldedCoinCellTo state nonce color amount isContract recipient => Json.mkObj [
+      ("op", toJson ("writeShieldedCoinCellTo" : String)), ("state", toJson state),
+      ("nonce", expressionJson nonce), ("color", expressionJson color),
+      ("amount", expressionJson amount), ("isContract", expressionJson isContract),
+      ("recipient", expressionJson recipient)]
   | .pushFrontCoin state nonce color amount selfAddress => Json.mkObj [
       ("op", toJson ("pushFrontCoin" : String)), ("state", toJson state),
       ("nonce", expressionJson nonce), ("color", expressionJson color),
       ("amount", expressionJson amount), ("selfAddress", expressionJson selfAddress)]
+  | .pushFrontCoinTo state nonce color amount isContract recipient => Json.mkObj [
+      ("op", toJson ("pushFrontCoinTo" : String)), ("state", toJson state),
+      ("nonce", expressionJson nonce), ("color", expressionJson color),
+      ("amount", expressionJson amount), ("isContract", expressionJson isContract),
+      ("recipient", expressionJson recipient)]
   | .spendShieldedFromMap state nonce color amount recipient selfAddress => Json.mkObj [
       ("op", toJson ("spendShieldedFromMap" : String)), ("state", toJson state),
       ("nonce", expressionJson nonce), ("color", expressionJson color),
