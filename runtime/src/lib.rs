@@ -1549,30 +1549,32 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             schema,
             expressions,
         } => {
-            let parsed = checked_record_schema(schema)?;
-            ensure!(
-                expressions.len() == parsed.fields.len(),
-                "list record expression count mismatch"
-            );
+            let (popeq_width, push_width) =
+                match list_operation_scalar_type(plan, *slot, keys, schema)? {
+                    Some(ty) => {
+                        ensure!(
+                            expressions.len() == 1,
+                            "scalar List operation requires one expression"
+                        );
+                        (
+                            list_scalar_popeq_impact_width(&ty),
+                            list_scalar_push_impact_width(&ty),
+                        )
+                    }
+                    None => {
+                        let parsed = checked_record_schema(schema)?;
+                        ensure!(
+                            expressions.len() == parsed.fields.len(),
+                            "list record expression count mismatch"
+                        );
+                        (parsed.popeq_impact_width(), parsed.push_impact_width())
+                    }
+                };
             let path = path_field_count(plan, *slot, keys)?;
             if matches!(instruction, Instruction::ListHead { .. }) {
-                vec![1, path, 4, parsed.popeq_impact_width()]
+                vec![1, path, 4, popeq_width]
             } else {
-                vec![
-                    path,
-                    1,
-                    4,
-                    2,
-                    parsed.push_impact_width() + 3,
-                    1,
-                    5,
-                    1,
-                    1,
-                    1,
-                    5,
-                    1,
-                    1,
-                ]
+                vec![path, 1, 4, 2, push_width + 3, 1, 5, 1, 1, 1, 5, 1, 1]
             }
         }
         Instruction::ListPopFront { slot, keys } => {
@@ -1875,21 +1877,19 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
             .as_object()
             .ok_or_else(|| anyhow!("invalid list element schema"))?;
         ensure!(parts.len() == 1, "invalid list element schema");
+        if let Some(ty) = parts.get("scalar").and_then(Json::as_str) {
+            validate_tree_scalar_type(ty)?;
+            return Ok(());
+        }
         checked_record_schema(
             parts
                 .get("composite")
-                .ok_or_else(|| anyhow!("list requires a Native record element"))?,
+                .ok_or_else(|| anyhow!("List requires a scalar or record element"))?,
         )?;
         return Ok(());
     }
     if let Some(ty) = fields.get("scalar").and_then(Json::as_str) {
-        let ty = ScalarType::parse(ty)?;
-        #[cfg(feature = "zkir-321")]
-        if !matches!(&ty, ScalarType::Foreign(_)) {
-            reject_unqualified_foreign_storage(&ty)?;
-        }
-        #[cfg(not(feature = "zkir-321"))]
-        reject_unqualified_foreign_storage(&ty)?;
+        validate_tree_scalar_type(ty)?;
         return Ok(());
     }
     if let Some(schema) = fields.get("composite") {
@@ -1907,6 +1907,17 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         .ok_or_else(|| anyhow!("invalid state tree map schema"))?;
     ledger_key_type(&parts[0])?;
     validate_tree_schema(&parts[1], depth + 1)
+}
+
+fn validate_tree_scalar_type(ty: &str) -> Result<ScalarType> {
+    let ty = ScalarType::parse(ty)?;
+    #[cfg(feature = "zkir-321")]
+    if !matches!(&ty, ScalarType::Foreign(_)) {
+        reject_unqualified_foreign_storage(&ty)?;
+    }
+    #[cfg(not(feature = "zkir-321"))]
+    reject_unqualified_foreign_storage(&ty)?;
+    Ok(ty)
 }
 
 struct RecordField {
@@ -2230,16 +2241,25 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
                 );
             }
             Instruction::ListHead {
-                slot, keys, schema, ..
+                slot,
+                keys,
+                schema,
+                expressions,
             }
             | Instruction::ListPushFront {
-                slot, keys, schema, ..
+                slot,
+                keys,
+                schema,
+                expressions,
             } => {
-                checked_record_schema(schema)?;
-                ensure!(
-                    list_schema_at_path(plan, *slot, keys.len())? == schema,
-                    "List record operation differs from state schema"
-                );
+                if list_operation_scalar_type(plan, *slot, keys, schema)?.is_some() {
+                    ensure!(
+                        expressions.len() == 1,
+                        "scalar List operation requires one expression"
+                    );
+                } else {
+                    checked_record_schema(schema)?;
+                }
             }
             _ => {}
         }
@@ -2465,11 +2485,7 @@ fn validate_record_fields(schema: &aggregates::Schema, fields: &[Fr]) -> Result<
     Ok(())
 }
 
-fn record_component_names(
-    read: &Read,
-    expressions: &[Expr],
-    schema: &Json,
-) -> Result<()> {
+fn record_component_names(read: &Read, expressions: &[Expr], schema: &Json) -> Result<()> {
     let checked = checked_record_schema(schema)?;
     ensure!(
         read.ty == "Composite"
@@ -2520,6 +2536,104 @@ fn validate_byte_read_projections(read: &Read, ty: &ScalarType) -> Result<()> {
         "byte read projections differ from its declared length"
     );
     Ok(())
+}
+
+fn validate_jubjub_point_read_projections(read: &Read) -> Result<()> {
+    ensure!(
+        read.schema.is_none() && read.components.is_empty(),
+        "JubjubPoint read has record metadata"
+    );
+    let projections = read
+        .projections
+        .as_ref()
+        .ok_or_else(|| anyhow!("JubjubPoint read is missing its projections"))?;
+    ensure!(
+        projections.len() == 2
+            && projections.iter().enumerate().all(|(index, projection)| {
+                projection.name == format!("_noctium_jubjub_read_{}_{}", read.name, index)
+                    && projection.ty == "Native"
+            }),
+        "JubjubPoint read projections differ from its coordinates"
+    );
+    Ok(())
+}
+
+fn bind_list_scalar_read(
+    read: &Read,
+    expression: &Expr,
+    ty_name: &str,
+    guard: Option<&Expr>,
+    active: bool,
+    value: Value,
+    env: &mut Environment,
+) -> Result<PreparationRead> {
+    let ty = ScalarType::parse(ty_name)?;
+    ensure!(
+        matches!(expression, Expr::Reference { name } if name == &read.name)
+            && read.ty == ty_name
+            && read.guard.as_ref() == guard
+            && read.components.is_empty()
+            && read.schema.is_none()
+            && value.scalar_type() == ty,
+        "scalar List read schema mismatch"
+    );
+    value.validate()?;
+    ensure!(
+        !env.contains_key(&read.name),
+        "scalar List read shadows an existing value"
+    );
+    env.insert(read.name.clone(), value.clone());
+    let mut produced = vec![read.name.clone()];
+
+    let projections = if ty.bytes_length().is_some() {
+        validate_byte_read_projections(read, &ty)?;
+        byte_projection_bindings(&read.name, ty.bytes_length().unwrap())?
+    } else if ty == ScalarType::JubjubPoint {
+        validate_jubjub_point_read_projections(read)?;
+        (0..2)
+            .map(|index| {
+                (
+                    format!("_noctium_jubjub_read_{}_{}", read.name, index),
+                    "Native".to_owned(),
+                )
+            })
+            .collect()
+    } else {
+        ensure!(
+            read.projections.is_none(),
+            "scalar List read has unexpected projections"
+        );
+        Vec::new()
+    };
+
+    if !projections.is_empty() {
+        let encoded = match &value {
+            Value::Bytes(_) => {
+                let mut fields = Vec::new();
+                aligned_bytes(&value)?.value_only_field_repr(&mut fields);
+                fields
+            }
+            Value::JubjubPoint(point) => jubjub::coordinates(*point)?.to_vec(),
+            _ => bail!("scalar List projection type mismatch"),
+        };
+        ensure!(
+            projections.len() == encoded.len(),
+            "scalar List projection field count mismatch"
+        );
+        for ((name, projection_ty), field) in projections.into_iter().zip(encoded) {
+            ensure!(
+                !env.contains_key(&name),
+                "scalar List projection shadows an existing value"
+            );
+            env.insert(
+                name.clone(),
+                input_value(&projection_ty, &Json::String(field_decimal(field)))?,
+            );
+            produced.push(name);
+        }
+    }
+
+    Ok(read_event(read, active, env, produced))
 }
 
 fn key_alignment(ty: &ScalarType) -> &'static str {
@@ -3247,6 +3361,10 @@ fn read_state_cell(
 }
 
 fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<Value> {
+    ensure!(
+        value.alignment.fits(&value.value),
+        "state cell encoding mismatch"
+    );
     let parsed = ScalarType::parse(ty)?;
     let decoded = if let Some(length) = parsed.bytes_length() {
         ensure!(
@@ -3330,12 +3448,73 @@ fn tree_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
     Ok(schema)
 }
 
-fn list_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
+fn list_element_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
     ensure!(depth <= 13, "list path exceeds native insertion depth");
     tree_schema_at_path(plan, slot, depth)?
         .get("list")
-        .and_then(|value| value.get("composite"))
-        .ok_or_else(|| anyhow!("path does not select a Native-record List"))
+        .ok_or_else(|| anyhow!("path does not select a List"))
+}
+
+/// Validate an operation's canonical scalar token or existing record schema against state.
+/// `None` denotes the record wire form, `Some` denotes a scalar element.
+fn list_operation_scalar_type(
+    plan: &Plan,
+    slot: u32,
+    keys: &[PathPart],
+    operation_schema: &Json,
+) -> Result<Option<ScalarType>> {
+    let element = list_element_schema_at_path(plan, slot, keys.len())?;
+    if let Some(ty_name) = element.get("scalar").and_then(Json::as_str) {
+        ensure!(
+            operation_schema.as_str() == Some(ty_name),
+            "List scalar operation differs from state schema"
+        );
+        return Ok(Some(validate_tree_scalar_type(ty_name)?));
+    }
+    let record = element
+        .get("composite")
+        .ok_or_else(|| anyhow!("List state requires a scalar or record element"))?;
+    ensure!(
+        operation_schema == record,
+        "List record operation differs from state schema"
+    );
+    Ok(None)
+}
+
+fn list_scalar_storage_alignment(ty: &ScalarType) -> String {
+    match ty {
+        ScalarType::Bytes32 => "bytes32".to_owned(),
+        ScalarType::Bytes(length) => format!("bytes:{length}"),
+        _ => "field".to_owned(),
+    }
+}
+
+fn list_scalar_atom_count(ty: &ScalarType) -> usize {
+    match ty {
+        ScalarType::JubjubPoint => 2,
+        #[cfg(feature = "zkir-321")]
+        ScalarType::Foreign(ty) => ty.native_type().encoded_len(),
+        _ => 1,
+    }
+}
+
+fn list_scalar_payload_field_count(ty: &ScalarType) -> usize {
+    match ty {
+        ScalarType::Bytes32 => 2,
+        ScalarType::Bytes(length) => length.div_ceil(31),
+        ScalarType::JubjubPoint => 2,
+        #[cfg(feature = "zkir-321")]
+        ScalarType::Foreign(ty) => ty.native_type().encoded_len(),
+        _ => 1,
+    }
+}
+
+fn list_scalar_popeq_impact_width(ty: &ScalarType) -> usize {
+    2 + list_scalar_atom_count(ty) + list_scalar_payload_field_count(ty)
+}
+
+fn list_scalar_push_impact_width(ty: &ScalarType) -> usize {
+    3 + list_scalar_atom_count(ty) + list_scalar_payload_field_count(ty)
 }
 
 fn validate_map_size_path(plan: &Plan, slot: u32, depth: usize) -> Result<()> {
@@ -3410,8 +3589,17 @@ fn native_list_value(
     let StateValue::Cell(head) = node.get(0).unwrap() else {
         bail!("invalid List head cell")
     };
-    let checked = checked_record_schema(schema)?;
-    decode_record_value(&checked, head)?;
+    if let Some(ty_name) = schema.get("scalar").and_then(Json::as_str) {
+        let ty = validate_tree_scalar_type(ty_name)?;
+        decode_state_cell(head, ty_name, &list_scalar_storage_alignment(&ty))?;
+    } else {
+        let checked = checked_record_schema(
+            schema
+                .get("composite")
+                .ok_or_else(|| anyhow!("List state requires a scalar or record element"))?,
+        )?;
+        decode_record_value(&checked, head)?;
+    }
     Ok((length, Some((**head).clone())))
 }
 
@@ -4022,15 +4210,14 @@ fn probe_instruction(
             env,
             deferred_outputs,
         ),
-        Instruction::AddImmediate { amount } | Instruction::SubImmediate { amount } => {
-            match amount {
-                ImmediateAmount::Literal(_) => Ok(None),
-                ImmediateAmount::Expression(expression) => {
-                    validate_counter_adjustment_path(plan, previous_index)?;
-                    probe_expression(expression, plan, env, deferred_outputs)
-                }
+        Instruction::AddImmediate { amount } | Instruction::SubImmediate { amount } => match amount
+        {
+            ImmediateAmount::Literal(_) => Ok(None),
+            ImmediateAmount::Expression(expression) => {
+                validate_counter_adjustment_path(plan, previous_index)?;
+                probe_expression(expression, plan, env, deferred_outputs)
             }
-        }
+        },
         // Read expressions bind values produced by the state read itself.
         Instruction::Popeq { .. }
         | Instruction::PopeqFields { .. }
@@ -4540,15 +4727,13 @@ impl PreparationCursor {
             Some(instruction)
         };
         if let Some(operation) = operation {
-            if let Some(input) =
-                probe_instruction(
-                    operation,
-                    &self.plan,
-                    &self.env,
-                    &self.deferred_outputs,
-                    self.previous_index.as_ref(),
-                )?
-            {
+            if let Some(input) = probe_instruction(
+                operation,
+                &self.plan,
+                &self.env,
+                &self.deferred_outputs,
+                self.previous_index.as_ref(),
+            )? {
                 return Ok(PreparationStep::PendingInputs(vec![input]));
             }
         }
@@ -4621,7 +4806,11 @@ pub(crate) fn prepare_with_context_and_block_time(
     has_block_time: bool,
 ) -> Result<Execution> {
     finish_preparation(PreparationCursor::from_context(
-        plan, inputs, context, params, has_block_time,
+        plan,
+        inputs,
+        context,
+        params,
+        has_block_time,
     )?)
 }
 
@@ -4889,6 +5078,8 @@ impl PreparationCursor {
                             read_index += 1;
                         }
                         Instruction::ListHead {
+                            slot,
+                            keys,
                             schema,
                             expressions,
                             ..
@@ -4901,15 +5092,40 @@ impl PreparationCursor {
                                 read.guard.as_ref() == Some(guard),
                                 "inactive List head guard mismatch"
                             );
-                            record_component_names(read, expressions, schema)?;
-                            let checked = checked_record_schema(schema)?;
-                            let defaults = checked
-                                .fields
-                                .iter()
-                                .map(|field| inactive_read_value(record_type_name(&field.ty)?))
-                                .collect::<Result<Vec<_>>>()?;
-                            let produced = bind_record_values(read, &checked, &defaults, env)?;
-                            event = Some(read_event(read, false, env, produced));
+                            if let Some(ty) = list_operation_scalar_type(plan, *slot, keys, schema)?
+                            {
+                                ensure!(
+                                    expressions.len() == 1,
+                                    "scalar List head requires one expression"
+                                );
+                                let ty_name = schema
+                                    .as_str()
+                                    .ok_or_else(|| anyhow!("invalid scalar List schema"))?;
+                                let value = inactive_read_value(ty_name)?;
+                                ensure!(
+                                    value.scalar_type() == ty,
+                                    "inactive scalar List default type mismatch"
+                                );
+                                event = Some(bind_list_scalar_read(
+                                    read,
+                                    &expressions[0],
+                                    ty_name,
+                                    Some(guard),
+                                    false,
+                                    value,
+                                    env,
+                                )?);
+                            } else {
+                                record_component_names(read, expressions, schema)?;
+                                let checked = checked_record_schema(schema)?;
+                                let defaults = checked
+                                    .fields
+                                    .iter()
+                                    .map(|field| inactive_read_value(record_type_name(&field.ty)?))
+                                    .collect::<Result<Vec<_>>>()?;
+                                let produced = bind_record_values(read, &checked, &defaults, env)?;
+                                event = Some(read_event(read, false, env, produced));
+                            }
                             read_index += 1;
                         }
                         Instruction::MerkleTreeIsFull { destination, .. }
@@ -5271,7 +5487,7 @@ impl PreparationCursor {
                 keys,
                 expression,
             } => {
-                let schema = list_schema_at_path(plan, *slot, keys.len())?;
+                let schema = list_element_schema_at_path(plan, *slot, keys.len())?;
                 let (index, values) = native_index(plan, *slot, keys, false, &env)?;
                 let read = plan
                     .reads
@@ -5647,10 +5863,7 @@ impl PreparationCursor {
                 schema,
                 expressions,
             } => {
-                ensure!(
-                    list_schema_at_path(plan, *slot, keys.len())? == schema,
-                    "List head schema mismatch"
-                );
+                let scalar_type = list_operation_scalar_type(plan, *slot, keys, schema)?;
                 let (index, values) = native_index(plan, *slot, keys, false, &env)?;
                 let read = plan
                     .reads
@@ -5660,7 +5873,6 @@ impl PreparationCursor {
                     read.guard.as_ref() == instruction_guard,
                     "List head guard mismatch"
                 );
-                record_component_names(read, expressions, schema)?;
                 let (_, head) = native_list_value(
                     if has_written {
                         &prefix_context
@@ -5669,13 +5881,35 @@ impl PreparationCursor {
                     },
                     *slot,
                     &values,
-                    schema,
+                    list_element_schema_at_path(plan, *slot, keys.len())?,
                 )?;
                 let head = head.ok_or_else(|| anyhow!("head of empty List"))?;
-                let checked = checked_record_schema(schema)?;
-                let values = decode_record_value(&checked, &head)?;
-                let produced = bind_record_values(read, &checked, &values, env)?;
-                event = Some(read_event(read, true, env, produced));
+                if let Some(ty) = scalar_type {
+                    ensure!(
+                        expressions.len() == 1,
+                        "scalar List head requires one expression"
+                    );
+                    let ty_name = schema
+                        .as_str()
+                        .ok_or_else(|| anyhow!("invalid scalar List schema"))?;
+                    let value =
+                        decode_state_cell(&head, ty_name, &list_scalar_storage_alignment(&ty))?;
+                    event = Some(bind_list_scalar_read(
+                        read,
+                        &expressions[0],
+                        ty_name,
+                        instruction_guard,
+                        true,
+                        value,
+                        env,
+                    )?);
+                } else {
+                    record_component_names(read, expressions, schema)?;
+                    let checked = checked_record_schema(schema)?;
+                    let values = decode_record_value(&checked, &head)?;
+                    let produced = bind_record_values(read, &checked, &values, env)?;
+                    event = Some(read_event(read, true, env, produced));
+                }
                 read_index += 1;
                 program.extend([Op::Dup { n: 0 }, index, list_index(0)]);
                 Op::Popeq {
@@ -5689,10 +5923,7 @@ impl PreparationCursor {
                 schema,
                 expressions,
             } => {
-                ensure!(
-                    list_schema_at_path(plan, *slot, keys.len())? == schema,
-                    "List push schema mismatch"
-                );
+                let scalar_type = list_operation_scalar_type(plan, *slot, keys, schema)?;
                 let (index, values) = native_index(plan, *slot, keys, true, &env)?;
                 native_list_value(
                     if has_written {
@@ -5702,13 +5933,28 @@ impl PreparationCursor {
                     },
                     *slot,
                     &values,
-                    schema,
+                    list_element_schema_at_path(plan, *slot, keys.len())?,
                 )?;
-                let checked = checked_record_schema(schema)?;
-                let fields = record_values_from_expressions(&checked, expressions, &env)?;
+                let aligned_head = if let Some(ty) = scalar_type {
+                    ensure!(
+                        expressions.len() == 1,
+                        "scalar List push requires one expression"
+                    );
+                    let value = evaluate(&expressions[0], &env)?;
+                    ensure!(
+                        value.scalar_type() == ty,
+                        "scalar List push expression type mismatch"
+                    );
+                    value.validate()?;
+                    aligned_storage_cell(&value)?
+                } else {
+                    let checked = checked_record_schema(schema)?;
+                    let fields = record_values_from_expressions(&checked, expressions, &env)?;
+                    aligned_record_value(&checked, &fields)?
+                };
                 let node = StateValue::Array(
                     vec![
-                        StateValue::Cell(Sp::new(aligned_record_value(&checked, &fields)?)),
+                        StateValue::Cell(Sp::new(aligned_head)),
                         StateValue::Null,
                         StateValue::Null,
                     ]
@@ -5738,7 +5984,7 @@ impl PreparationCursor {
                 }
             }
             Instruction::ListPopFront { slot, keys } => {
-                let schema = list_schema_at_path(plan, *slot, keys.len())?;
+                let schema = list_element_schema_at_path(plan, *slot, keys.len())?;
                 let (index, values) = native_index(plan, *slot, keys, true, &env)?;
                 let (length, _) = native_list_value(
                     if has_written {
@@ -5787,7 +6033,7 @@ impl PreparationCursor {
                 }
             }
             Instruction::ListReset { slot, keys } => {
-                list_schema_at_path(plan, *slot, keys.len())?;
+                list_element_schema_at_path(plan, *slot, keys.len())?;
                 let (_, values) = native_index(plan, *slot, keys, false, &env)?;
                 if let Some((_, parents)) = keys.split_last() {
                     let (index, _) = native_index(plan, *slot, parents, true, &env)?;
@@ -6158,8 +6404,7 @@ impl PreparationCursor {
             }
             Instruction::Member => Op::Member,
             Instruction::AddImmediate { amount } | Instruction::SubImmediate { amount } => {
-                let (slot, keys) =
-                    validate_counter_adjustment_path(plan, previous_index.as_ref())?;
+                let (slot, keys) = validate_counter_adjustment_path(plan, previous_index.as_ref())?;
                 let amount = evaluate_immediate_amount(amount, &env)?;
                 if has_written {
                     advance_native_state_prefix(

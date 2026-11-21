@@ -1,6 +1,6 @@
-# Native memo Lists
+# Native Lists
 
-Noctium lowers Lists of checked ledger records directly to the pinned
+Noctium lowers Lists of scalars and checked ledger records directly to the pinned
 ledger VM. A node is `Array[Cell(record), tail, Cell(length)]`. The empty value
 is `Array[Null, Null, Cell(0u64)]`. Length uses the ledger's eight-byte u64 FAB
 alignment. Record fields retain their declared order and storage types.
@@ -9,13 +9,20 @@ and a `JubjubPoint` field two Field atoms holding the checked x/y coordinates.
 
 `tests/NativeList.lean` declares a standalone `list inbox : struct Memo {...}`
 and a two-key `tree memos : Bytes32 => Bytes32 => List struct Memo {...}`.
+For scalar Lists, declare `list values : Native` or
+`tree memos : Bytes32 => List Bytes 128`. A scalar head binds one value
+under the requested name. The native codec preserves the value's alignment.
+A 128-byte element uses one Bytes128 atom and five transcript fields.
+
 The source operations are:
 
 - `reset path` initializes or clears a List. Parent maps need explicit creation.
 - `length path as count` binds a UInt64 value.
+- `isEmpty path as empty` binds a Bool from the ordered length read.
 - `head path as memo` binds the checked record fields, such as `memo_x`.
 - `headOrDefault path as (present, memo)` binds a Bool and the same record fields. An empty List returns `false` with typed defaults. Every present record returns `true`.
-- `pushFront path := fields(...)` prepends one record.
+- `pushFront path := value` prepends a scalar. Use
+  `pushFront path := fields(...)` for a named record.
 - `popFront path` removes the first record.
 
 Strict `head` and `popFront` reject empty Lists. Pop includes a native length decrement check before selecting the tail. `headOrDefault` reads the native length and guards the head read with the nonempty result. Noctium binds both reads to the ordered ledger state. An inactive statement returns `false` and typed defaults without looking up its path. A missing active path still rejects.
@@ -47,3 +54,9 @@ The compiler uses uncached native operations and an explicit nonempty guard for
 pop. It does not depend on the Compact compiler or runtime.
 
 [OptionalListHead.lean](../../tests/OptionalListHead.lean) checks the optional form on standalone and nested paths. [MixedLedgerRecord.lean](../../tests/MixedLedgerRecord.lean) uses the same memo shape in map cells and List nodes. `fields(...)` takes one typed expression per declared field. Reads bind names such as `memo_payload` and `memo_ephemeral` with their declared types.
+
+[NativeScalarList.lean](../../tests/NativeScalarList.lean) and its
+[native checker case](../../runtime/tests/native_scalar_list.rs) exercise
+standalone Native and nested Bytes128 Lists. The
+[Compact 0.36.1 oracle](../../tests/compact/native-scalar-list.mjs)
+checks the corresponding empty, prepend, pop and reset transitions.

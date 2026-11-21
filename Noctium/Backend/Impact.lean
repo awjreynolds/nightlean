@@ -51,7 +51,8 @@ private def ledgerFieldAtomCount : LedgerFieldExpr → Nat
   | _ => 1
 
 private def ledgerFieldTags : LedgerFieldExpr → List Scalar
-  | .mk (.bytes 32) _ => [.native 32]
+  | .mk (.bytes 0) value => [.letE "_noctium_empty_bytes" value (.native 0)]
+  | .mk (.bytes length) _ => [.native length]
   | .mk .jubjubPoint _ => List.replicate 2 (.native (Field.modulus - 2))
   | .mk (.foreign kind) _ => List.replicate kind.encodedFieldCount (.native (Field.modulus - 2))
   | .mk _ _ => [.native (Field.modulus - 2)]
@@ -60,7 +61,6 @@ private def ledgerFieldPayloads : LedgerFieldExpr → List Scalar
   | .mk .native value => [value]
   | .mk .bool value => [.select value (.native 1) (.native 0)]
   | .mk (.uint _) value => [.cast .native value]
-  | .mk (.bytes 32) value => [.bytesField value 0, .bytesField value 1]
   | .mk (.bytes length) value =>
       (List.range (alignedByteChunkCount length)).map (.bytesField value)
   | .mk .jubjubScalar value => [.jubjubScalarToNative value]
@@ -895,6 +895,29 @@ def recordSchema (environment : Types.CompositeEnv) (type : Types.CompositeType)
         ("name", Lean.toJson name),
         ("type", Lean.toJson (Noctium.NativeExpression.typeName ty))]))]
 
+private def listElementOperationSchema (environment : Types.CompositeEnv)
+    (type : Types.CompositeType) : Except String Lean.Json :=
+  match type with
+  | .scalar ty => pure (Lean.Json.str (Noctium.NativeExpression.typeName ty))
+  | _ => recordSchema environment type
+
+private def listHeadParts (environment : Types.CompositeEnv)
+    (type : Types.CompositeType) (destination : String)
+    (fields destinations : List (String × Ty)) : Except String (Lean.Json × List LedgerFieldExpr × Read) := do
+  unless fields.map Prod.snd == destinations.map Prod.snd do
+    throw "List head destination type mismatch"
+  let schema ← listElementOperationSchema environment type
+  match type with
+  | .scalar ty => do
+    unless fields.map Prod.snd == [ty] && destinations == [(destination, ty)] do
+      throw "scalar List head requires one destination matching its read name"
+    pure (schema, [refLedgerFieldExpr destination ty], {name := destination, ty})
+  | _ => do
+    let components := destinations
+    let values := destinations.map fun (field, ty) => refLedgerFieldExpr field ty
+    let read : Read := {name := destination, ty := Ty.native, components := components, schema := some schema}
+    pure (schema, values, read)
+
 private def splitPath (keys : List Aligned) : Except String (List Aligned × Aligned) := do
   if keys.isEmpty then throw "nested map path must contain at least one key"
   let some finalKey := keys.getLast? | throw "nested map path must contain at least one key"
@@ -1353,13 +1376,8 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let slot ← stateSlot state name
     let (environment, foundType, fields) ← resolveListState state name keys
     unless foundType == type do throw "List head record type mismatch"
-    unless fields.map Prod.snd == destinations.map Prod.snd do
-      throw "List head destination type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← recordSchema environment type
-    let values := destinations.map fun (field, ty) => refLedgerFieldExpr field ty
-    let components := destinations
-    let read : Read := {name := destination, ty := Ty.native, components := components, schema := some schema}
+    let (schema, values, read) ← listHeadParts environment type destination fields destinations
     pure {plan with
       operations := plan.operations ++ [.listHead slot alignedKeys schema values]
       reads := plan.reads ++ [read]}
@@ -1370,7 +1388,7 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     unless fields.map Prod.snd == values.map LedgerFieldExpr.ty do
       throw "List push record field type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← recordSchema environment type
+    let schema ← listElementOperationSchema environment type
     pure {plan with operations := plan.operations ++ [
       .listPushFront slot alignedKeys schema values]}
   | .listPopFront name keys => do
@@ -1973,13 +1991,8 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let slot ← stateSlot state name
     let (environment, foundType, fields) ← resolveListState state name keys
     unless foundType == type do throw "List head record type mismatch"
-    unless fields.map Prod.snd == destinations.map Prod.snd do
-      throw "List head destination type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← recordSchema environment type
-    let values := destinations.map fun (field, ty) => refLedgerFieldExpr field ty
-    let components := destinations
-    let read : Read := {name := destination, ty := Ty.native, components := components, schema := some schema}
+    let (schema, values, read) ← listHeadParts environment type destination fields destinations
     plan := {plan with
       operations := plan.operations ++ [.listHead slot alignedKeys schema values]
       reads := plan.reads ++ [read]}
@@ -1990,7 +2003,7 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     unless fields.map Prod.snd == values.map LedgerFieldExpr.ty do
       throw "List push record field type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← recordSchema environment type
+    let schema ← listElementOperationSchema environment type
     plan := {plan with operations := plan.operations ++ [
       .listPushFront slot alignedKeys schema values]}
   | .listPopFront name keys => do

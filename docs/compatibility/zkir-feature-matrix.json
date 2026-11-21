@@ -5282,6 +5282,7 @@
       "standalone and nested Counter cells with native Bytes8 encoding, reads, expression-valued or literal increments and decrements, and reset",
       "standalone and nested Lists of checked Native-field records, with prepend, length/head reads, nonempty pop and reset",
       "checked ledger records with Native, Bytes32 and JubjubPoint fields in map cells and List elements",
+      "scalar List elements with native cell alignment, ordered prepend/head/pop/reset, length and emptiness",
       "typed scalar getter and post-update results committed as native call output, with source disclosure checks",
       "integrated confidential-token registration, mint-to-pending, authenticated sweep, transfer, burn, views, conserving self-moves epoch-checked memo clearing and encrypted escrow approval/refund/replacement and delegated spend/burn with supply/memos/permanent pair counters",
       "guarded native map leaf deletion with idempotent absent-leaf behavior, missing-parent rejection and separate VM activity groups",
@@ -5420,6 +5421,14 @@
       "source": "../../tests/MixedLedgerRecord.lean",
       "native": "../../runtime/tests/mixed_ledger_record.rs",
       "scope": "Flat named ledger fields keep their Native, Bytes32 or JubjubPoint type through direct and nested map cells and List nodes. Bytes32 uses one Bytes32 FAB atom. JubjubPoint uses two checked Field coordinates. Guarded and empty optional reads bind zero Native and Bytes32 values and the Jubjub identity. Disclosure is checked per private field expression."
+    },
+    "scalarLists": {
+      "issue": 179,
+      "source": "../../tests/NativeScalarList.lean",
+      "native": "../../runtime/tests/native_scalar_list.rs",
+      "reference": "../../tests/compact/native-scalar-list.mjs",
+      "scope": "Standalone and nested scalar Lists reuse typed ledger cell codecs with one logical result per head. Emptiness derives from the ordered UInt64 length. List writes retain explicit private value and path disclosure. Existing checked record lists keep their node and wire shapes.",
+      "focusedChecks": "Matched Compact 0.36.1/runtime 0.21.0 and Noctium Ledger 9/ZKIR 3.2.1 checker cases cover Native and Bytes128 lists, empty defaults, prepend order, pop, reset and inactive missing paths. Noctium checks exact alignment, five packed chunks for Bytes128, presence of a Bytes0 element and malformed alignment rejection."
     },
     "namespaceMigration": {
       "status": "canonical-noctium-only",

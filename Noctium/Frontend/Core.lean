@@ -318,6 +318,9 @@ scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "struct" ident "{" nlcomp
 scoped syntax ident ident ":" "struct" ident "{" nlcompositefield* "}" : nlstate
 scoped syntax "tree" ident ":" nltype "=>" ident "struct" ident "{" nlcompositefield* "}" : nlstate
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" ident "struct" ident "{" nlcompositefield* "}" : nlstate
+scoped syntax ident ident ":" nltype : nlstate
+scoped syntax "tree" ident ":" nltype "=>" ident nltype : nlstate
+scoped syntax "tree" ident ":" nltype "=>" nltype "=>" ident nltype : nlstate
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "Counter" : nlstate
 scoped syntax "tree" ident ":" nltype "=>" "Counter" : nlstate
 scoped syntax "set" ident ":" nltype : nlstate
@@ -331,6 +334,10 @@ scoped syntax "tree" ident ":" nltype "=>" nltype "=>" nltype : nlstate
 
 declare_syntax_cat nlleaves
 scoped syntax "fields(" nlexpr,* ")" : nlleaves
+
+declare_syntax_cat nllistvalue
+scoped syntax nlexpr : nllistvalue
+scoped syntax nlleaves : nllistvalue
 
 declare_syntax_cat nlpath
 scoped syntax ident : nlpath
@@ -383,7 +390,7 @@ scoped syntax "insert" ident "[" nlexpr "]" ":=" nlleaves : nleffect
 scoped syntax "write" ident "[" nlexpr "]" ":=" nlleaves : nleffect
 scoped syntax "insert" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlleaves : nleffect
 scoped syntax "write" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlleaves : nleffect
-scoped syntax "pushFront" nlpath ":=" nlleaves : nleffect
+scoped syntax "pushFront" nlpath ":=" nllistvalue : nleffect
 scoped syntax "popFront" nlpath : nleffect
 scoped syntax "remove" nlpath : nleffect
 scoped syntax "blockTimeBefore(" nlexpr ")" "as" ident : nleffect
@@ -412,7 +419,7 @@ scoped syntax "insertHashIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
 scoped syntax "insertFieldIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insertHashIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insertFieldIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
-scoped syntax "when" nlexpr "pushFront" nlpath ":=" nlleaves : nleffect
+scoped syntax "when" nlexpr "pushFront" nlpath ":=" nllistvalue : nleffect
 scoped syntax "when" nlexpr "popFront" nlpath : nleffect
 scoped syntax "when" nlexpr "remove" nlpath : nleffect
 scoped syntax "when" nlexpr "blockTimeBefore(" nlexpr ")" "as" ident : nleffect
@@ -1453,7 +1460,7 @@ private def lowerListPath (schema : List (String × StateKind)) (env : Bindings)
   let (keys, value) ← lowerTreePath env treeSchema sourceKeys
   let .«list» environment type := value
     | throwErrorAt path "List operation path must select a List value"
-  let fields ← match LedgerValueType.recordFields environment type with
+  let fields ← match LedgerValueType.listElementFields environment type with
     | .ok fields => pure fields
     | .error message => throwErrorAt path message
   pure (storage, ← pathKeysTerm keys, type, fields)
@@ -1621,7 +1628,7 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr insertHash $_path:nlpath := $_hash:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr insertHashIndex $_path:nlpath at $_index:nlexpr := $_hash:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr insertFieldIndex $_path:nlpath at $_index:nlexpr := $_leaf:nlexpr) => some condition
-  | `(nleffect| when $condition:nlexpr pushFront $_path:nlpath := $_payload:nlleaves) => some condition
+  | `(nleffect| when $condition:nlexpr pushFront $_path:nlpath := $_payload:nllistvalue) => some condition
   | `(nleffect| when $condition:nlexpr popFront $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr remove $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr blockTimeBefore($_deadline:nlexpr) as $_dest:ident)
@@ -1805,26 +1812,33 @@ private def elaborateListLength (schema : List (String × StateKind))
   let updated := {updated with terms := updated.terms.push term}
   bindReadName updated destinationId.getId.toString readName (.uint (2 ^ 64 - 1))
 
+private def listElementTypeTerm (source : Syntax) (type : Types.CompositeType) :
+    CommandElabM (TSyntax `term) := do
+  match type with
+  | .scalar ty => `(Noctium.Types.CompositeType.scalar $(← tyTerm ty))
+  | .structure id => `(Noctium.Types.CompositeType.structure $(stringTerm id))
+  | _ => throwErrorAt source "List elements must be scalar values or named records"
+
 private def elaborateListHead (schema : List (String × StateKind))
     (path : TSyntax `nlpath) (destination : TSyntax `ident) (depth : Nat)
     (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, keys, type, fields) ← lowerListPath schema state.env path
   let (readName, updated) ← freshReadName depth state destination
-  let (updated, destinations) ← bindLedgerRecordFields updated destination depth fields
-  let typeTerm ← match type with
-    | .structure id => `(Noctium.Types.CompositeType.structure $(stringTerm id))
-    | _ => throwErrorAt path "List head currently requires a named structure"
+  let (updated, destinations) ← match type with
+    | .scalar ty => do
+      let updated ← bindReadName updated destination.getId.toString readName ty
+      pure (updated, ← `([($(stringTerm readName), $(← tyTerm ty))]))
+    | _ => bindLedgerRecordFields updated destination depth fields
+  let typeTerm ← listElementTypeTerm path type
   let term ← `(Noctium.Effect.listHead
     $(stringTerm storage.getId.toString) $(stringTerm readName) $keys $typeTerm $destinations)
   pure {updated with terms := updated.terms.push term}
 
-private def elaborateListHeadOrDefault (schema : List (String × StateKind))
-    (path : TSyntax `nlpath) (present record : TSyntax `ident) (depth : Nat)
-    (guard span : TSyntax `term) (state : EntryEffects) : CommandElabM EntryEffects := do
-  let (storage, keys, _, _) ← lowerListPath schema state.env path
-  ensureFresh state.env present
+private def listLengthIsZero (storage : TSyntax `ident) (keys : TSyntax `term)
+    (stem : String) (state : EntryEffects) :
+    CommandElabM (EntryEffects × TSyntax `term) := do
   let (lengthName, nextLocal) := chooseBranchLocalName state.env
-    state.usedLocalNames state.nextLocal "noctiumOptionalHeadLength"
+    state.usedLocalNames state.nextLocal stem
   let lengthEffect ← `(Noctium.Effect.listLength
     $(stringTerm storage.getId.toString) $(stringTerm lengthName) $keys)
   let maximum := 2 ^ 64 - 1
@@ -1832,6 +1846,17 @@ private def elaborateListHeadOrDefault (schema : List (String × StateKind))
   let lengthRef ← `(@Noctium.Expr.ref $lengthType $(stringTerm lengthName))
   let zero ← `(Noctium.Expr.uint $(natTerm maximum) 0)
   let isZero ← `(Noctium.Expr.eq $lengthRef $zero)
+  pure ({state with
+    terms := state.terms.push lengthEffect
+    nextLocal
+    usedLocalNames := lengthName :: state.usedLocalNames}, isZero)
+
+private def elaborateListHeadOrDefault (schema : List (String × StateKind))
+    (path : TSyntax `nlpath) (present record : TSyntax `ident) (depth : Nat)
+    (guard span : TSyntax `term) (state : EntryEffects) : CommandElabM EntryEffects := do
+  let (storage, keys, _, _) ← lowerListPath schema state.env path
+  ensureFresh state.env present
+  let (state, isZero) ← listLengthIsZero storage keys "noctiumOptionalHeadLength" state
   let presentValue ← `(Noctium.Expr.eq $isZero (Noctium.Expr.bool Bool.false))
   let headGuard ← match guard with
     | `(term| none) => `(some $presentValue)
@@ -1842,22 +1867,27 @@ private def elaborateListHeadOrDefault (schema : List (String × StateKind))
   let updated : EntryEffects := {
     state with
     env := (presentName, .bool, presentValue) :: state.env
-    terms := state.terms.push lengthEffect
     spans := state.spans.push span |>.push span
     guards := state.guards.push guard |>.push headGuard
-    nextLocal
-    usedLocalNames := lengthName :: state.usedLocalNames
   }
   elaborateListHead schema path record depth updated
 
 private def elaborateListPushFront (schema : List (String × StateKind))
-    (path : TSyntax `nlpath) (payload : TSyntax `nlleaves)
+    (path : TSyntax `nlpath) (payload : TSyntax `nllistvalue)
     (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, keys, type, fields) ← lowerListPath schema state.env path
-  let valuesTerm ← elaborateLedgerFieldValues state.env payload fields
-  let typeTerm ← match type with
-    | .structure id => `(Noctium.Types.CompositeType.structure $(stringTerm id))
-    | _ => throwErrorAt path "pushFront currently requires a named structure"
+  let valuesTerm ← match payload with
+    | `(nllistvalue| $item:nlexpr) => do
+      let .scalar ty := type
+        | throwErrorAt payload "record List pushFront expects fields(...)"
+      let value ← checkedExpression state.env item ty
+      `([Noctium.LedgerFieldExpr.mk $(← tyTerm ty) $value])
+    | `(nllistvalue| $items:nlleaves) => do
+      if let .scalar _ := type then
+        throwErrorAt payload "scalar List pushFront expects one value expression"
+      elaborateLedgerFieldValues state.env items fields
+    | _ => throwErrorAt payload "expected a List element"
+  let typeTerm ← listElementTypeTerm path type
   let term ← `(Noctium.Effect.listPushFront
     $(stringTerm storage.getId.toString) $keys $typeTerm $valuesTerm)
   pure {state with terms := state.terms.push term}
@@ -1947,7 +1977,7 @@ private def elaborateSetInsert (schema : List (String × StateKind))
 
 private def elaborateNamedPathRead (schema : List (String × StateKind))
     (operation : String) (path : TSyntax `nlpath) (destination : TSyntax `ident)
-    (depth : Nat) (state : EntryEffects) : CommandElabM EntryEffects := do
+    (depth : Nat) (guard : TSyntax `term) (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, sourceKeys) ← sourcePathParts path
   match operation with
   | "length" => elaborateListLength schema path destination depth state
@@ -1956,6 +1986,18 @@ private def elaborateNamedPathRead (schema : List (String × StateKind))
       throwErrorAt path "map or set emptiness path exceeds the native index limit"
     let valueType ← statePathSchema schema storage
     let (keys, selected) ← lowerTreePath state.env valueType sourceKeys
+    if let .«list» .. := selected then
+      unless sourceKeys.length ≤ 13 do
+        throwErrorAt path "List paths support at most 13 map keys"
+      ensureFresh state.env destination
+      let (updated, isZero) ← listLengthIsZero storage (← pathKeysTerm keys)
+        "noctiumListEmptyLength" state
+      let empty ← match guard with
+        | `(term| none) => pure isZero
+        | `(term| some $condition) =>
+          `(Noctium.Backend.Impact.activityGuardWithin $condition $isZero)
+        | _ => throwError "invalid List emptiness effect guard"
+      return {updated with env := (destination.getId.toString, .bool, empty) :: updated.env}
     unless selected.collectionKey?.isSome do
       throwErrorAt path "isEmpty path must select a Map or Set"
     let (readName, updated) ← freshReadName depth state destination
@@ -2220,7 +2262,7 @@ private def elaborateEffect (schema : List (String × StateKind))
     state ← elaborateCounterLessThan schema path threshold destination depth state
   | `(nleffect| read $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr read $path:nlpath as $destination:ident) =>
-    state := ← elaborateNamedPathRead schema "read" path destination depth state
+    state := ← elaborateNamedPathRead schema "read" path destination depth guard state
   | `(nleffect| readSelf as $destination:ident)
   | `(nleffect| when $_:nlexpr readSelf as $destination:ident) => do
     let (readName, updated) ← freshReadName depth state destination
@@ -2229,7 +2271,7 @@ private def elaborateEffect (schema : List (String × StateKind))
       destination.getId.toString readName (.bytes 32)
   | `(nleffect| member $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr member $path:nlpath as $destination:ident) =>
-    state := ← elaborateNamedPathRead schema "member" path destination depth state
+    state := ← elaborateNamedPathRead schema "member" path destination depth guard state
   | `(nleffect| blockTimeBefore($deadline) as $destination:ident)
   | `(nleffect| when $_:nlexpr blockTimeBefore($deadline) as $destination:ident) =>
     state := ← elaborateBlockTimeRead state depth destination Bool.true deadline
@@ -2251,7 +2293,7 @@ private def elaborateEffect (schema : List (String × StateKind))
       destination.getId.toString readName .bool
   | `(nleffect| $operation:ident $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr $operation:ident $path:nlpath as $destination:ident) =>
-    state := ← elaborateNamedPathRead schema operation.getId.toString path destination depth state
+    state := ← elaborateNamedPathRead schema operation.getId.toString path destination depth guard state
   | `(nleffect| write $storage:ident := $value:nlexpr)
   | `(nleffect| when $_:nlexpr write $storage:ident := $value:nlexpr) => do
     let some (.cell ty) := schema.lookup storage.getId.toString
@@ -2348,8 +2390,8 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| decrement $path:nlpath by $amount:nlexpr)
   | `(nleffect| when $_:nlexpr decrement $path:nlpath by $amount:nlexpr) =>
     state := ← elaborateCounterAdjust schema path Bool.true amount state
-  | `(nleffect| pushFront $path:nlpath := $payload:nlleaves)
-  | `(nleffect| when $_:nlexpr pushFront $path:nlpath := $payload:nlleaves) =>
+  | `(nleffect| pushFront $path:nlpath := $payload:nllistvalue)
+  | `(nleffect| when $_:nlexpr pushFront $path:nlpath := $payload:nllistvalue) =>
     state := ← elaborateListPushFront schema path payload state
   | `(nleffect| popFront $path:nlpath)
   | `(nleffect| when $_:nlexpr popFront $path:nlpath) =>
@@ -2490,6 +2532,18 @@ private def elaborateNamedRecord (contractName : Name) (record : TSyntax `ident)
   let compositeTypeTerm ← `(Noctium.Types.CompositeType.structure $(stringTerm typeId))
   let environment : Types.CompositeEnv := {structures := [{id := typeId, fields := fieldValues}]}
   pure (environment, compositeType, environmentTerm, compositeTypeTerm)
+
+private def elaborateScalarListDecl (keys : List (TSyntax `nltype)) (element : TSyntax `nltype) :
+    CommandElabM (StateKind × TSyntax `term) := do
+  let elementTy ← readTy element
+  let mut valueSchema := LedgerValueType.«list» {} (.scalar elementTy)
+  let mut valueTerm ← `(Noctium.LedgerValueType.«list» {}
+    (Noctium.Types.CompositeType.scalar $(← tyTerm elementTy)))
+  for key in keys.reverse do
+    let keyTy ← readTy key
+    valueSchema := .map keyTy valueSchema
+    valueTerm ← `(Noctium.LedgerValueType.map $(← tyTerm keyTy) $valueTerm)
+  pure (.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
 
 private def elaborateConstructor (source : TSyntax `nlstate)
     (schema : List (String × StateKind)) : CommandElabM (TSyntax `term) := do
@@ -2752,6 +2806,21 @@ private def elaborateConstructor (source : TSyntax `nlstate)
             (Noctium.LedgerValueType.map $innerTerm
               (Noctium.LedgerValueType.«list» $environmentTerm $compositeTypeTerm)))
           pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
+        | `(nlstate| $listKind:ident $id:ident : $element:nltype) => do
+          unless listKind.getId.toString == "list" do
+            throwErrorAt listKind "expected a scalar List declaration"
+          let (kind, term) ← elaborateScalarListDecl [] element
+          pure (id, kind, term)
+        | `(nlstate| tree $id:ident : $key:nltype => $listKind:ident $element:nltype) => do
+          unless listKind.getId.toString == "List" do
+            throwErrorAt listKind "expected a List value in the recursive tree"
+          let (kind, term) ← elaborateScalarListDecl [key] element
+          pure (id, kind, term)
+        | `(nlstate| tree $id:ident : $outer:nltype => $inner:nltype => $listKind:ident $element:nltype) => do
+          unless listKind.getId.toString == "List" do
+            throwErrorAt listKind "expected a List value in the recursive tree"
+          let (kind, term) ← elaborateScalarListDecl [outer, inner] element
+          pure (id, kind, term)
         | `(nlstate| tree $id:ident : $outer:nltype => $inner:nltype => $value:nltype) => do
           let outerTy ← readTy outer
           let innerTy ← readTy inner

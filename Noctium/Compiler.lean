@@ -560,8 +560,9 @@ private def stateJson (state : StateDecl) : Json :=
     | .map keyTy value => Json.mkObj [("map", toJson [toJson (typeName keyTy), treeJson value])]
     | .set keyTy => Json.mkObj [("set", toJson (typeName keyTy))]
     | .composite environment type => Json.mkObj [("composite", compositeSchema environment type)]
-    | .list environment type => Json.mkObj [("list", Json.mkObj [
-        ("composite", compositeSchema environment type)])]
+    | .list environment type => Json.mkObj [("list", match type with
+        | .scalar ty => Json.mkObj [("scalar", toJson (typeName ty))]
+        | _ => Json.mkObj [("composite", compositeSchema environment type)])]
     | .counter => Json.mkObj [("counter", toJson Bool.true)]
     | .merkleTree depth historic => Json.mkObj (
         [("merkleTree", toJson depth)] ++
