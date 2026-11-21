@@ -1050,8 +1050,8 @@
       "id": "C-LANG-PRAGMA",
       "layer": "language",
       "surface": "Version pragmas and compatibility declarations",
-      "noctiumStatus": "missing",
-      "notes": "Equivalent explicit Noctium compatibility target, without Compact syntax or toolchain dependency.",
+      "noctiumStatus": "subset",
+      "notes": "A file-level Lean option declares an exact Midnight target profile. Normal check and compile accept the matching target and reject a mismatch or an unknown name before publishing artifacts. Version ranges and imported-library requirements remain unverified.",
       "source": [
         "reference"
       ],
@@ -1059,7 +1059,10 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/source-target-requirement.sh",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
