@@ -1344,17 +1344,20 @@
         "docs/development/native-aggregate-argument-receipt.json",
         "docs/development/native-caller-receipt.json",
         "docs/development/independent-composition-receipt.json",
-        "docs/development/composition-transport-receipt.json"
+        "docs/development/composition-transport-receipt.json",
+        "docs/development/composition-cpp-localnet-receipt.json"
       ],
       "equivalence": "unverified",
       "implementationUpdate": {
-        "checkedOn": "2026-11-19",
-        "scope": "Typed calls bind their installed verifier, target, argument and return commitments. Direct Lean calls accept named aggregate results in the checked layout order. An accepted funded Ledger 9 call commits two aggregate returns alongside a Bool and fixed bytes. Readable hosted witness circuits commit scalar and fixed-byte source parameters through the same header. Structured witness sources also commit complete private aggregates while delivering a typed value to the provider. The native partitioner rejects changed arguments and results. The Rust path qualifies registry routing and checked parent addresses. Two Rust processes exchange canonical public offers, rebuild the shared draft and prove separate calls. Foreign SDK bindings, durable recovery and complete equivalence remain open.",
+        "checkedOn": "2026-11-21",
+        "scope": "Typed calls bind their installed verifier, target, argument and return commitments. Direct Lean calls accept named aggregate results in the checked layout order. A funded Ledger 9 call commits two aggregate returns alongside a Bool and fixed bytes. Hosted witnesses commit scalar, fixed-byte and structured private arguments. Focused tests reject a wrong selector, changed arguments or results, and multiple parents. The Rust path qualifies registry routing and checked parent addresses. Rust and C++ owners exchange canonical public offers and prove separate slots for one finalized Ledger 9 transaction. The C ABI covers the owner workflow. Foreign coordinator APIs, durable recovery and full equivalence remain open.",
         "evidence": [
           "Noctium/Backend/Impact.lean",
           "runtime/src/proof/composition.rs",
           "runtime/src/composition_wire.rs",
+          "runtime/include/noctium_native.h",
           "runtime/tests/native_composition.rs",
+          "runtime/tests/native_composition/cpp_owner.cpp",
           "tests/WitnessSource.lean",
           "tests/IndependentComposition.lean",
           "docs/development/native-call-claims.md"

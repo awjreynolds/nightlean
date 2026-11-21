@@ -61,7 +61,8 @@ extern "C" {
    Hard stop/deadline enforcement requires a host worker policy. In-flight work
    still occupies its resource slot after cancel/free, until its call returns.
 
-   Limits: 8 combined proof sessions, witness target contexts and client sessions,
+   Limits: 8 combined proof sessions, witness target contexts, client sessions and
+   composition owner contexts,
    2 live prepare/prove/verification calls, 64 ordinary result
    tokens, 16 private tokens, 1MiB private config/request/proof/result, 64KiB public
    descriptor/reply metadata, 16MiB declared bundle payload, 128MiB SRS. The
@@ -94,6 +95,53 @@ int32_t noctium_native_result_free(uint64_t);
 int32_t noctium_native_private_length(uint64_t,size_t*);
 int32_t noctium_native_private_copy(uint64_t,uint8_t*,size_t,size_t*);
 int32_t noctium_native_private_free(uint64_t);
+
+/* Independent owner side of one native contract-call composition. The host supplies
+   an authenticated finalized snapshot; this ABI does not contact a ledger.
+
+   Begin descriptor UTF-8 JSON (unknown fields reject):
+     {"abiVersion":1,"profile":"<selected profile NAME>",
+      "bundleDirectory":"<explicit host-authorized directory>",
+      "trustedManifestSha256":"<independently supplied lowercase SHA256>",
+      "proofParametersSha256":"<independently supplied SRS SHA256>",
+      "k":9,"ttl":2000000000,"networkId":"<ledger network>",
+      "contractAddress":"<64 lowercase hex characters>"}
+   inputs are a UTF-8 JSON object of private entrypoint inputs. contract_state and
+   ledger_parameters are exact canonical tagged Ledger 9 ContractState and
+   LedgerParameters encodings from one finalized snapshot. proof_parameters are the
+   public pinned native SRS bytes. Supply 32 fresh unpredictable entropy bytes.
+   Bundle and SRS pins, profile, k, installed entrypoint, and fixed ledger parameters
+   are checked before source inputs are parsed. Fee prices come from the supplied
+   current LedgerParameters. The caller authenticates snapshot provenance and pairing.
+   The output offer token contains canonical public CompositionOffer bytes.
+
+   Prove accepts the exact public composition draft bytes and this owner's slot index.
+   The ABI rebuilds the draft against its retained snapshot, checks its TTL against
+   begin, and checks the owner's execution, entrypoint, state and commitment against
+   the selected slot before producing a detached native proof. Supply 32 fresh entropy
+   bytes. Output proof and offer tokens use the result length/copy/free functions above.
+   An invalid draft or slot returns INVALID_RESPONSE, leaves output zero and permits
+   retry. A successful proof consumes the owner context for further proof calls.
+   Free the context after receiving its detached proof. Free during active proving
+   returns INVALID_STATE. Offer and proof outputs follow the 1MiB ordinary result cap.
+
+   Inputs must remain immutable and readable until return, outputs writable and
+   non-overlapping. Contract state and snapshot provenance remain the host's
+   responsibility. Offers expose the compiled plan's public transcript, including
+   authorized disclosures. They contain neither the private input map nor its
+   communication opening. Errors contain no private input values. */
+int32_t noctium_native_composition_owner_begin(
+  const uint8_t *descriptor, size_t descriptor_len,
+  const uint8_t *inputs, size_t inputs_len,
+  const uint8_t *contract_state, size_t contract_state_len,
+  const uint8_t *ledger_parameters, size_t ledger_parameters_len,
+  const uint8_t *proof_parameters, size_t proof_parameters_len,
+  const uint8_t *coins, size_t coins_len,
+  uint64_t *out_owner, uint64_t *out_offer);
+int32_t noctium_native_composition_owner_prove(
+  uint64_t owner, const uint8_t *draft, size_t draft_len, size_t slot,
+  const uint8_t *coins, size_t coins_len, uint64_t *out_proof);
+int32_t noctium_native_composition_owner_free(uint64_t owner);
 
 /* Read a bounded JSON page or a Merkle path from a native Merkle tree snapshot.
    Request UTF-8 JSON (unknown fields reject):

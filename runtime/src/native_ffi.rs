@@ -2,17 +2,31 @@
 //! No foreign callback, stack frame or borrowed buffer survives an ABI call.
 use crate::{
     artifacts,
-    proof::{PreparedProof, TrustedParameters},
+    assembly::{CheckedNativeCall, CompositionOffer},
+    proof::{CompositionDraft, CompositionMaterial, PreparedProof, TrustedParameters},
 };
+use base_crypto::hash::HashOutput;
+use coin_structure::contract::ContractAddress;
 use futures::executor::block_on;
-use rand::{SeedableRng, rngs::StdRng};
+use ledger::structure::LedgerState;
+use onchain_runtime::{
+    context::QueryContext,
+    state::{ContractState, EntryPointBuf},
+};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{Value as Json, json};
+use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize, tagged_serialize};
 use std::{
     collections::BTreeMap,
     panic::{AssertUnwindSafe, catch_unwind},
     path::PathBuf,
     sync::{Arc, Mutex, OnceLock},
+};
+use storage::arena::Sp;
+use transient_crypto::{
+    curve::Fr,
+    proofs::{VerifierKey, Zkir},
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -74,6 +88,19 @@ struct WitnessProofBegin {
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CompositionOwnerBegin {
+    abi_version: u32,
+    profile: String,
+    bundle_directory: PathBuf,
+    trusted_manifest_sha256: String,
+    proof_parameters_sha256: String,
+    k: u8,
+    ttl: u64,
+    network_id: String,
+    contract_address: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Reply {
     abi_version: u32,
     request_id: u64,
@@ -107,6 +134,22 @@ struct TargetContext {
     target: Arc<crate::proof::WitnessTarget>,
     reservation: Option<ProofReservation>,
 }
+struct CompositionOwner {
+    bundle: artifacts::VerifiedBundle,
+    parameters: TrustedParameters,
+    entry_point: EntryPointBuf,
+    circuit: crate::zkir::IrSource,
+    execution: crate::Execution,
+    snapshot: LedgerState<crate::Db>,
+    address: ContractAddress,
+    communication_commitment_rand: Fr,
+    ttl: u64,
+    proved: bool,
+}
+struct CompositionOwnerSlot {
+    owner: Arc<Mutex<CompositionOwner>>,
+    busy: bool,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ProofReservation {
     session: u64,
@@ -120,6 +163,7 @@ struct Registry {
     next: u64,
     sessions: BTreeMap<u64, Session>,
     targets: BTreeMap<u64, TargetContext>,
+    composition_owners: BTreeMap<u64, CompositionOwnerSlot>,
     results: BTreeMap<u64, Vec<u8>>,
     private: BTreeMap<u64, Private>,
     active_work: usize,
@@ -133,6 +177,7 @@ impl Default for Registry {
             next: 1 << 62,
             sessions: BTreeMap::new(),
             targets: BTreeMap::new(),
+            composition_owners: BTreeMap::new(),
             results: BTreeMap::new(),
             private: BTreeMap::new(),
             active_work: 0,
@@ -169,6 +214,12 @@ impl Registry {
     }
     fn revoke_private(&mut self, owner: u64) {
         self.private.retain(|_, p| p.owner != owner);
+    }
+    fn live_contexts(&self) -> usize {
+        self.sessions.len()
+            + self.clients.len()
+            + self.targets.len()
+            + self.composition_owners.len()
     }
 }
 // Work outlives cancellation of its session. Its resource slot ends only when the call returns.
@@ -243,6 +294,331 @@ fn pending(session: &Session) -> Result<(), i32> {
     }
 }
 
+fn decode_tagged<T>(bytes: &[u8]) -> Result<T, i32>
+where
+    T: Deserializable + Serializable + Tagged,
+{
+    let mut reader = bytes;
+    let decoded = tagged_deserialize(&mut reader).map_err(|_| INVALID_ARGUMENT)?;
+    if !reader.is_empty() {
+        return Err(INVALID_ARGUMENT);
+    }
+    let mut encoded = Vec::new();
+    tagged_serialize(&decoded, &mut encoded).map_err(|_| INVALID_ARGUMENT)?;
+    if encoded != bytes {
+        return Err(INVALID_ARGUMENT);
+    }
+    Ok(decoded)
+}
+
+struct CompositionOwnerReservation(u64);
+impl CompositionOwnerReservation {
+    fn reserve(token: u64) -> Result<(Self, Arc<Mutex<CompositionOwner>>), i32> {
+        let owner = registry(|r| {
+            let slot = r.composition_owners.get_mut(&token).ok_or(INVALID_HANDLE)?;
+            if slot.busy {
+                return Err(INVALID_STATE);
+            }
+            slot.busy = true;
+            Ok(Arc::clone(&slot.owner))
+        })?;
+        Ok((Self(token), owner))
+    }
+}
+impl Drop for CompositionOwnerReservation {
+    fn drop(&mut self) {
+        let _ = registry(|r| {
+            let slot = r.composition_owners.get_mut(&self.0).ok_or(INTERNAL)?;
+            slot.busy = false;
+            Ok(())
+        });
+    }
+}
+
+/// # Safety
+/// Every input pointer must reference immutable bytes until return. The state and
+/// parameter snapshots come from the host's authenticated chain observation.
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub unsafe extern "C" fn noctium_native_composition_owner_begin(
+    descriptor: *const u8,
+    descriptor_len: usize,
+    inputs: *const u8,
+    inputs_len: usize,
+    contract_state: *const u8,
+    contract_state_len: usize,
+    ledger_parameters: *const u8,
+    ledger_parameters_len: usize,
+    proof_parameters: *const u8,
+    proof_parameters_len: usize,
+    coins: *const u8,
+    coins_len: usize,
+    out_owner: *mut u64,
+    out_offer: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe {
+            output(out_owner)?;
+            output(out_offer)?;
+        }
+        let begin: CompositionOwnerBegin =
+            serde_json::from_slice(unsafe { input(descriptor, descriptor_len, MAX_DESCRIPTOR)? })
+                .map_err(|_| INVALID_ARGUMENT)?;
+        if begin.abi_version != 1
+            || begin.profile != crate::profile::NAME
+            || begin.bundle_directory.as_os_str().len() > 4096
+            || begin.ttl == 0
+            || begin.network_id.is_empty()
+            || begin.network_id.len() > 128
+            || begin.contract_address.len() != 64
+            || !begin
+                .contract_address
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            || !(1..=20).contains(&begin.k)
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        let _work = Work::reserve()?;
+        registry(|r| {
+            if r.live_contexts() >= MAX_SESSIONS {
+                Err(LIMIT)
+            } else {
+                Ok(())
+            }
+        })?;
+
+        let bundle = artifacts::verify_with_limit(
+            &begin.bundle_directory,
+            Some(&begin.trusted_manifest_sha256),
+            MAX_BUNDLE,
+        )
+        .map_err(|error| {
+            if error.code == "limit_exceeded" {
+                LIMIT
+            } else {
+                INVALID_ARGUMENT
+            }
+        })?;
+        if bundle.manifest().profile != begin.profile {
+            return Err(INVALID_ARGUMENT);
+        }
+        let parameters = TrustedParameters::from_bytes(
+            unsafe { input(proof_parameters, proof_parameters_len, MAX_PARAMETERS)? },
+            begin.k,
+            &begin.proof_parameters_sha256,
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        let ledger_parameters: ledger::structure::LedgerParameters =
+            decode_tagged(unsafe { input(ledger_parameters, ledger_parameters_len, MAX_BYTES)? })?;
+        let bundled_parameters: ledger::structure::LedgerParameters = decode_tagged(
+            bundle
+                .file(artifacts::Role::LedgerParameters)
+                .map_err(|_| INVALID_ARGUMENT)?,
+        )?;
+        let plan: crate::Plan = serde_json::from_slice(
+            bundle
+                .file(artifacts::Role::Plan)
+                .map_err(|_| INVALID_ARGUMENT)?,
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        let circuit = crate::zkir::IrSource::load(
+            bundle
+                .file(artifacts::Role::Circuit)
+                .map_err(|_| INVALID_ARGUMENT)?,
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        if parameters.k() != begin.k
+            || circuit.k() != begin.k
+            || !circuit.do_communications_commitment
+            || plan.entrypoint.is_empty()
+            || !crate::profile::validate_plan(plan.target.as_deref(), plan.target_profile.as_ref())
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        let mut expected_parameters = bundled_parameters;
+        expected_parameters.fee_prices = ledger_parameters.fee_prices.clone();
+        if expected_parameters != ledger_parameters {
+            return Err(INVALID_ARGUMENT);
+        }
+
+        let address_bytes: [u8; 32] = hex::decode(&begin.contract_address)
+            .map_err(|_| INVALID_ARGUMENT)?
+            .try_into()
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let address = ContractAddress(HashOutput(address_bytes));
+        let state: ContractState<crate::Db> =
+            decode_tagged(unsafe { input(contract_state, contract_state_len, MAX_BYTES)? })?;
+        let entry = EntryPointBuf(plan.entrypoint.as_bytes().to_vec());
+        let verifier: VerifierKey = decode_tagged(
+            bundle
+                .file(artifacts::Role::VerifierKey)
+                .map_err(|_| INVALID_ARGUMENT)?,
+        )?;
+        verifier.init().map_err(|_| INVALID_ARGUMENT)?;
+        let matches_verifier = state
+            .operations
+            .get(&entry)
+            .is_some_and(|operation| operation.latest() == Some(&verifier));
+        if !matches_verifier {
+            return Err(INVALID_ARGUMENT);
+        }
+        let mut snapshot = LedgerState::<crate::Db>::new(begin.network_id);
+        snapshot.parameters = Sp::new(ledger_parameters.clone());
+        snapshot.contract = snapshot.contract.insert(address, state.clone());
+
+        let mut rng = unsafe { entropy(coins, coins_len)? };
+        let mut source_inputs: BTreeMap<String, Json> =
+            serde_json::from_slice(unsafe { input(inputs, inputs_len, MAX_BYTES)? })
+                .map_err(|_| INVALID_ARGUMENT)?;
+        let execution = crate::prepare(
+            &plan,
+            &source_inputs,
+            &state.data,
+            &snapshot.parameters,
+            address,
+        );
+        for value in source_inputs.values_mut() {
+            crate::control::wipe_json(value);
+        }
+        drop(source_inputs);
+        let execution = execution.map_err(|_| INVALID_ARGUMENT)?;
+
+        let communication_commitment_rand = rng.r#gen();
+        let checked = CheckedNativeCall {
+            execution: &execution,
+            circuit: &circuit,
+            initial_context: QueryContext::new(state.data.clone(), address),
+            entry_point: entry.clone(),
+            communication_commitment_rand,
+        };
+        let offer = CompositionOffer::public_bytes(
+            &checked
+                .composition_offer(&snapshot.parameters)
+                .map_err(|_| INVALID_ARGUMENT)?,
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        if offer.len() > MAX_BYTES {
+            return Err(LIMIT);
+        }
+        let owner = CompositionOwner {
+            bundle,
+            parameters,
+            entry_point: entry,
+            circuit,
+            execution,
+            snapshot,
+            address,
+            communication_commitment_rand,
+            ttl: begin.ttl,
+            proved: false,
+        };
+        registry(|r| {
+            if r.live_contexts() >= MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let owner_token = r.token()?;
+            let offer_token = r.result(offer)?;
+            r.composition_owners.insert(
+                owner_token,
+                CompositionOwnerSlot {
+                    owner: Arc::new(Mutex::new(owner)),
+                    busy: false,
+                },
+            );
+            unsafe {
+                out_owner.write(owner_token);
+                out_offer.write(offer_token);
+            }
+            Ok(())
+        })
+    })
+}
+
+/// # Safety
+/// Draft bytes and entropy must remain readable until return. A successful owner
+/// proof consumes this context; a rejected draft or slot leaves it available to retry.
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub unsafe extern "C" fn noctium_native_composition_owner_prove(
+    owner: u64,
+    draft: *const u8,
+    draft_len: usize,
+    slot: usize,
+    coins: *const u8,
+    coins_len: usize,
+    out_proof: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_proof)? };
+        let draft = unsafe { input(draft, draft_len, crate::composition_wire::MAX_DRAFT_BYTES)? };
+        let rng = unsafe { entropy(coins, coins_len)? };
+        let _work = Work::reserve()?;
+        let owner_token = owner;
+        let (_reservation, owner_arc) = CompositionOwnerReservation::reserve(owner_token)?;
+        let mut owner = owner_arc.lock().map_err(|_| INTERNAL)?;
+        if owner.proved {
+            return Err(INVALID_STATE);
+        }
+        let draft = CompositionDraft::from_public_bytes(draft, &owner.snapshot)
+            .map_err(|_| INVALID_RESPONSE)?;
+        if draft.ttl() != owner.ttl {
+            return Err(INVALID_RESPONSE);
+        }
+        let state = owner
+            .snapshot
+            .contract
+            .get(&owner.address)
+            .ok_or(INTERNAL)?;
+        let call = CheckedNativeCall {
+            execution: &owner.execution,
+            circuit: &owner.circuit,
+            initial_context: QueryContext::new(state.data.clone(), owner.address),
+            entry_point: owner.entry_point.clone(),
+            communication_commitment_rand: owner.communication_commitment_rand,
+        };
+        let proof = block_on(draft.prove_call(
+            slot,
+            &call,
+            &owner.snapshot,
+            &CompositionMaterial {
+                bundle: &owner.bundle,
+                parameters: &owner.parameters,
+            },
+            rng,
+        ))
+        .map_err(|_| INVALID_RESPONSE)?;
+        if proof.len() > MAX_BYTES {
+            return Err(LIMIT);
+        }
+        let proof_token = registry(|r| {
+            let slot = r
+                .composition_owners
+                .get(&owner_token)
+                .ok_or(INVALID_HANDLE)?;
+            if !slot.busy {
+                return Err(INTERNAL);
+            }
+            r.result(proof)
+        })?;
+        owner.proved = true;
+        unsafe { out_proof.write(proof_token) };
+        Ok(())
+    })
+}
+
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub extern "C" fn noctium_native_composition_owner_free(owner: u64) -> i32 {
+    guard(|| {
+        registry(|r| {
+            let slot = r.composition_owners.get(&owner).ok_or(INVALID_HANDLE)?;
+            if slot.busy {
+                return Err(INVALID_STATE);
+            }
+            r.composition_owners.remove(&owner).ok_or(INVALID_HANDLE)?;
+            Ok(())
+        })
+    })
+}
+
 pub(crate) fn native_target_context_snapshot(
     token: u64,
 ) -> Result<crate::control::AuthenticatedNativeTarget, i32> {
@@ -303,7 +679,7 @@ pub unsafe extern "C" fn noctium_native_witness_target_begin(
         }
         let _work = Work::reserve()?;
         registry(|r| {
-            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
+            if r.live_contexts() >= MAX_SESSIONS {
                 Err(LIMIT)
             } else {
                 Ok(())
@@ -348,7 +724,7 @@ pub unsafe extern "C" fn noctium_native_witness_target_begin(
             "ttl": begin.ttl
         }))?;
         registry(|r| {
-            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
+            if r.live_contexts() >= MAX_SESSIONS {
                 return Err(LIMIT);
             }
             let context = r.token()?;
@@ -423,7 +799,7 @@ pub unsafe extern "C" fn noctium_native_begin_from_witness(
         }
         let _work = Work::reserve()?;
         let (directory, target) = registry(|r| {
-            if r.sessions.len() + r.clients.len() + r.targets.len() > MAX_SESSIONS {
+            if r.live_contexts() > MAX_SESSIONS {
                 return Err(LIMIT);
             }
             let context = r.targets.get(&target_context).ok_or(INVALID_HANDLE)?;
@@ -512,7 +888,7 @@ pub unsafe extern "C" fn noctium_native_begin_from_witness(
             .transpose()
             .map_err(|_| INVALID_ARGUMENT)?;
         let reservation = registry(|r| {
-            if r.sessions.len() + r.clients.len() + r.targets.len() > MAX_SESSIONS {
+            if r.live_contexts() > MAX_SESSIONS {
                 return Err(LIMIT);
             }
             let context = r.targets.get(&target_context).ok_or(INVALID_HANDLE)?;
@@ -633,7 +1009,7 @@ pub unsafe extern "C" fn noctium_native_begin(
         }
         let _work = Work::reserve()?;
         registry(|r| {
-            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
+            if r.live_contexts() >= MAX_SESSIONS {
                 Err(LIMIT)
             } else {
                 Ok(())
@@ -688,7 +1064,7 @@ pub unsafe extern "C" fn noctium_native_begin(
             .transpose()
             .map_err(|_| INVALID_ARGUMENT)?;
         registry(|r| {
-            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
+            if r.live_contexts() >= MAX_SESSIONS {
                 return Err(LIMIT);
             }
             let token = r.token()?;
@@ -1235,7 +1611,7 @@ pub unsafe extern "C" fn noctium_client_start(
         let setup = unsafe { input(setup, setup_len, MAX_BYTES)? };
         let _work = Work::reserve()?;
         registry(|r| {
-            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
+            if r.live_contexts() >= MAX_SESSIONS {
                 return Err(LIMIT);
             }
             let s = r.sessions.get(&source).ok_or(INVALID_HANDLE)?;
@@ -1297,7 +1673,7 @@ pub unsafe extern "C" fn noctium_client_start_from_witness(
                 .map_err(|_| INVALID_ARGUMENT)?;
         let _work = Work::reserve()?;
         registry(|r| {
-            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
+            if r.live_contexts() >= MAX_SESSIONS {
                 return Err(LIMIT);
             }
             let token = r.token()?;
@@ -1342,7 +1718,7 @@ pub unsafe extern "C" fn noctium_client_recover(
         let driver =
             crate::native_client::Driver::recover(d, context).map_err(|_| INVALID_ARGUMENT)?;
         registry(|r| {
-            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
+            if r.live_contexts() >= MAX_SESSIONS {
                 return Err(LIMIT);
             }
             let token = r.token()?;
