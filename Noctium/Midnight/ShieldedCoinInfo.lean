@@ -28,7 +28,7 @@ def environment : Types.CompositeEnv := {
   }]
 }
 
-/-- Compact wire bytes concatenate two 32-byte fields and a 16-byte UInt128. -/
+/-- The fixed Noctium frame holds two 32-byte fields and a 16-byte UInt128. -/
 def frameBytes : Nat := 32 + 32 + 16
 
 /-- Checked encoder/decoder shape for unqualified ShieldedCoinInfo values. -/
