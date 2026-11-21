@@ -45,7 +45,7 @@ private def issue69MissingFieldDisclosure : Entrypoint :=
   {issue69CompositeEntry with effects := issue69CompositeEntry.effects.map fun effect =>
     match effect with
     | .writeCompositePath state keys type values =>
-      .writeCompositePath state keys type (values.take 3 ++ [.ref "c2y"])
+      .writeCompositePath state keys type (values.take 3 ++ [.mk .native (.ref "c2y")])
     | other => other}
 
 #guard match Disclosure.entrypoint issue69MissingFieldDisclosure with

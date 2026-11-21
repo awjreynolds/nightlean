@@ -155,6 +155,14 @@ private def alignedExpressionJson (value : Backend.Impact.Aligned) : Json :=
   | .nativeFields expressions => toJson (expressions.map nativeExpressionJson)
   | .counter expression => nativeExpressionJson expression
 
+private def ledgerFieldExprJson (value : LedgerFieldExpr) : Json :=
+  match value with
+  | .mk _ expression => nativeExpressionJson expression
+
+private def sourceLedgerFieldExprJson (value : LedgerFieldExpr) : Json :=
+  match value with
+  | .mk _ expression => expressionJson expression
+
 private def operationJsonBare : Backend.Impact.Op → Json
   | .dup => Json.mkObj [("op", toJson ("dup" : String))]
   | .index slot pushPath => Json.mkObj [("op", toJson ("index" : String)),
@@ -171,10 +179,10 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .popeq value => Json.mkObj ([("op", toJson ("popeq" : String))] ++ alignedJson value)
   | .pushFields schema expressions storage => Json.mkObj [
       ("op", toJson ("pushFields" : String)), ("storage", toJson storage),
-      ("expressions", toJson (expressions.map nativeExpressionJson)), ("schema", schema)]
+      ("expressions", toJson (expressions.map ledgerFieldExprJson)), ("schema", schema)]
   | .popeqFields schema expressions => Json.mkObj [
       ("op", toJson ("popeqFields" : String)),
-      ("expressions", toJson (expressions.map nativeExpressionJson)), ("schema", schema)]
+      ("expressions", toJson (expressions.map ledgerFieldExprJson)), ("schema", schema)]
   | .member => Json.mkObj [("op", toJson ("member" : String))]
   | .insert n => Json.mkObj [("op", toJson ("insert" : String)), ("n", toJson n)]
   | .addImmediate amount => Json.mkObj [("op", toJson ("addImmediate" : String)), ("amount", toJson amount)]
@@ -198,11 +206,11 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .listHead slot keys schema expressions => Json.mkObj [
       ("op", toJson ("listHead" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
-      ("schema", schema), ("expressions", toJson (expressions.map nativeExpressionJson))]
+      ("schema", schema), ("expressions", toJson (expressions.map ledgerFieldExprJson))]
   | .listPushFront slot keys schema expressions => Json.mkObj [
       ("op", toJson ("listPushFront" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
-      ("schema", schema), ("expressions", toJson (expressions.map nativeExpressionJson))]
+      ("schema", schema), ("expressions", toJson (expressions.map ledgerFieldExprJson))]
   | .listPopFront slot keys => Json.mkObj [
       ("op", toJson ("listPopFront" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key)))]
@@ -475,12 +483,12 @@ private def effectJson : Effect → Json
       ("destination", toJson destination),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value)),
-      ("destinations", toJson destinations)]
+      ("destinations", toJson (destinations.map Prod.fst))]
   | .listPushFront state keys _ values => Json.mkObj [
       ("op", toJson ("listPushFront" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value)),
-      ("values", toJson (values.map expressionJson))]
+      ("values", toJson (values.map sourceLedgerFieldExprJson))]
   | .listPopFront state keys => Json.mkObj [
       ("op", toJson ("listPopFront" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
@@ -499,14 +507,15 @@ private def effectJson : Effect → Json
         | .mk _ value => expressionJson value)), ("value", expressionJson value)]
   | .readCompositePath state destination keys _ destinations => Json.mkObj [
         ("op", toJson ("readCompositePath" : String)), ("state", toJson state),
-        ("destination", toJson destination), ("destinations", toJson destinations),
+        ("destination", toJson destination),
+        ("destinations", toJson (destinations.map Prod.fst)),
         ("keys", toJson (keys.map fun key => match key with
           | .mk _ value => expressionJson value))]
   | .writeCompositePath state keys _ values => Json.mkObj [
       ("op", toJson ("writeCompositePath" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value)),
-      ("values", toJson (values.map expressionJson))]
+      ("values", toJson (values.map sourceLedgerFieldExprJson))]
   | .emptyMapPath state keys => Json.mkObj [
       ("op", toJson ("emptyMapPath" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
@@ -531,9 +540,7 @@ private def guardedEffectJson (guard : Option (Expr .bool)) (effect : Effect) : 
 
 private def stateJson (state : StateDecl) : Json :=
   let compositeSchema (environment : Types.CompositeEnv) (type : Types.CompositeType) : Json :=
-    match Types.compileType environment type with
-    | .error _ => Json.null
-    | .ok compiled => (Types.schemaJson compiled).toOption.getD Json.null
+    (Backend.Impact.recordSchema environment type).toOption.getD Json.null
   let rec treeJson : LedgerValueType → Json
     | .scalar ty => Json.mkObj [("scalar", toJson (typeName ty))]
     | .map keyTy value => Json.mkObj [("map", toJson [toJson (typeName keyTy), treeJson value])]

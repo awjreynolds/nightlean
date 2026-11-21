@@ -293,23 +293,24 @@ def describeEffect : Effect → LedgerEffectDescriptor
       [.path sink keys, .payload "value" s!"public nested map write value '{state}'" payload] []
   | .readCompositePath state _ keys _ destinations =>
     .publicEffect "readCompositePath" .stateRead .publicActivity s!"public nested composite read guard '{state}'"
-      [.path s!"public nested composite read path '{state}'" keys] destinations
+      [.path s!"public nested composite read path '{state}'" keys] (destinations.map Prod.fst)
   | .writeCompositePath state keys _ payloads =>
     let sink := s!"public nested composite write path '{state}'"
     .publicEffect "writeCompositePath" .stateWrite .publicActivity sink
-      (.path sink keys :: payloads.zipIdx.map (fun (payload, index) =>
-        .payload "field" s!"public nested composite write field {index} of '{state}'" payload)) []
+      (.path sink keys :: payloads.zipIdx.map (fun (payload, index) => match payload with
+        | .mk _ value =>
+          .payload "field" s!"public nested composite write field {index} of '{state}'" value)) []
   | .listLength state destination keys =>
     .publicEffect "listLength" .stateRead .publicActivity s!"public List length guard '{state}'"
       [.path s!"public List length path '{state}'" keys] [destination]
   | .listHead state _ keys _ destinations =>
     .publicEffect "listHead" .stateRead .publicActivity s!"public List head guard '{state}'"
-      [.path s!"public List head path '{state}'" keys] destinations
+      [.path s!"public List head path '{state}'" keys] (destinations.map Prod.fst)
   | .listPushFront state keys _ payloads =>
     let sink := s!"public List push path '{state}'"
     .publicEffect "listPushFront" .stateWrite .publicActivity sink
-      (.path sink keys :: payloads.zipIdx.map (fun (payload, index) =>
-        .payload "field" s!"public List push field {index} of '{state}'" payload)) []
+      (.path sink keys :: payloads.zipIdx.map (fun (payload, index) => match payload with
+        | .mk _ value => .payload "field" s!"public List push field {index} of '{state}'" value)) []
   | .listPopFront state keys =>
     let sink := s!"public List mutation path '{state}'"
     .publicEffect "listPopFront" .stateWrite .publicActivity sink [.path sink keys] []

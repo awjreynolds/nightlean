@@ -57,8 +57,8 @@ inductive LedgerValue where
   | null
   | scalar (value : Value)
   | map (entries : List (Value × LedgerValue))
-  | composite (type : Types.CompositeType) (leaves : List Nat)
-  | list (entries : List (List Nat))
+  | composite (type : Types.CompositeType) (fields : List Value)
+  | list (entries : List (List Value))
   | merkleTree (depth count : Nat)
   | merkleTreeKnown (depth count : Nat) (tree : Noctium.Merkle.Tree)
   | historicMerkleTree (depth count : Nat) (history : List Nat)
@@ -223,6 +223,18 @@ private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   | .jubjubPoint => v.1 < ctx.modulus && v.2 < ctx.modulus &&
       (ctx.jubjub.pointValid v).isOk
   | .foreign kind => kind.canonical v
+
+private def defaultDenote : (ty : Ty) → ty.Denote
+  | .native => 0
+  | .bool => false
+  | .uint _ => 0
+  | .bytes length => List.replicate length 0
+  | .jubjubScalar => 0
+  | .jubjubPoint => (0, 1)
+  | .foreign (.base _) | .foreign (.scalar _) => 0
+  | .foreign (.point _) => .identity
+
+private def defaultValue (ty : Ty) : Value := Value.pack ty (defaultDenote ty)
 
 private def contractAddressValue (ctx : EvalContext) : Except String Value := do
   let some address := ctx.ownContractAddress | throw "missing execution contract address"
@@ -841,6 +853,22 @@ private def claimUnshieldedCoinSpend (ctx : EvalContext) (env : EvalEnv) (state 
   let claims ← accumulateTaggedAmount state.unshieldedSpendClaims key (← amount.eval ctx env)
   pure {state with unshieldedSpendClaims := claims}
 
+private def evalLedgerField (ctx : EvalContext) (env : EvalEnv) :
+    LedgerFieldExpr → Except String Value
+  | .mk ty expression => do
+    let value ← expression.eval ctx env
+    unless canonical ctx ty value do throw "noncanonical ledger record field"
+    pure (Value.pack ty value)
+
+private def checkedRecordBindings (ctx : EvalContext) (destinations : List (String × Ty))
+    (values : List Value) (typeError canonicalError : String) :
+    Except String (List (String × Value)) := do
+  unless values.length == destinations.length do throw typeError
+  destinations.zip values |>.mapM fun ((destination, ty), raw) => do
+    let some value := raw.as ty | throw typeError
+    unless canonical ctx ty value do throw canonicalError
+    pure (destination, Value.pack ty value)
+
 private def evaluatePath (ctx : EvalContext) (env : EvalEnv) (keys : List PathKey) :
     Except String (List Value) := keys.mapM fun key => match key with
   | .mk ty expression => do
@@ -1024,7 +1052,7 @@ private def callerValues (names : CallerBindings) (caller : Option CallerAddress
     (names.contractAddress, .bytes 32 contract), (names.userAddress, .bytes 32 user)]
 
 private def listPayloadAt (root : LedgerValue) (keys : List Value) :
-    Except String (List (List Nat)) := do
+    Except String (List (List Value)) := do
   let some (.list entries) := treeLookup root keys
     | throw "missing or non-list state value"
   pure entries
@@ -1139,11 +1167,11 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
       let some (.composite found leaves) := treeLookup root evaluated
         | throw s!"missing or non-composite nested map value '{name}'"
-      unless found == type && leaves.length == destinations.length do
+      unless found == type do
         throw s!"nested composite state type mismatch '{name}'"
-      unless leaves.all (· < ctx.modulus) do throw s!"noncanonical nested composite value '{name}'"
-      env := env ++ (destinations.zip leaves).map fun (destination, value) =>
-        (destination, .native value)
+      env := env ++ (← checkedRecordBindings ctx destinations leaves
+        s!"nested composite state type mismatch '{name}'"
+        s!"noncanonical nested composite value '{name}'")
     | .memberPath name destination keys => do
       let evaluated ← evaluatePath ctx env keys
       let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
@@ -1187,17 +1215,11 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
       let entries ← listPayloadAt root evaluated
       let some leaves := entries.head? | throw "cannot read the head of an empty List"
-      unless leaves.length == destinations.length do
-        throw "List head record leaf count mismatch"
-      unless leaves.all (· < ctx.modulus) do throw "noncanonical List record field"
-      env := env ++ (destinations.zip leaves).map fun (destination, value) =>
-        (destination, .native value)
+      env := env ++ (← checkedRecordBindings ctx destinations leaves
+        "List head record field count or type mismatch" "noncanonical List record field")
     | .listPushFront name keys _type values => do
       let evaluated ← evaluatePath ctx env keys
-      let leaves ← values.mapM fun value => do
-        let result ← value.eval ctx env
-        if result ≥ ctx.modulus then throw "noncanonical List record field"
-        pure result
+      let leaves ← values.mapM (evalLedgerField ctx env)
       if leaves.isEmpty then throw "List record must contain at least one field"
       let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
       let entries ← listPayloadAt root evaluated
@@ -1314,7 +1336,7 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       next := {next with trees := updateAssoc name updated next.trees}
     | .writeCompositePath name keys type values => do
       let evaluated ← evaluatePath ctx env keys
-      let leaves ← values.mapM (fun value => value.eval ctx env)
+      let leaves ← values.mapM (evalLedgerField ctx env)
       let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
       let some updated := treeSet root evaluated (.composite type leaves)
         | throw s!"nested map parent is missing or not a map '{name}'"
@@ -1451,11 +1473,11 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
           let some (.composite found leaves) := treeLookup root evaluated
             | throw s!"missing or non-composite nested map value '{name}'"
-          unless found == type && leaves.length == destinations.length do
+          unless found == type do
             throw s!"nested composite state type mismatch '{name}'"
-          unless leaves.all (· < ctx.modulus) do throw s!"noncanonical nested composite value '{name}'"
-          env := env ++ (destinations.zip leaves).map fun (destination, value) =>
-            (destination, .native value)
+          env := env ++ (← checkedRecordBindings ctx destinations leaves
+            s!"nested composite state type mismatch '{name}'"
+            s!"noncanonical nested composite value '{name}'")
         | .memberPath name destination keys => do
           let evaluated ← evaluatePath ctx env keys
           let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
@@ -1499,17 +1521,11 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
           let entries ← listPayloadAt root evaluated
           let some leaves := entries.head? | throw "cannot read the head of an empty List"
-          unless leaves.length == destinations.length do
-            throw "List head record leaf count mismatch"
-          unless leaves.all (· < ctx.modulus) do throw "noncanonical List record field"
-          env := env ++ (destinations.zip leaves).map fun (destination, value) =>
-            (destination, .native value)
+          env := env ++ (← checkedRecordBindings ctx destinations leaves
+            "List head record field count or type mismatch" "noncanonical List record field")
         | .listPushFront name keys _type values => do
           let evaluated ← evaluatePath ctx env keys
-          let leaves ← values.mapM fun value => do
-            let result ← value.eval ctx env
-            if result ≥ ctx.modulus then throw "noncanonical List record field"
-            pure result
+          let leaves ← values.mapM (evalLedgerField ctx env)
           if leaves.isEmpty then throw "List record must contain at least one field"
           let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
           let entries ← listPayloadAt root evaluated
@@ -1592,7 +1608,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           next := {next with trees := updateAssoc name updated next.trees}
         | .writeCompositePath name keys type values => do
           let evaluated ← evaluatePath ctx env keys
-          let leaves ← values.mapM (fun value => value.eval ctx env)
+          let leaves ← values.mapM (evalLedgerField ctx env)
           let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
           let some updated := treeSet root evaluated (.composite type leaves)
             | throw s!"nested map parent is missing or not a map '{name}'"
@@ -1656,7 +1672,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             | .foreign (.point _) => .identity
           env := (destination, Value.pack ty zero) :: env
         | .readCompositePath _ _ _ _ destinations =>
-          env := env ++ destinations.map fun destination => (destination, .native 0)
+          env := env ++ destinations.map fun (destination, ty) =>
+            (destination, defaultValue ty)
         | .readCaller destinations =>
           env := (← callerValues destinations none) ++ env
         | .memberPath _ destination _ => env := (destination, .bool false) :: env
@@ -1675,7 +1692,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .merkleTreeResetAt .. | .merkleTreeResetHistoryAt .. => pure ()
         | .listLength _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
         | .listHead _ _ _ _ destinations =>
-          env := env ++ destinations.map fun destination => (destination, .native 0)
+          env := env ++ destinations.map fun (destination, ty) =>
+            (destination, defaultValue ty)
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
     pure (env, next)
 

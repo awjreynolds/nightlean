@@ -1358,6 +1358,19 @@ private def checkedExpression (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty)
   let (found, value) ← expression env stx
   coerceExpression stx found ty value
 
+private def elaborateLedgerFieldValues (env : Bindings) (payload : TSyntax `nlleaves)
+    (fields : List (String × Ty)) : CommandElabM (TSyntax `term) := do
+  let items ← match payload with
+    | `(nlleaves| fields($items:nlexpr,*)) => pure items.getElems.toList
+    | _ => throwErrorAt payload "ledger record payload expects fields(...)"
+  unless items.length == fields.length do
+    throwErrorAt payload "ledger record field count does not match its checked layout"
+  let values ← (items.zip fields).mapM fun (item, _, ty) => do
+    let value ← checkedExpression env item ty
+    `(Noctium.LedgerFieldExpr.mk $(← tyTerm ty) $value)
+  let values := values.toArray
+  `(([$values,*] : List Noctium.LedgerFieldExpr))
+
 private partial def lowerTreePath (env : Bindings) (schema : LedgerValueType)
     (keys : List (TSyntax `nlexpr)) :
     CommandElabM (List (TSyntax `term) × LedgerValueType) := do
@@ -1440,7 +1453,7 @@ private def statePathSchema (schema : List (String × StateKind)) (storage : TSy
 
 private def lowerListPath (schema : List (String × StateKind)) (env : Bindings)
     (path : TSyntax `nlpath) :
-    CommandElabM (TSyntax `ident × TSyntax `term × Types.CompositeType × List String) := do
+    CommandElabM (TSyntax `ident × TSyntax `term × Types.CompositeType × List (String × Ty)) := do
   let (storage, sourceKeys) ← sourcePathParts path
   unless sourceKeys.length ≤ 13 do
     throwErrorAt path "List paths support at most 13 map keys"
@@ -1448,10 +1461,10 @@ private def lowerListPath (schema : List (String × StateKind)) (env : Bindings)
   let (keys, value) ← lowerTreePath env treeSchema sourceKeys
   let .«list» environment type := value
     | throwErrorAt path "List operation path must select a List value"
-  let fieldNames ← match LedgerValueType.nativeLeafNames environment type with
-    | .ok names => pure names
+  let fields ← match LedgerValueType.recordFields environment type with
+    | .ok fields => pure fields
     | .error message => throwErrorAt path message
-  pure (storage, ← pathKeysTerm keys, type, fieldNames)
+  pure (storage, ← pathKeysTerm keys, type, fields)
 
 private def counterPathTerm (env : Bindings) (schema : LedgerValueType)
     (keys : List (TSyntax `nlexpr)) : CommandElabM (TSyntax `term) := do
@@ -1680,6 +1693,24 @@ private def bindReadName (state : EntryEffects) (sourceName internalName : Strin
     else addReferenceAs state.env sourceName internalName ty
   pure {state with env}
 
+private def bindLedgerRecordFields (state : EntryEffects) (destination : TSyntax `ident)
+    (depth : Nat) (fields : List (String × Ty)) :
+    CommandElabM (EntryEffects × TSyntax `term) := do
+  let mut updated := state
+  let mut destinations := #[]
+  for (field, ty) in fields do
+    let sourceName := s!"{destination.getId}_{field}"
+    if updated.env.any (fun binding => binding.1 == sourceName) then
+      throwErrorAt destination s!"duplicate ledger record read field {sourceName}"
+    let internalName ← if depth == 0 then pure sourceName else do
+      let (candidate, nextLocal) := chooseBranchLocalName updated.env
+        updated.usedLocalNames updated.nextLocal
+      updated := {updated with nextLocal, usedLocalNames := candidate :: updated.usedLocalNames}
+      pure candidate
+    updated ← bindReadName updated sourceName internalName ty
+    destinations := destinations.push (← `(($(stringTerm internalName), $(← tyTerm ty))))
+  pure (updated, ← `(([$destinations,*] : List (String × Noctium.Ty))))
+
 private def elaborateTokenBalanceRead (state : EntryEffects) (depth : Nat)
     (destination : TSyntax `ident) (color tag : TSyntax `nlexpr)
     (comparison : Option (_root_.Bool × TSyntax `nlexpr)) :
@@ -1733,25 +1764,11 @@ private def elaborateTreeRead (storage destination : TSyntax `ident)
     let updated := {updated with terms := updated.terms.push term}
     bindReadName updated destination.getId.toString readName valueTy
   | .composite environment (.structure typeId) => do
-    let leafNames ← match LedgerValueType.nativeLeafNames environment (.structure typeId) with
-      | .ok names => pure names
+    let fields ← match LedgerValueType.recordFields environment (.structure typeId) with
+      | .ok fields => pure fields
       | .error message => throwErrorAt destination message
     let (readName, updated) ← freshReadName depth state destination
-    let mut updated := updated
-    let mut internalNames : List String := []
-    for leafName in leafNames do
-      let sourceName := destination.getId.toString ++ "_" ++ leafName
-      if updated.env.any (fun binding => binding.1 == sourceName) then
-        throwErrorAt destination s!"duplicate composite read field {sourceName}"
-      let internalName ← if depth == 0 then pure sourceName else do
-        let (candidate, nextLocal) := chooseBranchLocalName updated.env
-          updated.usedLocalNames updated.nextLocal
-        updated := {updated with nextLocal, usedLocalNames := candidate :: updated.usedLocalNames}
-        pure candidate
-      updated ← bindReadName updated sourceName internalName .native
-      internalNames := internalNames ++ [internalName]
-    let destinationsRaw ← stringListTerm (internalNames.map stringTerm)
-    let destinations ← `(($destinationsRaw : List String))
+    let (updated, destinations) ← bindLedgerRecordFields updated destination depth fields
     let typeTerm ← `(Noctium.Types.CompositeType.structure $(stringTerm typeId))
     let term ← `(Noctium.Effect.readCompositePath
       $(stringTerm storage.getId.toString) $(stringTerm readName) $keys $typeTerm $destinations)
@@ -1796,26 +1813,12 @@ private def elaborateListLength (schema : List (String × StateKind))
 private def elaborateListHead (schema : List (String × StateKind))
     (path : TSyntax `nlpath) (destination : TSyntax `ident) (depth : Nat)
     (state : EntryEffects) : CommandElabM EntryEffects := do
-  let (storage, keys, type, fieldNames) ← lowerListPath schema state.env path
+  let (storage, keys, type, fields) ← lowerListPath schema state.env path
   let (readName, updated) ← freshReadName depth state destination
-  let mut updated := updated
-  let mut internalNames : List String := []
-  for fieldName in fieldNames do
-    let sourceName := destination.getId.toString ++ "_" ++ fieldName
-    if updated.env.any (fun binding => binding.1 == sourceName) then
-      throwErrorAt destination s!"duplicate List head field {sourceName}"
-    let internalName ← if depth == 0 then pure sourceName else do
-      let (candidate, nextLocal) := chooseBranchLocalName updated.env
-        updated.usedLocalNames updated.nextLocal
-      updated := {updated with nextLocal, usedLocalNames := candidate :: updated.usedLocalNames}
-      pure candidate
-    updated ← bindReadName updated sourceName internalName .native
-    internalNames := internalNames ++ [internalName]
+  let (updated, destinations) ← bindLedgerRecordFields updated destination depth fields
   let typeTerm ← match type with
     | .structure id => `(Noctium.Types.CompositeType.structure $(stringTerm id))
     | _ => throwErrorAt path "List head currently requires a named structure"
-  let destinationsRaw ← stringListTerm (internalNames.map stringTerm)
-  let destinations ← `(($destinationsRaw : List String))
   let term ← `(Noctium.Effect.listHead
     $(stringTerm storage.getId.toString) $(stringTerm readName) $keys $typeTerm $destinations)
   pure {updated with terms := updated.terms.push term}
@@ -1855,19 +1858,11 @@ private def elaborateListHeadOrDefault (schema : List (String × StateKind))
 private def elaborateListPushFront (schema : List (String × StateKind))
     (path : TSyntax `nlpath) (payload : TSyntax `nlleaves)
     (state : EntryEffects) : CommandElabM EntryEffects := do
-  let (storage, keys, type, fieldNames) ← lowerListPath schema state.env path
-  let values ← match payload with
-    | `(nlleaves| fields($items:nlexpr,*)) => pure items.getElems.toList
-    | _ => throwErrorAt payload "pushFront expects fields(...)"
-  unless values.length == fieldNames.length do
-    throwErrorAt payload "pushFront field count does not match its checked List record"
-  let values ← values.mapM fun value => checkedExpression state.env value Ty.native
+  let (storage, keys, type, fields) ← lowerListPath schema state.env path
+  let valuesTerm ← elaborateLedgerFieldValues state.env payload fields
   let typeTerm ← match type with
     | .structure id => `(Noctium.Types.CompositeType.structure $(stringTerm id))
     | _ => throwErrorAt path "pushFront currently requires a named structure"
-  let nativeTy ← tyTerm Ty.native
-  let valuesRaw ← nativeExprListTerm values
-  let valuesTerm ← `(($valuesRaw : List (Noctium.Expr $nativeTy)))
   let term ← `(Noctium.Effect.listPushFront
     $(stringTerm storage.getId.toString) $keys $typeTerm $valuesTerm)
   pure {state with terms := state.terms.push term}
@@ -1926,19 +1921,11 @@ private def elaborateCompositePathWrite (schema : List (String × StateKind))
   let (path, result) ← lowerTreePath state.env treeSchema keys
   let (.composite environment type) := result
     | throwErrorAt payload "composite write must select a composite record"
-  let fieldNames ← match LedgerValueType.nativeLeafNames environment type with
-    | .ok names => pure names
+  let fields ← match LedgerValueType.recordFields environment type with
+    | .ok fields => pure fields
     | .error message => throwErrorAt payload message
-  let values ← match payload with
-    | `(nlleaves| fields($items:nlexpr,*)) => pure items.getElems.toList
-    | _ => throwErrorAt payload "composite write expects fields(...)"
-  unless values.length == fieldNames.length do
-    throwErrorAt payload "composite write field count does not match its checked layout"
-  let lowered ← values.mapM fun value => checkedExpression state.env value Ty.native
+  let valueList ← elaborateLedgerFieldValues state.env payload fields
   let pathTerm ← pathKeysTerm path
-  let nativeTy ← tyTerm Ty.native
-  let valueListRaw ← nativeExprListTerm lowered
-  let valueList ← `(($valueListRaw : List (Noctium.Expr $nativeTy)))
   let typeTerm ← match type with
     | .structure id => `(Noctium.Types.CompositeType.structure $(stringTerm id))
     | _ => throwErrorAt payload "composite writes currently require a named structure"
