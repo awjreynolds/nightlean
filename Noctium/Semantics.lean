@@ -356,6 +356,11 @@ private def checkedPrimeFieldInverse (value modulus : Nat) : Except String Nat :
 private def integerBytesLE (value length : Nat) : List Nat :=
   (List.range length).map fun index => (value / 256 ^ index) % 256
 
+private def fabUnsignedWidth (maximum : Nat) : Nat := Id.run do
+  let mut width := 1
+  while maximum ≥ 256 ^ width do width := width + 1
+  return width
+
 private def checkedForeignPoint (curve : Foreign.Curve) (point : Foreign.Point) :
     Except String Foreign.Point := do
   unless Foreign.pointValid curve point do throw "foreign point is not canonical or on curve"
@@ -487,6 +492,51 @@ private def checkedForeignBinary : (ctx : EvalContext) → (operation : Foreign.
   | _, .fromCoordinates curve, x, y => do
     unless x < curve.baseModulus && y < curve.baseModulus do throw "foreign coordinates are noncanonical"
     checkedForeignPoint curve (Foreign.normalizePoint curve x y)
+
+mutual
+private def fabHashFieldPreimage (ctx : EvalContext) (env : EvalEnv)
+    : Types.Layout → Sigma Expr → Except String (List Nat)
+  | layout, value => do
+  match layout, value with
+  | .bytes length .byteField, ⟨.bytes actualLength, expression⟩ => do
+    unless length == actualLength do throw "mixed FAB Bytes field type mismatch"
+    let bytes ← expression.eval ctx env
+    unless bytes.length == length && bytes.all (· ≤ 255) do
+      throw "mixed FAB Bytes field is not canonical"
+    pure bytes
+  | .scalar .nativeField, ⟨.native, expression⟩ =>
+    pure (nativeFieldBytesLE (← expression.eval ctx env))
+  | .scalar .booleanField, ⟨.bool, expression⟩ =>
+    pure [if (← expression.eval ctx env) then 1 else 0]
+  | .scalar (.boundedUnsignedField maximum), ⟨.uint actualMaximum, expression⟩ => do
+    unless maximum == actualMaximum do throw "mixed FAB UInt field type mismatch"
+    pure (integerBytesLE (← expression.eval ctx env) (fabUnsignedWidth maximum))
+  | .enumeration _ (.enumTagField maximum) _ 0 _ variants,
+      ⟨.uint actualMaximum, expression⟩ => do
+    unless maximum == actualMaximum && !variants.isEmpty && variants.all (·.2.1.isEmpty) do
+      throw "mixed FAB enum layout is unsupported"
+    pure (integerBytesLE (← expression.eval ctx env) (fabUnsignedWidth maximum))
+  | _, _ => throw "unsupported mixed FAB field during evaluation"
+termination_by _ value => sizeOf value
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | exact Noctium.sizeOfSigmaExprValueLt _
+    | omega
+
+private def fabHashFieldsPreimage (ctx : EvalContext) (env : EvalEnv)
+    : List Types.Layout → List (Sigma Expr) → Except String (List Nat)
+  | [], [] => pure []
+  | layout :: layouts, value :: rest => do
+    pure ((← fabHashFieldPreimage ctx env layout value) ++
+      (← fabHashFieldsPreimage ctx env layouts rest))
+  | _, _ => throw "mixed FAB field count changed after validation"
+termination_by _ values => sizeOf values
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | exact Noctium.sizeOfMemberListLt (by simp)
+    | omega
 
 /-- Evaluation is total and returns errors for absent/mistyped witnesses or
 noncanonical field data, rather than silently inventing witness values. -/
@@ -660,6 +710,11 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     for value in values do
       preimage := preimage ++ nativeFieldBytesLE (← value.eval ctx env)
     evaluatePersistentHash ctx preimage
+  | .persistentHashFab compositeEnv type values => do
+    let layout ← validateFabHashLayout compositeEnv type values
+    let .structure _ fields := layout
+      | throw "mixed FAB persistent hash requires a named flat structure"
+    evaluatePersistentHash ctx (← fabHashFieldsPreimage ctx env (fields.map Prod.snd) values)
   | .toBytes32 (source := .native) value => do
     pure (nativeFieldBytesLE (← value.eval ctx env))
   | .toBytes32 (source := .jubjubScalar) value => do
@@ -764,6 +819,17 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     let result ← ctx.transientHash inputs
     if result >= ctx.modulus then throw "transient_hash oracle returned noncanonical value"
     pure result
+
+termination_by value => sizeOf value
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | have h := Noctium.sizeOfMemberListLt (by assumption); omega
+    | exact Noctium.sizeOfSigmaExprHeadLt _ _
+    | exact Noctium.sizeOfSigmaExprValueLt _
+    | have _h := Noctium.sizeOfSigmaExprMemberLt (by assumption); omega
+    | omega
+end
 
 theorem Expr.eval_reverseBytes32_twice (ctx : EvalContext) (env : EvalEnv)
     (value : Expr (.bytes 32)) :
@@ -1176,9 +1242,15 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       throw "reference evaluator cannot determine the native shielded receive index"
     | .insertShieldedCoinSet .. =>
       throw "reference evaluator cannot determine the booked shielded coin index"
+    | .insertShieldedCoinSetTo .. =>
+      throw "reference evaluator cannot determine the booked shielded coin index"
     | .writeShieldedCoinCell .. =>
       throw "reference evaluator cannot determine the booked shielded coin index"
+    | .writeShieldedCoinCellTo .. =>
+      throw "reference evaluator cannot determine the booked shielded coin index"
     | .pushFrontCoin .. =>
+      throw "reference evaluator cannot determine the booked shielded coin index"
+    | .pushFrontCoinTo .. =>
       throw "reference evaluator cannot determine the booked shielded coin index"
     | .spendShieldedFromMap .. =>
       throw "reference evaluator cannot determine the native shielded spend commitment"
@@ -1499,9 +1571,15 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           throw "reference evaluator cannot determine the native shielded receive index"
         | .insertShieldedCoinSet .. =>
           throw "reference evaluator cannot determine the booked shielded coin index"
+        | .insertShieldedCoinSetTo .. =>
+          throw "reference evaluator cannot determine the booked shielded coin index"
         | .writeShieldedCoinCell .. =>
           throw "reference evaluator cannot determine the booked shielded coin index"
+        | .writeShieldedCoinCellTo .. =>
+          throw "reference evaluator cannot determine the booked shielded coin index"
         | .pushFrontCoin .. =>
+          throw "reference evaluator cannot determine the booked shielded coin index"
+        | .pushFrontCoinTo .. =>
           throw "reference evaluator cannot determine the booked shielded coin index"
         | .spendShieldedFromMap .. =>
           throw "reference evaluator cannot determine the native shielded spend commitment"
@@ -1748,6 +1826,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .claimUnshieldedCoinSpend .. | .emitEvent .. |
             .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. | .pushFrontCoin .. |
+            .insertShieldedCoinSetTo .. | .writeShieldedCoinCellTo .. | .pushFrontCoinTo .. |
             .listPopFront .. | .listReset .. | .setInsert .. | .removePath .. => pure ()
         | .readPath _ destination _ ty =>
           let zero : ty.Denote := match ty with

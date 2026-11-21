@@ -140,6 +140,33 @@ def persistentHashNativeVectorTerm (values : List Term) : Term :=
   | [value] => persistentHashNativeTerm value
   | _ => .unary s!"persistent_hash_native_vector:{values.length}" (.hash values)
 
+def fabHashByteWidth (maximum : Nat) : Nat := Id.run do
+  for width in List.range 32 do
+    let width := width + 1
+    if maximum < 2 ^ (8 * width) then return width
+  return 0
+
+/-- The checked source layout determines each FAB atom. Byte atoms of length
+32 consume two native fields, while shorter byte atoms consume one. -/
+def fabHashLayoutAtom : Types.Layout → Except String String
+  | .bytes length .byteField => do
+    unless 1 ≤ length && length ≤ 32 do throw "unsupported mixed FAB byte width"
+    pure s!"bytes:{length}"
+  | .scalar .nativeField => pure "field"
+  | .scalar .booleanField => pure "bytes:1"
+  | .scalar (.boundedUnsignedField maximum) => do
+    let width := fabHashByteWidth maximum
+    unless width > 0 do throw "unsupported mixed FAB unsigned width"
+    pure s!"bytes:{width}"
+  | .enumeration _ (.enumTagField maximum) _ 0 _ variants => do
+    unless maximum < 256 && !variants.isEmpty && variants.all (fun variant => variant.2.1.isEmpty) do
+      throw "unsupported mixed FAB enum layout"
+    pure "bytes:1"
+  | _ => throw "unsupported mixed FAB field layout"
+
+def persistentHashFabTerm (alignment : List String) (values : List Term) : Term :=
+  .unary ("persistent_hash_fab:" ++ String.intercalate "," alignment) (.hash values)
+
 /-- Foreign values retain their kind and canonical Encode representation. -/
 def foreignConstantTerm (kind : Foreign.Kind) (encoding : List Nat) : Term :=
   .unary ("foreign_constant:" ++ kind.nativeName) (.hash (encoding.map Term.constant))
@@ -212,6 +239,7 @@ private def opaqueBytes32Value : Term → Bool
   | .unary opcode _ => opcode == "persistent_hash32" || opcode == "persistent_hash_native" ||
       opcode == "keccak256_secp256k1_point" ||
       opcode.startsWith "persistent_hash_vector32:" || opcode.startsWith "persistent_hash_native_vector:" ||
+      opcode.startsWith "persistent_hash_fab:" ||
       opcode.startsWith "to_bytes32_" || opcode.startsWith "from_bytes32_" ||
       opcode == "bytes32_from_chunks" || opcode == "reverse_bytes32"
       || opcode.startsWith "bytes_from_chunks:" || opcode.startsWith "reverse_bytes:"
@@ -396,6 +424,7 @@ theorem subtraction_eq (ty : Ty) (left right : Normalized) :
       {requireSourceType ty (.binary "add" left.term (.unary "neg" right.term))
         (left.bounds ++ right.bounds) with assertions := left.assertions ++ right.assertions} := rfl
 
+mutual
 def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Normalized
   | .native value => pure {term := .constant value}
   | .opaqueBytesProjection value => normalize env value
@@ -548,6 +577,30 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let bounds := (normalized.map (fun item => item.bounds)).flatten
     let assertions := (normalized.map (fun item => item.assertions)).flatten
     pure {term, bounds, assertions}
+  | .persistentHashFab compositeEnv compositeType values => do
+    let compiled ← validateFabHashLayout compositeEnv compositeType values
+    let .structure _ fields := compiled
+      | throw "mixed FAB persistent hash requires a named flat structure"
+    let normalizedValues ← normalizeFabValues env values
+    let mut alignment := []
+    let mut operands := []
+    let mut bounds := []
+    let mut assertions := []
+    for (field, normalized) in fields.zip normalizedValues do
+      alignment := alignment ++ [← fabHashLayoutAtom field.2]
+      let aligned ← match field.2 with
+        | .bytes 32 .byteField => do
+          let (highByte, low31) ← alignedBytes32Fields normalized
+          pure [highByte, low31]
+        | .bytes length .byteField => bytesChunksTerm length normalized.term
+        | .scalar .nativeField | .scalar .booleanField
+        | .scalar (.boundedUnsignedField _) | .enumeration _ (.enumTagField _) _ 0 _ _ =>
+          pure [normalized.term]
+        | _ => throw "unsupported mixed FAB field layout"
+      operands := operands ++ aligned
+      bounds := bounds ++ normalized.bounds
+      assertions := assertions ++ normalized.assertions
+    pure {term := persistentHashFabTerm alignment operands, bounds, assertions}
   | .reverseBytes32 value => do
     let normalized ← normalize env value
     let (highByte, low31) ← alignedBytes32Fields normalized
@@ -703,6 +756,25 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let left ← normalize env left
     let right ← normalize env right
     pure {term := .hash [.constant domain, left.term, right.term], bounds := left.bounds ++ right.bounds, assertions := left.assertions ++ right.assertions}
+termination_by value => sizeOf value
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | have h := sizeOfMemberListLt (by assumption); omega
+    | omega
+
+private def normalizeFabValues (env : AliasEnvironment) :
+    List (Sigma Expr) → Except String (List Normalized)
+  | [] => pure []
+  | ⟨_, value⟩ :: rest => do
+    pure ((← normalize env value) :: (← normalizeFabValues env rest))
+termination_by values => sizeOf values
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | have _h := sizeOfSigmaExprHeadLt _ _; omega
+    | omega
+end
 
 structure InputRequirement where
   identifier : String

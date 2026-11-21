@@ -383,6 +383,15 @@ pub struct Schema {
     fingerprint: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum FabHashField {
+    Bytes(usize),
+    Bool,
+    UInt(BigUint),
+    EnumTag { id: String, maximum: BigUint },
+    Native,
+}
+
 #[derive(Clone, Debug)]
 pub struct Projection {
     pub kind: String,
@@ -912,6 +921,58 @@ impl Schema {
     pub fn counts(&self) -> Counts {
         self.measures[self.root]
     }
+
+    /// Return fields for the bounded named-flat-structure FAB hash subset.
+    /// Enum payloads need branch-dependent field expressions, so this helper
+    /// accepts only one-byte fieldless enums and exposes their tag as a field.
+    pub(crate) fn fab_hash_fields(&self) -> Result<Vec<FabHashField>> {
+        let LayoutNode::Struct { fields, .. } = &self.nodes[self.root] else {
+            bail!("FAB hash requires a named flat structure")
+        };
+        ensure!(
+            (1..=32).contains(&fields.len()),
+            "FAB hash field count is outside the supported range"
+        );
+
+        fields
+            .iter()
+            .map(|field| match &self.nodes[field.layout] {
+                LayoutNode::Scalar(Leaf::Native) => Ok(FabHashField::Native),
+                LayoutNode::Scalar(Leaf::Bool) => Ok(FabHashField::Bool),
+                LayoutNode::Scalar(Leaf::UInt(maximum)) => {
+                    let width = maximum.bits();
+                    ensure!(
+                        width > 0
+                            && width <= crate::scalars::MAX_UINT_BITS as u64
+                            && maximum + 1u8 == (BigUint::from(1u8) << width as usize),
+                        "FAB unsigned field maximum is outside the supported bit widths"
+                    );
+                    Ok(FabHashField::UInt(maximum.clone()))
+                }
+                LayoutNode::Bytes { length } => {
+                    ensure!(
+                        (1..=32).contains(length),
+                        "FAB byte field length is outside the supported range"
+                    );
+                    Ok(FabHashField::Bytes(*length))
+                }
+                LayoutNode::Enum { id, variants, .. } => {
+                    ensure!(
+                        !variants.is_empty()
+                            && variants.len() <= 256
+                            && variants.iter().all(|variant| variant.fields.is_empty()),
+                        "FAB hash supports only one-byte fieldless enums"
+                    );
+                    Ok(FabHashField::EnumTag {
+                        id: id.clone(),
+                        maximum: BigUint::from(variants.len() - 1),
+                    })
+                }
+                _ => bail!("FAB hash supports only flat scalar and byte fields"),
+            })
+            .collect()
+    }
+
     fn flatten_value(&self, json: &[u8]) -> Result<Vec<BigUint>> {
         let tree = JsonTree::parse(json)?;
         enum Task {

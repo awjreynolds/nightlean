@@ -1,0 +1,25 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger coinSlot: QualifiedShieldedCoinInfo;
+export ledger coinSet: Set<QualifiedShieldedCoinInfo>;
+export ledger coinList: List<QualifiedShieldedCoinInfo>;
+
+circuit destination(isContract: Boolean, bytes: Bytes<32>): Either<ZswapCoinPublicKey, ContractAddress> {
+  return isContract ? right<ZswapCoinPublicKey, ContractAddress>(ContractAddress{bytes: bytes})
+                    : left<ZswapCoinPublicKey, ContractAddress>(ZswapCoinPublicKey{bytes: bytes});
+}
+
+export circuit store(domain: Bytes<32>, nonce: Bytes<32>, value: Uint<64>, book: Boolean,
+                     bookingIsContract: Boolean, bookingAddress: Bytes<32>,
+                     writeIsContract: Boolean, writeAddress: Bytes<32>): ShieldedCoinInfo {
+  const coin = disclose(book)
+    ? mintShieldedToken(disclose(domain), disclose(value), disclose(nonce),
+                       disclose(destination(bookingIsContract, bookingAddress)))
+    : ShieldedCoinInfo{nonce: nonce, color: tokenType(domain, kernel.self()), value: value};
+  const recipient = disclose(destination(writeIsContract, writeAddress));
+  coinSlot.writeCoin(disclose(coin), recipient);
+  coinSet.insertCoin(disclose(coin), recipient);
+  coinList.pushFrontCoin(disclose(coin), recipient);
+  return disclose(coin);
+}

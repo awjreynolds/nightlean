@@ -127,10 +127,81 @@ inductive Expr : Ty → Type where
   | poseidon2 (domain : Nat) (a b : Expr .native) : Expr .native
   /-- Hash the exact ordered Native operands with the pinned transient_hash. -/
   | transientHash (values : List (Expr .native)) : Expr .native
+  /-- Hash a checked, flat Compact composite using its FAB field alignment.
+  Values stay logically typed here. Backends derive the alignment from the
+  checked layout rather than accepting a caller-provided alignment vector. -/
+  | persistentHashFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
+      (values : List (Sigma Expr)) : Expr (.bytes 32)
   deriving Repr
 
 def Expr.foreignIdentity (curve : Foreign.Curve) : Expr (.foreign (.point curve)) :=
   .foreignPoint curve .identity
+
+private def fabHashFieldMatches (layout : Types.Layout) (value : Sigma Expr) : Bool :=
+  match layout, value with
+  | .bytes length .byteField, ⟨.bytes actualLength, _⟩ => length == actualLength && length > 0 && length ≤ 32
+  | .scalar .nativeField, ⟨.native, _⟩ => true
+  | .scalar .booleanField, ⟨.bool, _⟩ => true
+  | .scalar (.boundedUnsignedField maximum), ⟨.uint actualMaximum, _⟩ => maximum == actualMaximum
+  | .enumeration _id (.enumTagField maximum) _ 0 _ variants, ⟨.uint actualMaximum, _⟩ =>
+      maximum == actualMaximum && !variants.isEmpty && variants.all (·.2.1.isEmpty)
+  | _, _ => false
+
+theorem sizeOfSigmaExprHeadLt {ty : Ty} (value : Expr ty) (rest : List (Sigma Expr)) :
+    sizeOf value < sizeOf (Sigma.mk ty value :: rest) := by
+  change sizeOf value < 1 + (1 + sizeOf ty + sizeOf value) + sizeOf rest
+  omega
+
+theorem sizeOfSigmaExprValueLt {ty : Ty} (value : Expr ty) :
+    sizeOf value < sizeOf (Sigma.mk ty value) := by
+  change sizeOf value < 1 + sizeOf ty + sizeOf value
+  omega
+
+theorem sizeOfMemberListLt {α : Type u} [SizeOf α] {value : α} :
+    ∀ {values : List α}, value ∈ values → sizeOf value < sizeOf values := by
+  intro values hMem
+  induction values with
+  | nil => cases hMem
+  | cons head tail ih =>
+    cases hMem with
+    | head => change sizeOf value < 1 + sizeOf value + sizeOf tail; omega
+    | tail _ hTail =>
+      change sizeOf value < 1 + sizeOf head + sizeOf tail
+      have hSize := ih hTail
+      omega
+
+theorem sizeOfSigmaExprMemberLt {ty : Ty} {value : Expr ty}
+    {values : List (Sigma Expr)} (member : Sigma.mk ty value ∈ values) :
+    sizeOf value < sizeOf values := by
+  have hItem := sizeOfMemberListLt member
+  have hValue : sizeOf value < sizeOf (Sigma.mk ty value) := by
+    change sizeOf value < 1 + sizeOf ty + sizeOf value
+    omega
+  omega
+
+/-- Check the deliberately bounded mixed-FAB subset supported by the current
+  persistent hash operation: one flat named structure of Native, Bool,
+  fixed-width unsigned integers, fixed Bytes values up to 32 bytes, and
+  payload-free enums. Nested composites and payload enums fail closed. -/
+def validateFabHashLayout (environment : Types.CompositeEnv) (type : Types.CompositeType)
+    (values : List (Sigma Expr)) : Except String Types.Layout := do
+  let checked ← (Types.checkedLayout Types.defaultLimits environment type).mapError (·.message)
+  let .structure _ fields := checked.value
+    | throw "mixed FAB persistent hash requires a named flat structure"
+  unless fields.length > 0 && fields.length ≤ 32 && values.length == fields.length do
+    throw "mixed FAB persistent hash field count is outside the source limit or differs from its layout"
+  for (field, value) in fields.zip values do
+    unless fabHashFieldMatches field.2 value do
+      throw s!"unsupported or mismatched mixed FAB field '{field.1}'"
+    match field.2 with
+    | .scalar (.boundedUnsignedField maximum) =>
+      unless (List.range ScalarPolicy.maxBits).any (fun bits => 2 ^ (bits + 1) - 1 == maximum) do
+        throw s!"mixed FAB unsigned field '{field.1}' must use a whole-byte UInt width"
+    | .enumeration _ (.enumTagField maximum) _ 0 _ _ =>
+      unless maximum < 256 do
+        throw s!"mixed FAB enum field '{field.1}' exceeds the supported one-byte tag width"
+    | _ => pure ()
+  pure checked.value
 
 structure Input where
   name : String
@@ -606,14 +677,32 @@ inductive Effect where
   from the transaction context. -/
   | insertShieldedCoinSet (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
+  /-- Insert a transaction-booked coin for an explicit wallet or contract
+  recipient into a qualified-record Set. The runtime gets its index from the
+  current transaction context. -/
+  | insertShieldedCoinSetTo (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (isContract : Expr .bool)
+      (recipient : Expr (.bytes 32))
   /-- Store a coin whose self-recipient commitment is already booked in the
   current transaction. The runtime obtains its Ledger index from context. -/
   | writeShieldedCoinCell (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
+  /-- Store a transaction-booked coin for an explicit wallet or contract
+  recipient in a qualified coin Cell. The runtime gets its index from the
+  current transaction context. -/
+  | writeShieldedCoinCellTo (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (isContract : Expr .bool)
+      (recipient : Expr (.bytes 32))
   /-- Push a transaction-booked self-recipient shielded coin to a root List.
   The backend obtains the coin's current transaction index from ledger context. -/
   | pushFrontCoin (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
+  /-- Push a transaction-booked coin for an explicit wallet or contract
+  recipient to a qualified coin List. The runtime gets its index from the
+  current transaction context. -/
+  | pushFrontCoinTo (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (isContract : Expr .bool)
+      (recipient : Expr (.bytes 32))
   /-- Spend the exact coin record read from a Bytes32-keyed tree Map entry.
   The backend derives native nullifier and output-commitment claims. -/
   | spendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
@@ -793,6 +882,7 @@ def Ty.validate (caps : Capabilities) (ty : Ty) : Except String Unit := do
     ScalarPolicy.validate ty.scalarKind
     unless maximum < caps.nativeModulus do throw "unsigned type exceeds native representation"
 
+mutual
 def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except String Unit
   | .native value =>
     if value < caps.nativeModulus then pure () else .error "noncanonical native constant"
@@ -877,6 +967,10 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless values.length ≥ 1 && values.length ≤ 32 do
       throw "Native persistent-hash vector must contain 1 to 32 fields"
     for value in values do value.validate caps env
+  | .persistentHashFab compositeEnv type values => do
+    unless caps.persistentHash32 do throw "target lacks qualified FAB persistent-hash support"
+    discard (validateFabHashLayout compositeEnv type values)
+    validateFabHashValues caps env values
   | .toBytes32 (source := source) value => do
     unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"
     unless source == .native || source == .jubjubScalar || source == .jubjubPoint do
@@ -1026,6 +1120,26 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless values.length ≤ Types.defaultLimits.maxVectorLength do
       throw s!"transient_hash input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
     for value in values do value.validate caps env
+termination_by value => sizeOf value
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | have _h := sizeOfSigmaExprMemberLt (by assumption); omega
+    | have _h := sizeOfSigmaExprHeadLt _ _; omega
+    | have h := sizeOfMemberListLt (by assumption); omega
+    | omega
+
+private def validateFabHashValues (caps : Capabilities) (env : TypeEnv) :
+    List (Sigma Expr) → Except String Unit
+  | [] => pure ()
+  | ⟨_, value⟩ :: rest => do
+    value.validate caps env
+    validateFabHashValues caps env rest
+termination_by values => sizeOf values
+decreasing_by
+  all_goals simp_wf
+  all_goals first | exact sizeOfSigmaExprHeadLt _ _ | omega
+end
 
 def PathKey.validate (caps : Capabilities) (env : TypeEnv) : PathKey → Except String Unit
   | .mk _ value => value.validate caps env
@@ -1157,8 +1271,10 @@ private def Constructor.validate (caps : Capabilities) (states : List StateDecl)
 private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
     .receiveShieldedToMap state .. | .insertShieldedCoinSet state .. |
+    .insertShieldedCoinSetTo state .. |
     .sendShieldedFromMap state .. |
-    .writeShieldedCoinCell state .. | .pushFrontCoin state .. |
+    .writeShieldedCoinCell state .. | .writeShieldedCoinCellTo state .. |
+    .pushFrontCoin state .. | .pushFrontCoinTo state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
     .emptyMapPath state .. | .setInsert state .. | .removePath state .. |
@@ -1365,6 +1481,19 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         amount.validate caps env
         selfAddress.validate caps env
         pure []
+      | .writeShieldedCoinCellTo state nonce color amount isContract recipient => do
+        if !caps.stateCells then throw "target lacks state cells"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown qualified shielded coin Cell '{state}'"
+        let .tree (.composite compositeEnv recordType) := declaration.kind
+          | throw s!"qualified shielded coin write requires a root composite Cell '{state}'"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        isContract.validate caps env
+        recipient.validate caps env
+        pure []
       | .pushFrontCoin state nonce color amount selfAddress => do
         if !caps.stateMaps then throw "target lacks state maps"
         let some declaration := decls.find? (·.name == state)
@@ -1377,6 +1506,19 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         amount.validate caps env
         selfAddress.validate caps env
         pure []
+      | .pushFrontCoinTo state nonce color amount isContract recipient => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown qualified shielded coin List '{state}'"
+        let .tree (.list compositeEnv recordType) := declaration.kind
+          | throw s!"qualified shielded coin push requires a root List '{state}'"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        isContract.validate caps env
+        recipient.validate caps env
+        pure []
       | .insertShieldedCoinSet state nonce color amount selfAddress => do
         if !caps.stateMaps then throw "target lacks state maps"
         let some declaration := decls.find? (·.name == state)
@@ -1388,6 +1530,19 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         color.validate caps env
         amount.validate caps env
         selfAddress.validate caps env
+        pure []
+      | .insertShieldedCoinSetTo state nonce color amount isContract recipient => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown qualified shielded coin Set '{state}'"
+        let .tree (.shieldedCoinSet compositeEnv recordType) := declaration.kind
+          | throw s!"qualified shielded coin insertion requires a root record Set '{state}'"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        isContract.validate caps env
+        recipient.validate caps env
         pure []
       | .spendShieldedFromMap state nonce color amount recipient selfAddress => do
         if !caps.stateMaps then throw "target lacks state maps"

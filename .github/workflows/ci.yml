@@ -55,6 +55,7 @@ jobs:
           lake env lean tests/Issue69NestedCounter.lean
           lake env lean tests/Issue69CompositeMap.lean
           lake env lean tests/Issue70PersistentHash.lean
+          lake env lean tests/MixedFabPersistentHash.lean
           lake env lean tests/Issue70HashPreimages.lean
           lake env lean tests/Issue70Jubjub.lean
           lake env lean tests/Issue70DerivedCrypto.lean
@@ -133,6 +134,7 @@ jobs:
           lake env lean tests/QualifiedCoinCell.lean
           lake env lean tests/QualifiedCoinSet.lean
           lake env lean tests/QualifiedCoinList.lean
+          lake env lean tests/QualifiedCoinRecipient.lean
           lake env lean tests/NativeTaggedSettlement.lean
           lake env lean tests/NativeUnshieldedSend.lean
           lake env lean tests/NativeUnshieldedMintRecipient.lean
@@ -142,6 +144,7 @@ jobs:
           lake env lean tests/NativeList.lean
           lake env lean tests/NativeScalarList.lean
           lake env lean tests/NativeScalarListMaybe.lean
+          lake env lean tests/NativeScalarEitherReturns.lean
           lake env lean tests/NativeMapDefault.lean
           lake env lean tests/OptionalListHead.lean
           lake env lean tests/MixedLedgerRecord.lean
