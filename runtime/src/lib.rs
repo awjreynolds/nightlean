@@ -1242,6 +1242,16 @@ pub enum Instruction {
         schema: Json,
         expressions: Vec<Expr>,
     },
+    #[serde(rename = "listPushFrontCoin", rename_all = "camelCase")]
+    ListPushFrontCoin {
+        slot: u32,
+        keys: Vec<PathPart>,
+        schema: Json,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        commitment: Expr,
+    },
     #[serde(rename = "listPopFront")]
     ListPopFront {
         slot: u32,
@@ -1603,6 +1613,9 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::ReceiveShieldedToMap { .. } => RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS.to_vec(),
         Instruction::WriteShieldedCoinCell { .. } => WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS.to_vec(),
+        Instruction::ListPushFrontCoin { .. } => {
+            bail!("qualified coin List push must be unguarded")
+        }
         Instruction::InsertShieldedCoinSet { slot, .. } => {
             validate_shielded_coin_set(plan, *slot)?;
             INSERT_SHIELDED_COIN_SET_FIELD_COUNTS.to_vec()
@@ -1799,6 +1812,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         }
         Instruction::WriteShieldedCoinCell { .. } => {
             bail!("shielded coin Cell write must be unguarded")
+        }
+        Instruction::ListPushFrontCoin { .. } => {
+            bail!("qualified coin List push must be unguarded")
         }
         Instruction::InsertShieldedCoinSet { .. } => {
             bail!("shielded coin Set insertion must be unguarded")
@@ -2246,6 +2262,39 @@ fn validate_shielded_coin_cell(plan: &Plan, slot: u32) -> Result<()> {
     Ok(())
 }
 
+fn validate_shielded_coin_list(
+    plan: &Plan,
+    slot: u32,
+    keys: &[PathPart],
+    operation_schema: &Json,
+) -> Result<()> {
+    ensure!(
+        slot < 16 && (slot as usize) < plan.state.len(),
+        "qualified coin List slot exceeds the native state limit"
+    );
+    ensure!(keys.is_empty(), "qualified coin List must be at the root");
+    ensure!(
+        !plan.state[slot as usize].sealed,
+        "qualified coin List is sealed"
+    );
+    let schema = list_element_schema_at_path(plan, slot, 0)?;
+    let record = schema
+        .as_object()
+        .filter(|object| object.len() == 1)
+        .and_then(|object| object.get("composite"))
+        .ok_or_else(|| anyhow!("qualified coin List must contain coin records"))?;
+    ensure!(
+        is_shielded_coin_record_schema(record),
+        "qualified coin List must use the fixed coin record schema"
+    );
+    ensure!(
+        operation_schema == record,
+        "qualified coin List operation differs from state schema"
+    );
+    checked_record_schema(operation_schema)?;
+    Ok(())
+}
+
 fn validate_shielded_coin_set(plan: &Plan, slot: u32) -> Result<()> {
     ensure!(
         plan.state.len() <= 16 && slot < 16,
@@ -2571,6 +2620,7 @@ fn mutates_contract_state(operation: &Instruction) -> bool {
             | Instruction::Insert { .. }
             | Instruction::MapRemove { .. }
             | Instruction::ListPushFront { .. }
+            | Instruction::ListPushFrontCoin { .. }
             | Instruction::ListPopFront { .. }
             | Instruction::ListReset { .. }
             | Instruction::MerkleTreeInsertHash { .. }
@@ -2916,6 +2966,15 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
             Instruction::RelayShieldedImmediate { recipient, .. } => {
                 ensure!(guard.is_none(), "immediate shielded relay must be unguarded");
                 validate_relay_shielded_immediate_layout(plan, index, recipient)?;
+            }
+            Instruction::ListPushFrontCoin {
+                slot,
+                keys,
+                schema,
+                ..
+            } => {
+                ensure!(guard.is_none(), "qualified coin List push must be unguarded");
+                validate_shielded_coin_list(plan, *slot, keys, schema)?;
             }
             Instruction::ListHead {
                 slot,
@@ -5143,6 +5202,13 @@ fn probe_instruction(
             ..
         }
         | Instruction::WriteShieldedCoinCell {
+            nonce,
+            color,
+            amount,
+            commitment,
+            ..
+        }
+        | Instruction::ListPushFrontCoin {
             nonce,
             color,
             amount,
@@ -7424,6 +7490,119 @@ impl PreparationCursor {
                 has_written = true;
                 insert
             }
+            Instruction::ListPushFrontCoin {
+                slot,
+                keys,
+                schema,
+                nonce,
+                color,
+                amount,
+                commitment,
+            } => {
+                validate_shielded_coin_list(plan, *slot, keys, schema)?;
+                let coin = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce, &env)?,
+                        "qualified coin List nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color, &env)?,
+                        "qualified coin List color",
+                    )?),
+                    value: unshielded_amount(amount, &env)?,
+                };
+                let recipient = Recipient::Contract(context.address);
+                let expected_commitment = claim_hash_output(
+                    evaluate(commitment, &env)?,
+                    "qualified coin List commitment",
+                )?;
+                let coin_commitment = coin.commitment(&recipient);
+                ensure!(
+                    coin_commitment.0 == expected_commitment,
+                    "qualified coin List commitment mismatch"
+                );
+                let qualified = context.qualify(&coin).ok_or_else(|| {
+                    anyhow!(
+                        "qualified coin List commitment is absent from the current transaction"
+                    )
+                })?;
+                ensure!(
+                    context.call_context.com_indices.get(&coin_commitment)
+                        == Some(&qualified.mt_index),
+                    "qualified coin List transaction index mismatch"
+                );
+
+                if has_written {
+                    advance_native_state_prefix(
+                        prefix_context,
+                        &program,
+                        &mut materialized_prefix,
+                        mutation_boundary,
+                        cost,
+                    )?;
+                }
+                let current = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                native_list_value(
+                    current,
+                    *slot,
+                    &[],
+                    list_element_schema_at_path(plan, *slot, 0)?,
+                )?;
+                let path = vec![Key::Value(
+                    AlignedValue::from(u8::try_from(*slot)?)
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid qualified coin List slot"))?,
+                )];
+                let path_length = path.len();
+                let mut operations = Vec::from(
+                    onchain_runtime::program_fragments::List_push_front_coin!(
+                        path,
+                        false,
+                        QualifiedInfo,
+                        coin,
+                        recipient
+                    ),
+                );
+                ensure!(
+                    matches!(
+                        operations.get(4),
+                        Some(Op::Push {
+                            storage: false,
+                            value: StateValue::Cell(_),
+                        })
+                    ) && matches!(
+                        operations.get(5),
+                        Some(Op::Push {
+                            storage: true,
+                            value: StateValue::Array(node),
+                        }) if node.len() == 3
+                    ),
+                    "qualified coin List fragment initial pushes changed"
+                );
+                // The Compact fragment pushes the empty node before its index key.
+                operations.swap(4, 5);
+                let Some(Op::Dup { n }) = operations.get_mut(6) else {
+                    bail!("qualified coin List fragment has no context lookup duplicate")
+                };
+                ensure!(
+                    *n == u8::try_from(4 + 2 * path_length)?,
+                    "qualified coin List fragment duplicate depth changed"
+                );
+                // The pinned depth selects effects. The commitment lookup needs context.
+                *n = n
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow!("qualified coin List duplicate depth overflow"))?;
+                let insert = operations
+                    .pop()
+                    .ok_or_else(|| anyhow!("qualified coin List operation is empty"))?;
+                program.extend(operations);
+                has_written = true;
+                insert
+            }
             Instruction::InsertShieldedCoinSet {
                 slot,
                 nonce,
@@ -8081,6 +8260,7 @@ impl PreparationCursor {
                 | Instruction::MerkleTreeReset { .. }
                 | Instruction::MerkleTreeResetHistory { .. }
                 | Instruction::ListPushFront { .. }
+                | Instruction::ListPushFrontCoin { .. }
                 | Instruction::ListPopFront { .. }
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }

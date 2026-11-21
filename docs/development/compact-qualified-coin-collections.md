@@ -24,11 +24,15 @@ The storage suffix differs by container.
 
 The [fixture](../../tests/compact/QualifiedCoinCollections.compact) and
 [runner](../../tests/compact/qualified-coin-collections.mjs) provide reference
-evidence. Noctium lowers the root Cell and Set routes for a coin already booked
+evidence. Noctium lowers the root Cell, Set and List routes for a coin already booked
 to the current contract. The [Set fixture](../../runtime/tests/qualified_coin_set.rs)
 checks the emitted relation and the native state, including indices 17 and 42,
-duplicate insertion, and missing or wrong-recipient bookings. These checks use
-a native query context. Finalized Set execution and the List route remain open.
+duplicate insertion, and missing or wrong-recipient bookings. The
+[List fixture](../../runtime/tests/qualified_coin_list.rs) checks prepending
+index 42 ahead of index 17 and the same booking boundary. The List lowering
+pushes the node before its key so the cached insert receives the correct operands.
+These checks use a native query context. Finalized collection execution and
+broader recipient cases remain open.
 
 The [pinned VM opcode source](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/onchain-vm/src/ops.rs)
 defines opcode names and immediate encoding. The pinned runtime exports the
