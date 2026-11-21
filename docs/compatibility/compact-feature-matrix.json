@@ -4235,8 +4235,8 @@
       "id": "C-STDLIB-TRANSIENTCOMMIT",
       "layer": "standard-library",
       "surface": "transientCommit",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean transientCommitFab prepends a Native opening to the canonical FAB value fields of a checked flat named record. The paired 3.2.1 check matches pinned Compact under independent changes to payload and opening. Recursive types and general overloads remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4249,7 +4249,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/MixedFabCommitments.lean",
+        "runtime/tests/mixed_fab_commitments.rs",
+        "tests/compact/mixed-fab-persistent-hash.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -4281,8 +4285,8 @@
       "id": "C-STDLIB-PERSISTENTCOMMIT",
       "layer": "standard-library",
       "surface": "persistentCommit",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean persistentCommitFab prepends a Bytes32 opening to the canonical FAB bytes of a checked flat named record. The paired 3.2.1 check matches pinned Compact under independent changes to payload and opening. Recursive types and general overloads remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4295,7 +4299,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/MixedFabCommitments.lean",
+        "runtime/tests/mixed_fab_commitments.rs",
+        "tests/compact/mixed-fab-persistent-hash.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
