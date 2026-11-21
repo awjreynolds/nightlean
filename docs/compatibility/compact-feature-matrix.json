@@ -1812,8 +1812,8 @@
       "id": "C-ADT-KERNEL-CLAIMZSWAPCOINRECEIVE",
       "layer": "language-ledger",
       "surface": "Kernel.claimZswapCoinReceive",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "related-subset",
+      "notes": "The native mint-and-receive fixture claims one guaranteed contract-owned output with its Ledger commitment and finalizes on localnet. A standalone public source primitive and other offer shapes remain open.",
       "source": [
         "adt"
       ],
@@ -1822,7 +1822,9 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "docs/development/shielded-receive-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2421,7 +2423,7 @@
       "layer": "language-ledger",
       "surface": "Map.insertCoin",
       "noctiumStatus": "related-subset",
-      "notes": "Noctium qualifies and inserts a coin into a root Bytes32-keyed Map in the same unguarded call, using the native context's prebooked output index. General Map.insertCoin and funded transaction assembly remain open.",
+      "notes": "The same-call mint-and-receive fixture finalizes on localnet and stores the Ledger-assigned output index in a root Bytes32-keyed Map. General Map.insertCoin remains open.",
       "source": [
         "adt"
       ],
@@ -2431,6 +2433,7 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "docs/development/shielded-receive-localnet-receipt.json",
         "tests/ShieldedReceive.lean",
         "runtime/tests/shielded_receive.rs",
         "docs/development/compact-shielded-coin-map.md"
@@ -3639,7 +3642,7 @@
       "layer": "standard-library",
       "surface": "QualifiedShieldedCoinInfo",
       "noctiumStatus": "related-subset",
-      "notes": "The same-call receive supports a fixed nonce, color, value and mtIndex ledger record. The native context supplies mtIndex. A general-purpose source type and ABI are open.",
+      "notes": "The fixed nonce, color, value and mtIndex record matches finalized state for the minted localnet receive. A general-purpose source type and ABI remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3653,6 +3656,7 @@
         "ABI"
       ],
       "observedEvidence": [
+        "docs/development/shielded-receive-localnet-receipt.json",
         "tests/ShieldedReceive.lean",
         "runtime/tests/shielded_receive.rs",
         "docs/development/compact-shielded-coin-map.md"
@@ -5165,7 +5169,7 @@
       "layer": "standard-library",
       "surface": "receiveShielded",
       "noctiumStatus": "related-subset",
-      "notes": "The unguarded own-contract receive-and-insert operation binds disclosed coin fields and the contract address into the ZKIR commitment. A native context with the output already booked is required. Funded transaction assembly is open.",
+      "notes": "The unguarded own-contract mint-and-receive fixture finalizes on localnet, with missing and mismatched offers rejected before submission. Wallet-funded receives and other settlement shapes remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5179,6 +5183,7 @@
         "ABI"
       ],
       "observedEvidence": [
+        "docs/development/shielded-receive-localnet-receipt.json",
         "tests/ShieldedReceive.lean",
         "runtime/tests/shielded_receive.rs",
         "docs/development/compact-shielded-coin-map.md"

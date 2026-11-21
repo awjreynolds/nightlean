@@ -1,0 +1,20 @@
+{
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "bundleManifestSha256": "5d657d4325f422139414fd2b09deb0a8423b82ef95d35f0a5710f486135dbe44",
+  "deploymentHeight": 137,
+  "callHeight": 140,
+  "callTransaction": "d4c89a7f07b346e627c58636165103951ce633825b5a9003d21c4530ab593712",
+  "contractAddress": "fd7a08d36a2bebdb84cb4635c7b0d74a09f18029681dc5bac38193139f24e1da",
+  "commitment": "d4c28ddbdeb6eb86a626f5f377dd820a4112cc92f9c1ec25c9ab154903d91114",
+  "nonce": "6c9714ba57dbf56395eff30ad086db835d392eb2627b76edc0a7843e3542dde6",
+  "color": "094654a531c8166dfc9499e444a44b630cbaecd11608ff4465e47afb57085ee5",
+  "value": "5",
+  "mtIndex": 29,
+  "stateSha256": "415cb2583d2e8b8cc2d69fe5bae8da7b722a14154e10353598ef466855e57177",
+  "k": 13,
+  "rejected": [
+    "missingOffer",
+    "mismatchedOffer"
+  ]
+}

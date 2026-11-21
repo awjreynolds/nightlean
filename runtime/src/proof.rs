@@ -7,6 +7,7 @@ use crate::{
     zkir::IrSource,
 };
 use base_crypto::cost_model::CostDuration;
+use coin_structure::coin::Commitment;
 use futures::{Future, FutureExt, pin_mut, select_biased};
 use ledger::structure::{
     ContractAction, ContractCall, Intent, LedgerParameters, ProofKind, ProofMarker,
@@ -24,6 +25,7 @@ use serde_json::Value as Json;
 use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize, tagged_serialize};
 use sha2::{Digest, Sha256};
 use std::{cell::RefCell, collections::BTreeMap, fmt, io, rc::Rc, sync::Arc};
+use storage::storage::Map;
 use transient_crypto::{
     commitment::{Pedersen, PedersenRandomness},
     curve::Fr,
@@ -957,6 +959,11 @@ impl ContractStateBinding {
         self.current_state.as_deref()
     }
 
+    #[cfg(feature = "localnet")]
+    pub(crate) fn expected_state(&self) -> &[u8] {
+        &self.expected_state
+    }
+
     pub(crate) fn context_identity(&self) -> &str {
         &self.context_identity
     }
@@ -1648,6 +1655,22 @@ impl PreparedProof {
         inputs: BTreeMap<String, Json>,
         rng: &mut (impl Rng + CryptoRng),
     ) -> Result<Self> {
+        Self::from_contract_witness_inputs_with_com_indices(
+            target,
+            current,
+            inputs,
+            Map::new(),
+            rng,
+        )
+    }
+
+    pub(crate) fn from_contract_witness_inputs_with_com_indices(
+        target: &ContractOperationTarget,
+        current: &CurrentStateContext,
+        inputs: BTreeMap<String, Json>,
+        com_indices: Map<Commitment, u64, Db>,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
         let mut inputs = SecretInputs(inputs);
         if !target.context_matches(current) {
             return Err(Error::BindingMismatch);
@@ -1680,6 +1703,7 @@ impl PreparedProof {
             &target.inner.deployment,
             &target.inner.ready_state,
             &current.state,
+            &com_indices,
             rng,
         )
         .map_err(|_| Error::InvalidPrivateInput)?;

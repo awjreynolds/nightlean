@@ -331,6 +331,44 @@ impl BoundTransaction {
         funding: &impl FundingAdapter,
         signer: &impl SigningAdapter,
     ) -> Result<Self> {
+        Self::prepare_inner(contract, policy, chain, funding, signer, None).await
+    }
+
+    #[cfg(feature = "localnet")]
+    pub(crate) async fn prepare_shielded_receive(
+        contract: &ProvedNativeIntent,
+        expected_offer: &zswap::Offer<transient_crypto::proofs::Proof, Db>,
+        policy: NetworkPolicy,
+        chain: &impl ChainAdapter,
+        funding: &impl FundingAdapter,
+        signer: &impl SigningAdapter,
+    ) -> Result<Self> {
+        require(
+            expected_offer.outputs.len() == 1
+                && expected_offer.inputs.is_empty()
+                && expected_offer.transient.is_empty(),
+            Error::Funding,
+        )?;
+        let expected_offer = body(&Some(storage::arena::Sp::new(expected_offer.clone())))?;
+        Self::prepare_inner(
+            contract,
+            policy,
+            chain,
+            funding,
+            signer,
+            Some(expected_offer),
+        )
+        .await
+    }
+
+    async fn prepare_inner(
+        contract: &ProvedNativeIntent,
+        policy: NetworkPolicy,
+        chain: &impl ChainAdapter,
+        funding: &impl FundingAdapter,
+        signer: &impl SigningAdapter,
+        expected_guaranteed_offer: Option<Vec<u8>>,
+    ) -> Result<Self> {
         policy.validate()?;
         let snapshot = chain.snapshot().await.map_err(|_| Error::Network)?;
         snapshot.validate(&policy)?;
@@ -368,8 +406,12 @@ impl BoundTransaction {
                     == Some(encode(contract)?),
             Error::AlteredTransaction,
         )?;
+        let guaranteed_offer_matches = match expected_guaranteed_offer {
+            Some(expected) => body(&funded_stx.guaranteed_coins)? == expected,
+            None => funded_stx.guaranteed_coins.is_none(),
+        };
         require(
-            funded_stx.guaranteed_coins.is_none()
+            guaranteed_offer_matches
                 && funded_stx.fallible_coins.is_empty()
                 && funded_stx.intents.iter().take(3).count() <= 2,
             Error::Funding,

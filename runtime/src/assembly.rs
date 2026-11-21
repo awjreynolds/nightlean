@@ -9,6 +9,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow, ensure};
 use base_crypto::time::Timestamp;
+use coin_structure::coin::Commitment;
 use ledger::{
     construct::{ContractCallPrototype, PreTranscript, partition_transcripts},
     structure::{
@@ -34,6 +35,7 @@ use std::{
     ops::Deref,
     path::{Path, PathBuf},
 };
+use storage::storage::Map;
 use transient_crypto::{
     commitment::PedersenRandomness,
     curve::Fr,
@@ -41,6 +43,7 @@ use transient_crypto::{
 };
 
 pub type NativeIntent = Intent<Signature, ProofPreimageMarker, PedersenRandomness, Db>;
+pub(crate) type BookedComIndices = Map<Commitment, u64, Db>;
 
 /// One prepared source call and the initial ledger context used to replay it.
 pub struct CheckedNativeCall<'a> {
@@ -619,8 +622,20 @@ fn build_with_rng(
     ensure!(ttl > 0, "TTL must be explicit Unix seconds");
     let (initial, entry) = contract_initial_state(plan, &config.state, &operation)?;
     let deployment = ContractDeploy::new(&mut rng, initial.clone());
+    let com_indices = Map::new();
     build_for_deployment(
-        plan, config, parameters, operation, circuit, ttl, initial, entry, deployment, None, block,
+        plan,
+        config,
+        parameters,
+        operation,
+        circuit,
+        ttl,
+        initial,
+        entry,
+        deployment,
+        None,
+        block,
+        &com_indices,
         &mut rng,
     )
 }
@@ -637,12 +652,14 @@ fn build_for_deployment(
     deployment: ContractDeploy<Db>,
     retained_intent: Option<&NativeIntent>,
     block: Option<&BlockContext>,
+    com_indices: &BookedComIndices,
     rng: &mut (impl Rng + CryptoRng),
 ) -> Result<Built> {
     ensure!(ttl > 0, "TTL must be explicit Unix seconds");
     let address = deployment.address();
     let mut context = QueryContext::new(initial.data.clone(), address);
     context.call_context.balance = initial.balance.clone();
+    context.call_context.com_indices = com_indices.clone();
     // prepare's zero-randomness preimage is diagnostic only. Reuse only its
     // evaluated program and private fields, then repartition for this commitment.
     if let Some(block) = block {
@@ -806,6 +823,7 @@ pub(crate) fn prepare_call_for_target(
         (**deployment).clone(),
         Some(&target.intent),
         None,
+        &Map::new(),
         rng,
     )?;
     Ok(built.call)
@@ -839,6 +857,7 @@ pub(crate) fn prepare_call_for_current_state(
         target,
         &ready,
         current,
+        &Map::new(),
         rng,
     )
 }
@@ -857,6 +876,7 @@ pub(crate) fn prepare_call_for_ready_state(
     target: &PreparedOperationMapDeployment,
     ready: &ContractState<Db>,
     current: &ContractState<Db>,
+    com_indices: &BookedComIndices,
     rng: &mut (impl Rng + CryptoRng),
 ) -> Result<(NativeIntent, ContractState<Db>)> {
     ensure!(
@@ -904,6 +924,7 @@ pub(crate) fn prepare_call_for_ready_state(
         (**deployment).clone(),
         Some(target.intent()),
         None,
+        com_indices,
         rng,
     )?;
     ensure!(

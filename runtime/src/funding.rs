@@ -16,10 +16,14 @@ use rand::rngs::StdRng;
 use sha2::{Digest, Sha256};
 use std::io;
 use storage::arena::Sp;
+#[cfg(feature = "localnet")]
+use transient_crypto::proofs::Proof;
 use transient_crypto::{
     commitment::{PedersenRandomness, PureGeneratorPedersen},
     proofs::{KeyLocation, ProvingKeyMaterial, Resolver, Zkir},
 };
+#[cfg(feature = "localnet")]
+use zswap::Offer as ZswapOffer;
 
 pub type UnsealedTransaction = Transaction<Signature, ProofMarker, PedersenRandomness, Db>;
 pub type SealedTransaction = Transaction<Signature, ProofMarker, PureGeneratorPedersen, Db>;
@@ -147,6 +151,93 @@ impl DustFunding {
         srs: &TrustedParameters,
         now: Timestamp,
         policy: FeePolicy,
+        rng: StdRng,
+    ) -> Result<FundedTransaction> {
+        self.fund_base(
+            contract,
+            one_intent(network_id, CONTRACT_SEGMENT, contract.clone()),
+            network_id,
+            parameters,
+            material,
+            srs,
+            now,
+            policy,
+            rng,
+        )
+        .await
+    }
+
+    #[cfg(feature = "localnet")]
+    pub(crate) async fn fund_shielded_receive(
+        &self,
+        contract: &ProvedNativeIntent,
+        offer: ZswapOffer<Proof, Db>,
+        offer_binding_randomness: PedersenRandomness,
+        network_id: &str,
+        parameters: &LedgerParameters,
+        material: &DustMaterial,
+        srs: &TrustedParameters,
+        now: Timestamp,
+        policy: FeePolicy,
+        rng: StdRng,
+    ) -> Result<FundedTransaction> {
+        let Some(ContractAction::Call(call)) = contract.actions.get(0) else {
+            return Err(Error::Intent);
+        };
+        let Some(transcript) = call.guaranteed_transcript.as_deref() else {
+            return Err(Error::Intent);
+        };
+        let Some(output) = offer.outputs.get(0) else {
+            return Err(Error::Intent);
+        };
+        if contract.actions.len() != 1
+            || call.fallible_transcript.is_some()
+            || transcript.effects.claimed_shielded_receives.size() != 1
+            || !transcript
+                .effects
+                .claimed_shielded_receives
+                .iter()
+                .any(|commitment| **commitment == output.coin_com)
+            || transcript.effects.shielded_mints.size() != 1
+            || offer.outputs.len() != 1
+            || !offer.inputs.is_empty()
+            || !offer.transient.is_empty()
+            || output.contract_address.as_deref() != Some(&call.address)
+        {
+            return Err(Error::Intent);
+        }
+
+        let mut base = one_intent(network_id, CONTRACT_SEGMENT, contract.clone());
+        let Transaction::Standard(transaction) = &mut base else {
+            return Err(Error::Intent);
+        };
+        transaction.guaranteed_coins = Some(Sp::new(offer));
+        transaction.binding_randomness = transaction.binding_randomness + offer_binding_randomness;
+        if transaction
+            .balance(None)
+            .map_err(|_| Error::Balance)?
+            .iter()
+            .any(|((token, _), delta)| *token != TokenType::Dust && *delta != 0)
+        {
+            return Err(Error::Balance);
+        }
+
+        self.fund_base(
+            contract, base, network_id, parameters, material, srs, now, policy, rng,
+        )
+        .await
+    }
+
+    async fn fund_base(
+        &self,
+        contract: &ProvedNativeIntent,
+        base: UnsealedTransaction,
+        network_id: &str,
+        parameters: &LedgerParameters,
+        material: &DustMaterial,
+        srs: &TrustedParameters,
+        now: Timestamp,
+        policy: FeePolicy,
         mut rng: StdRng,
     ) -> Result<FundedTransaction> {
         policy.validate()?;
@@ -166,7 +257,6 @@ impl DustFunding {
         {
             return Err(Error::Intent);
         }
-        let base = one_intent(network_id, CONTRACT_SEGMENT, contract.clone());
         let mut needed = 0u128;
         for _ in 0..10 {
             if needed > policy.max_dust {
