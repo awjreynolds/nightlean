@@ -497,6 +497,10 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
     s!"persistentHashVector32([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| persistentHashFab($environment:ident, $type:ident, [$values,*])) =>
     s!"persistentHashFab({environment.getId}, {type.getId}, [{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
+  | `(nlexpr| persistentCommitFab($environment:ident, $type:ident, $opening, [$values,*])) =>
+    s!"persistentCommitFab({environment.getId}, {type.getId}, {renderExpr opening}, [{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
+  | `(nlexpr| transientCommitFab($environment:ident, $type:ident, $opening, [$values,*])) =>
+    s!"transientCommitFab({environment.getId}, {type.getId}, {renderExpr opening}, [{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| persistentHashNative($value)) => s!"persistentHashNative({renderExpr value})"
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     s!"persistentHashNativeVector([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
@@ -596,6 +600,9 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHashNativeVector([$values,*]))
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.flatMap disclosedValues
+  | `(nlexpr| persistentCommitFab($_:ident, $_:ident, $opening, [$values,*]))
+  | `(nlexpr| transientCommitFab($_:ident, $_:ident, $opening, [$values,*])) =>
+    disclosedValues opening ++ values.getElems.toList.flatMap disclosedValues
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
   | `(nlexpr| jubjubMulGenerator($value))
@@ -656,6 +663,9 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHashNativeVector([$values,*]))
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.flatMap inlineAssertions
+  | `(nlexpr| persistentCommitFab($_:ident, $_:ident, $opening, [$values,*]))
+  | `(nlexpr| transientCommitFab($_:ident, $_:ident, $opening, [$values,*])) =>
+    inlineAssertions opening ++ values.getElems.toList.flatMap inlineAssertions
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
   | `(nlexpr| jubjubMulGenerator($value))
