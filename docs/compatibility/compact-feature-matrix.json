@@ -973,7 +973,7 @@
       "layer": "language",
       "surface": "Modules, imports, exports, includes",
       "noctiumStatus": "subset",
-      "notes": "Namespace and visibility behavior, top-level exports, generic modules.",
+      "notes": "Namespace and visibility behavior, top-level exports, generic modules, and explicit ordinary circuit imports. A two-file 3.2.1 CLI case selects one qualified circuit and matches the single-file entrypoint's ZKIR bytes. Source provenance qualification for imported artifacts remains open.",
       "source": [
         "reference"
       ],
@@ -994,6 +994,7 @@
         "evidence": [
           "tests/Modules.lean",
           "tests/modules/check.sh",
+          "tests/cli.sh",
           "tests/compact/ModuleLedger.compact",
           "docs/development/modules.md",
           "docs/development/module-ledger-localnet-receipts.json",
