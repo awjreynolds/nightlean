@@ -1,0 +1,27 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger coinSlot: QualifiedShieldedCoinInfo;
+export ledger coinSet: Set<QualifiedShieldedCoinInfo>;
+export ledger coinList: List<QualifiedShieldedCoinInfo>;
+
+circuit bookCoin(coin: ShieldedCoinInfo, book: Boolean): [] {
+  if (disclose(book)) {
+    receiveShielded(disclose(coin));
+  }
+}
+
+export circuit putInCell(coin: ShieldedCoinInfo, book: Boolean): [] {
+  bookCoin(coin, book);
+  coinSlot.writeCoin(disclose(coin), right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));
+}
+
+export circuit putInSet(coin: ShieldedCoinInfo, book: Boolean): [] {
+  bookCoin(coin, book);
+  coinSet.insertCoin(disclose(coin), right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));
+}
+
+export circuit putInList(coin: ShieldedCoinInfo, book: Boolean): [] {
+  bookCoin(coin, book);
+  coinList.pushFrontCoin(disclose(coin), right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));
+}

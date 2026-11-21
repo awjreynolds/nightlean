@@ -1096,9 +1096,12 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     pure (mergeLowered (.scalar result) (.bytes operation [value.term]) [value])
   | `(nlexpr| keccak256($value)) => do
     let value ← lowerExpr programName callPrefix env value
-    let .scalar (.bytes length) := value.type
-      | throwErrorAt stx "keccak256 requires a fixed byte-string value"
-    let operation := Noctium.Helpers.BytesOp.keccak256 length
+    let operation ← match value.type with
+      | .scalar (.bytes length) => pure (Noctium.Helpers.BytesOp.keccak256 length)
+      | .scalar (.foreign (.point .secp256k1)) => pure .keccak256Secp256k1Point
+      | .scalar (.foreign (.point _)) =>
+        throwErrorAt stx "keccak256 point overload supports Secp256k1Point"
+      | _ => throwErrorAt stx "keccak256 requires a fixed byte string or Secp256k1Point"
     let (_, result) ← match operation.signature 1 with
       | .error message => throwErrorAt stx message
       | .ok signature => pure signature
@@ -1580,6 +1583,7 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
       | .sha256 length => `(Noctium.Helpers.BytesOp.sha256 $(natTerm length))
       | .sha512 length => `(Noctium.Helpers.BytesOp.sha512 $(natTerm length))
       | .keccak256 length => `(Noctium.Helpers.BytesOp.keccak256 $(natTerm length))
+      | .keccak256Secp256k1Point => `(Noctium.Helpers.BytesOp.keccak256Secp256k1Point)
       | .reverseBytes32 => `(Noctium.Helpers.BytesOp.reverseBytes32)
       | .reverseBytes length => `(Noctium.Helpers.BytesOp.reverseBytes $(natTerm length))
       | .sliceBytes length start stop =>

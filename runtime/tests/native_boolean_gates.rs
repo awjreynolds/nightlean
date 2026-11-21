@@ -3,7 +3,7 @@
 use noctium_runtime::zkir::IrSource;
 use noctium_runtime::{Expr, Plan, check, create_state, prepare};
 use serde_json::json;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, env, fs, path::PathBuf};
 use transient_crypto::curve::Fr;
 
 #[test]
@@ -92,6 +92,169 @@ fn typed_boolean_gates_bind_truth_tables_and_eager_assertions() {
                 coin_structure::contract::ContractAddress::default(),
             )
             .is_err()
+        );
+    }
+}
+
+fn lazy_boolean_inputs(
+    and_enabled: bool,
+    or_enabled: bool,
+    nested_outer: bool,
+    nested_inner: bool,
+) -> BTreeMap<String, serde_json::Value> {
+    BTreeMap::from([
+        ("andEnabled".into(), json!(and_enabled)),
+        ("orEnabled".into(), json!(or_enabled)),
+        ("nestedOuter".into(), json!(nested_outer)),
+        ("nestedInner".into(), json!(nested_inner)),
+        ("amount".into(), json!("2")),
+    ])
+}
+
+#[test]
+#[ignore = "requires fresh LazyBoolean outputs in NOCTIUM_LAZY_BOOLEAN_DIR"]
+fn lazy_boolean_gates_skip_inactive_uint1_narrowing() {
+    let directory =
+        PathBuf::from(env::var_os("NOCTIUM_LAZY_BOOLEAN_DIR").expect("NOCTIUM_LAZY_BOOLEAN_DIR"));
+    let plan: Plan =
+        serde_json::from_slice(&fs::read(directory.join("LazyBoolean.lazy.impact.json")).unwrap())
+            .unwrap();
+    let circuit_bytes = fs::read(directory.join("LazyBoolean.lazy.zkir")).unwrap();
+    let circuit = IrSource::load(circuit_bytes.as_slice()).unwrap();
+    let initial = create_state(&plan, &BTreeMap::new()).unwrap();
+    let parameters = &ledger::structure::INITIAL_PARAMETERS;
+    let address = coin_structure::contract::ContractAddress::default();
+
+    let inactive_narrowing = prepare(
+        &plan,
+        &lazy_boolean_inputs(false, true, false, false),
+        &initial,
+        parameters,
+        address,
+    )
+    .expect("false AND and true OR skip UInt1 narrowing");
+    check(&inactive_narrowing, &circuit).unwrap();
+    assert_eq!(
+        inactive_narrowing.returns_json(),
+        BTreeMap::from([
+            ("andResult".into(), json!(false)),
+            ("orResult".into(), json!(true)),
+            ("nestedResult".into(), json!(false)),
+        ])
+    );
+    assert_eq!(
+        inactive_narrowing.preimage.private_transcript,
+        vec![
+            Fr::from(0u64),
+            Fr::from(1u64),
+            Fr::from(0u64),
+            Fr::from(0u64),
+            Fr::from(2u64),
+        ]
+    );
+    let nested_short_circuit = prepare(
+        &plan,
+        &lazy_boolean_inputs(false, true, true, true),
+        &initial,
+        parameters,
+        address,
+    )
+    .expect("nested true OR skips UInt1 narrowing");
+    check(&nested_short_circuit, &circuit).unwrap();
+    assert_eq!(
+        nested_short_circuit.returns_json()["nestedResult"],
+        json!(true)
+    );
+
+    let mut active_and = inactive_narrowing;
+    active_and.preimage.private_transcript[0] = Fr::from(1u64);
+    assert_eq!(
+        active_and.returns_json()["andResult"],
+        json!(false),
+        "the forged active input keeps the accepted public result"
+    );
+    assert!(
+        check(&active_and, &circuit).is_err(),
+        "native relation rejects active UInt1 narrowing even when the public result stays unchanged"
+    );
+
+    for (and_enabled, or_enabled, nested_outer, nested_inner) in [
+        (true, true, false, false),
+        (false, false, false, false),
+        (false, true, true, false),
+    ] {
+        assert!(
+            prepare(
+                &plan,
+                &lazy_boolean_inputs(and_enabled, or_enabled, nested_outer, nested_inner),
+                &initial,
+                parameters,
+                address,
+            )
+            .is_err(),
+            "active UInt1 narrowing must reject amount 2"
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires fresh LazyConditional outputs in NOCTIUM_LAZY_CONDITIONAL_DIR"]
+fn lazy_conditionals_check_both_skipped_cast_branches() {
+    let directory = PathBuf::from(
+        env::var_os("NOCTIUM_LAZY_CONDITIONAL_DIR").expect("NOCTIUM_LAZY_CONDITIONAL_DIR"),
+    );
+    let plan: Plan = serde_json::from_slice(
+        &fs::read(directory.join("LazyConditional.branches.impact.json")).unwrap(),
+    )
+    .unwrap();
+    let circuit_bytes = fs::read(directory.join("LazyConditional.branches.zkir")).unwrap();
+    let circuit = IrSource::load(circuit_bytes.as_slice()).unwrap();
+    let initial = create_state(&plan, &BTreeMap::new()).unwrap();
+    let parameters = &ledger::structure::INITIAL_PARAMETERS;
+    let address = coin_structure::contract::ContractAddress::default();
+    let inputs = |then_condition: bool, else_condition: bool| {
+        BTreeMap::from([
+            ("thenCondition".into(), json!(then_condition)),
+            ("elseCondition".into(), json!(else_condition)),
+            ("amount".into(), json!("3")),
+        ])
+    };
+    let accepted_inputs = inputs(false, true);
+
+    let accepted = prepare(&plan, &accepted_inputs, &initial, parameters, address)
+        .expect("false then and true else skip both invalid UInt1 casts");
+    check(&accepted, &circuit).unwrap();
+    assert_eq!(
+        accepted.returns_json(),
+        BTreeMap::from([
+            ("thenResult".into(), json!(true)),
+            ("elseResult".into(), json!(true)),
+        ])
+    );
+    assert_eq!(
+        accepted.preimage.private_transcript,
+        vec![Fr::from(0u64), Fr::from(1u64), Fr::from(3u64)]
+    );
+
+    for (private_index, active_then, active_else, active_value, result_name) in [
+        (0, true, true, 1u64, "thenResult"),
+        (1, false, false, 0u64, "elseResult"),
+    ] {
+        let active_inputs = inputs(active_then, active_else);
+        assert!(
+            prepare(&plan, &active_inputs, &initial, parameters, address).is_err(),
+            "host preparation rejects active {result_name} narrowing"
+        );
+        let mut forged = prepare(&plan, &accepted_inputs, &initial, parameters, address).unwrap();
+        forged.preimage.private_transcript[private_index] = Fr::from(active_value);
+        assert_eq!(
+            forged.returns_json()[result_name],
+            json!(true),
+            "active invalid narrowing keeps the accepted result"
+        );
+        assert!(
+            check(&forged, &circuit).is_err(),
+            "native relation rejects active UInt1 narrowing for {result_name}"
         );
     }
 }

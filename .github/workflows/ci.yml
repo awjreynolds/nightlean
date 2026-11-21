@@ -95,7 +95,10 @@ jobs:
           lake env lean tests/Control.lean
           lake env lean --run tests/NativeProducer.lean
           lake env lean tests/ByteHashes.lean
+          lake env lean tests/TypedPointKeccak.lean
           lake env lean tests/BooleanGates.lean
+          lake env lean tests/LazyBoolean.lean
+          lake env lean tests/LazyConditional.lean
           lake env lean tests/HashToCurve.lean
           lake env lean tests/ForeignTransport.lean
           lake env lean tests/ForeignPointLiterals.lean
@@ -125,7 +128,9 @@ jobs:
           lake env lean tests/FundedShieldedReceive.lean
           lake env lean tests/ShieldedSpend.lean
           lake env lean tests/ShieldedMapPartialSpend.lean
+          lake env lean tests/ShieldedImmediateRelay.lean
           lake env lean tests/NativeTaggedSettlement.lean
+          lake env lean tests/NativeUnshieldedSend.lean
           lake env lean tests/NativeContractAddress.lean
           lake env lean tests/NativeTokenBalance.lean
           lake env lean tests/NativeBlockTime.lean

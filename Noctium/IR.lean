@@ -50,6 +50,10 @@ inductive Expr : Ty → Type where
   | sha512 {length : Nat} (value : Expr (.bytes length)) : Expr (.bytes 64)
   /-- Keccak-256 over a source byte string, returning its full fixed-width digest. -/
   | keccak256 {length : Nat} (value : Expr (.bytes length)) : Expr (.bytes 32)
+  /-- Compact-compatible Keccak over the canonical FAB encoding of a
+  Secp256k1Point. This is distinct from the point's compressed byte form. -/
+  | keccak256Secp256k1Point
+      (value : Expr (.foreign (.point .secp256k1))) : Expr (.bytes 32)
   /-- SHA-256 over the pinned FAB Bytes32 alignment, using native ZKIR
   persistent_hash and returning a typed Bytes32 digest. -/
   | persistentHash32 (value : Expr (.bytes 32)) : Expr (.bytes 32)
@@ -593,6 +597,12 @@ inductive Effect where
   | sendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
       (inputAmount sendAmount : Expr (.uint (2 ^ 128 - 1)))
       (recipient selfAddress : Expr (.bytes 32))
+  /-- Receive an exact shielded coin transiently at this contract and forward
+  its full value to another contract. The backend derives receive, nullifier
+  and contract-recipient spend commitments. This operation does not store a
+  relay coin or create change. -/
+  | relayShieldedImmediate (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (recipient selfAddress : Expr (.bytes 32))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
       (isUnshielded : Expr .bool)
@@ -813,6 +823,9 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless caps.keccak256 do throw "target lacks qualified Keccak-256 support"
     unless length ≤ maxBytesLength do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    value.validate caps env
+  | .keccak256Secp256k1Point value => do
+    unless caps.keccak256 do throw "target lacks qualified Keccak-256 support"
     value.validate caps env
   | .reverseBytes32 value => do
     unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"
@@ -1314,6 +1327,13 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         color.validate caps env
         inputAmount.validate caps env
         sendAmount.validate caps env
+        recipient.validate caps env
+        selfAddress.validate caps env
+        pure []
+      | .relayShieldedImmediate nonce color amount recipient selfAddress => do
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
         recipient.validate caps env
         selfAddress.validate caps env
         pure []

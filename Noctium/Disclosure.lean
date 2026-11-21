@@ -45,7 +45,8 @@ def origins (env : Environment) : Expr ty → Except String Origins
   | .reverseBytes value | .sliceBytes value .. => origins env value
   | .concatBytes left right => do
     pure (merge (← origins env left) (← origins env right))
-  | .sha256 value | .sha512 value | .keccak256 value => origins env value
+  | .sha256 value | .sha512 value | .keccak256 value
+  | .keccak256Secp256k1Point value => origins env value
   | .reverseBytes32 value => origins env value
   | .persistentHash32 value => origins env value
   | .bytes32Literal _ => pure []
@@ -234,6 +235,12 @@ def describeEffect : Effect → LedgerEffectDescriptor
       [.selector "nonce" sink nonce, .selector "color" sink color,
        .payload "inputAmount" sink inputAmount, .payload "sendAmount" sink sendAmount,
        .selector "recipient" sink recipient,
+       .selector "contractAddress" sink selfAddress] []
+  | .relayShieldedImmediate nonce color amount recipient selfAddress =>
+    let sink := "public immediate shielded contract relay"
+    .publicEffect "relayShieldedImmediate" .asset .publicActivity sink
+      [.selector "nonce" sink nonce, .selector "color" sink color,
+       .payload "amount" sink amount, .selector "recipient" sink recipient,
        .selector "contractAddress" sink selfAddress] []
   | .mintUnshielded domain amount =>
     let sink := "public unshielded mint"

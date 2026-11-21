@@ -1,6 +1,6 @@
 # Typed Boolean gates
 
-`boolAnd(left, right)`, `boolOr(left, right)` and `boolXor(left, right)` take two `Bool` expressions. They evaluate both operands. Use the existing short-circuit witness controls when the right operand should run conditionally.
+`boolAnd(left, right)`, `boolOr(left, right)` and `boolXor(left, right)` take two `Bool` expressions and evaluate both operands. `andThen(left, right)` evaluates the right operand only when the left operand is true. `orElse(left, right)` evaluates the right operand only when the left operand is false.
 
 ```lean
 import Noctium.Frontend
@@ -21,4 +21,18 @@ The producer validates actual typed Bool operands, nonempty native gate inputs a
 
 The focused source and native cases are [BooleanGates.lean](../../tests/BooleanGates.lean) and [native_boolean_gates.rs](../../runtime/tests/native_boolean_gates.rs). They cover truth tables, nested XOR parity, output binding, eager assertions and malformed producer operands. A host Session case exercises the witness interpreter. This slice adds no keys, proofs or deployment qualification.
 
+[LazyBoolean.lean](../../tests/LazyBoolean.lean) checks short-circuiting in ordinary circuits. An inactive right operand skips the check on a `UInt 8` to `UInt 1` narrowing. The active path still enforces the bound, including inside a nested lazy expression. This expression-level support uses the shared guarded lowering. Witness scheduling and ledger effects use their own statement controls.
+
+```sh
+lake exe noctium compile tests/LazyBoolean.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --output build/lazy-boolean
+NOCTIUM_LAZY_BOOLEAN_DIR="$PWD/build/lazy-boolean" \
+  cargo test --locked --manifest-path runtime/Cargo.toml --no-default-features \
+  --features zkir-321 --test native_boolean_gates \
+  lazy_boolean_gates_skip_inactive_uint1_narrowing -- --ignored --exact
+```
+
 The separate formal witness semantics needs reconciliation with the expanded byte, curve and Boolean language. [Issue 21](https://github.com/awjreynolds/noctium/issues/21#issuecomment-6971590829) tracks that gap. The focused execution cases do not establish witness-erasure or whole-language preservation.
+
+`ite(condition, thenValue, elseValue)` binds the condition once and requires both branches to have the same type. Only the selected branch's dynamic checks apply. `select` evaluates both branches. The [Lean conditional fixture](../../tests/LazyConditional.lean) and [pinned Compact comparator](../../tests/compact/LazyConditional.compact) exercise both branch directions with an invalid `UInt 1` narrowing. The [native check](../../runtime/tests/native_boolean_gates.rs) also changes each private condition in the accepted proof input and checks rejection against the emitted relation.

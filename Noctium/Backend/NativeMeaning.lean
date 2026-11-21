@@ -210,6 +210,7 @@ private def bytesFieldTerms (terms : List Term) (index : Nat) : Except String (L
 
 private def opaqueBytes32Value : Term → Bool
   | .unary opcode _ => opcode == "persistent_hash32" || opcode == "persistent_hash_native" ||
+      opcode == "keccak256_secp256k1_point" ||
       opcode.startsWith "persistent_hash_vector32:" || opcode.startsWith "persistent_hash_native_vector:" ||
       opcode.startsWith "to_bytes32_" || opcode.startsWith "from_bytes32_" ||
       opcode == "bytes32_from_chunks" || opcode == "reverse_bytes32"
@@ -519,6 +520,9 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let normalized ← normalize env value
     let chunks ← bytesChunksTerm length normalized.term
     pure {normalized with term := fixedByteHashTerm "keccak256" length chunks.reverse}
+  | .keccak256Secp256k1Point value => do
+    let normalized ← normalize env value
+    pure {normalized with term := .unary "keccak256_secp256k1_point" normalized.term}
   | .persistentHash32 value => do
     let normalized ← normalize env value
     let (highByte, low31) ← alignedBytes32Fields normalized
