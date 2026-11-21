@@ -132,6 +132,14 @@ inductive Expr : Ty → Type where
   checked layout rather than accepting a caller-provided alignment vector. -/
   | persistentHashFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
       (values : List (Sigma Expr)) : Expr (.bytes 32)
+  /-- Commit to a checked flat FAB payload using a Bytes32 opening prepended
+  to its canonical binary encoding. -/
+  | persistentCommitFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
+      (opening : Expr (.bytes 32)) (values : List (Sigma Expr)) : Expr (.bytes 32)
+  /-- Commit to a checked flat FAB payload using a Native opening prepended
+  to its canonical FAB field sequence. -/
+  | transientCommitFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
+      (opening : Expr .native) (values : List (Sigma Expr)) : Expr .native
   deriving Repr
 
 def Expr.foreignIdentity (curve : Foreign.Curve) : Expr (.foreign (.point curve)) :=
@@ -970,6 +978,16 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .persistentHashFab compositeEnv type values => do
     unless caps.persistentHash32 do throw "target lacks qualified FAB persistent-hash support"
     discard (validateFabHashLayout compositeEnv type values)
+    validateFabHashValues caps env values
+  | .persistentCommitFab compositeEnv type opening values => do
+    unless caps.persistentHash32 do throw "target lacks qualified FAB persistent-commit support"
+    discard (validateFabHashLayout compositeEnv type values)
+    opening.validate caps env
+    validateFabHashValues caps env values
+  | .transientCommitFab compositeEnv type opening values => do
+    unless caps.poseidon2 do throw "target lacks qualified FAB transient-commit support"
+    discard (validateFabHashLayout compositeEnv type values)
+    opening.validate caps env
     validateFabHashValues caps env values
   | .toBytes32 (source := source) value => do
     unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"

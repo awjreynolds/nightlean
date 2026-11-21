@@ -17,7 +17,7 @@ assert.equal(runtimePackage.version, '0.21.0');
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const experiments = join(projectRoot, 'build/experiments');
 mkdirSync(experiments, { recursive: true });
-const scratch = mkdtempSync(join(experiments, '271-mixed-fab-persistent-hash-'));
+const scratch = mkdtempSync(join(experiments, '275-mixed-fab-commitments-'));
 
 try {
   const generated = join(scratch, 'compact');
@@ -48,7 +48,9 @@ try {
   const opening = new Uint8Array(32).fill(9);
   const nonce = 77n;
   const persistentHashes = [];
-  for (const payload of payloads) {
+  const persistentCommitments = [];
+  const transientCommitments = [];
+  async function fabHashes(payload, persistentOpening, transientOpening) {
     const context = runtime.createCircuitContext({
       circuitId: 'fabHashes',
       contractAddress: runtime.dummyContractAddress(),
@@ -56,9 +58,18 @@ try {
       contractState: currentContractState.data,
       privateState: null,
     });
-    const call = await contract.circuits.fabHashes(context, payload, opening, nonce);
+    const call = await contract.circuits.fabHashes(
+      context, payload, persistentOpening, transientOpening,
+    );
     assert.ok(Array.isArray(call.result) && call.result.length === 4, 'expected four FAB hash outputs');
-    persistentHashes.push(Buffer.from(call.result[0]).toString('hex'));
+    return call.result;
+  }
+
+  for (const payload of payloads) {
+    const result = await fabHashes(payload, opening, nonce);
+    persistentHashes.push(Buffer.from(result[0]).toString('hex'));
+    persistentCommitments.push(Buffer.from(result[1]).toString('hex'));
+    transientCommitments.push(result[3].toString());
   }
 
   assert.deepEqual(persistentHashes, [
@@ -67,6 +78,36 @@ try {
   ]);
   assert.notEqual(persistentHashes[0], persistentHashes[1],
     'persistentHash must bind the changed UInt16 field');
+
+  assert.deepEqual(persistentCommitments, [
+    'cff69459a493e86a1276354b70bcb77aaac2edaaac6802fda770a68723f3d68d',
+    'c24011e4183df55510160926607b3dc3bcae795f70b69db0e370e9bf9669ccdc',
+  ]);
+  assert.deepEqual(transientCommitments, [
+    '26379122738253202444518886441389591496658820157546698964272146379194073575416',
+    '52175680914820761057797808711717819206214043408631344658262904895711887709638',
+  ]);
+
+  const changedPersistentOpening = await fabHashes(
+    payloads[0], new Uint8Array(32).fill(10), nonce,
+  );
+  assert.equal(Buffer.from(changedPersistentOpening[0]).toString('hex'), persistentHashes[0]);
+  assert.equal(
+    Buffer.from(changedPersistentOpening[1]).toString('hex'),
+    '34f5becb77595f7a8e7eda241d9c187f87e97e5c4af68a14577b668c519030fe',
+  );
+  assert.equal(changedPersistentOpening[3].toString(), transientCommitments[0]);
+
+  const changedTransientOpening = await fabHashes(
+    payloads[0], opening, 78n,
+  );
+  assert.equal(Buffer.from(changedTransientOpening[0]).toString('hex'), persistentHashes[0]);
+  assert.equal(Buffer.from(changedTransientOpening[1]).toString('hex'), persistentCommitments[0]);
+  assert.equal(
+    changedTransientOpening[3].toString(),
+    '1245246646047273088008560749436502138436832274864845859888856457488273394968',
+  );
+
   console.log(JSON.stringify({
     compiler: compilerVersion,
     runtime: runtime.versionString,
@@ -74,6 +115,8 @@ try {
     layout: ['Bytes<32>', 'Boolean', 'Uint<16>', 'LeafMarker', 'Field'],
     inputs: payloads.map(({ counter }) => ({ counter: counter.toString() })),
     persistentHashes,
+    persistentCommitments,
+    transientCommitments,
   }));
 } finally {
   rmSync(scratch, { recursive: true, force: true });

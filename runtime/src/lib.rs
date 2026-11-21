@@ -504,6 +504,18 @@ pub enum Expr {
         schema: Json,
         values: Vec<FabHashInput>,
     },
+    #[serde(rename = "persistentCommitFab")]
+    PersistentCommitFab {
+        schema: Json,
+        opening: Box<Expr>,
+        values: Vec<FabHashInput>,
+    },
+    #[serde(rename = "transientCommitFab")]
+    TransientCommitFab {
+        schema: Json,
+        opening: Box<Expr>,
+        values: Vec<FabHashInput>,
+    },
     #[serde(rename = "transientHash")]
     TransientHash {
         values: Vec<Expr>,
@@ -692,11 +704,11 @@ fn aligned_fab_uint(value: &Value, maximum: &BigUint) -> Result<AlignedValue> {
     .ok_or_else(|| anyhow!("invalid FAB unsigned alignment"))
 }
 
-fn persistent_hash_fab(
+fn aligned_fab_payload(
     schema_json: &Json,
     values: &[FabHashInput],
     env: &Environment,
-) -> Result<Value> {
+) -> Result<AlignedValue> {
     let schema_bytes = serde_json::to_vec(schema_json)?;
     let schema = Schema::from_json(&schema_bytes)?;
     let fields = schema.fab_hash_fields()?;
@@ -761,7 +773,41 @@ fn persistent_hash_fab(
             }
         })
         .collect::<Result<Vec<_>>>()?;
-    persistent_hash(AlignedValue::concat(&aligned))
+    Ok(AlignedValue::concat(&aligned))
+}
+
+fn persistent_hash_fab(
+    schema_json: &Json,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<Value> {
+    persistent_hash(aligned_fab_payload(schema_json, values, env)?)
+}
+
+fn persistent_commit_fab(
+    schema_json: &Json,
+    opening: &Expr,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<Value> {
+    let opening = claim_hash_output(evaluate(opening, env)?, "FAB persistent commitment opening")?;
+    let payload = aligned_fab_payload(schema_json, values, env)?;
+    let commitment = base_crypto::hash::persistent_commit(&ValueReprAlignedValue(payload), opening);
+    Ok(Value::Bytes(commitment.0.to_vec()))
+}
+
+fn transient_commit_fab(
+    schema_json: &Json,
+    opening: &Expr,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<Value> {
+    let opening = evaluate(opening, env)?.field()?;
+    let payload = aligned_fab_payload(schema_json, values, env)?;
+    Ok(Value::Native(transient_crypto::hash::transient_commit(
+        &ValueReprAlignedValue(payload),
+        opening,
+    )))
 }
 
 pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
@@ -967,6 +1013,16 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             persistent_hash(AlignedValue::concat(&parts))?
         }
         Expr::PersistentHashFab { schema, values } => persistent_hash_fab(schema, values, env)?,
+        Expr::PersistentCommitFab {
+            schema,
+            opening,
+            values,
+        } => persistent_commit_fab(schema, opening, values, env)?,
+        Expr::TransientCommitFab {
+            schema,
+            opening,
+            values,
+        } => transient_commit_fab(schema, opening, values, env)?,
         Expr::TransientHash { values } => {
             ensure!(
                 values.len() <= MAX_TRANSIENT_HASH_FIELDS,
