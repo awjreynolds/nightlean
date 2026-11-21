@@ -515,8 +515,8 @@
       "id": "C-LANG-OPAQUE",
       "layer": "language",
       "surface": "Opaque string and Uint8Array",
-      "noctiumStatus": "missing",
-      "notes": "Host-only values and restrictions on circuit usage/serialization must be explicit.",
+      "noctiumStatus": "subset",
+      "notes": "OpaqueString covers sealed constructor metadata. OpaqueBytes stores and reads public raw bytes in a Bytes32-keyed Map and binds one FAB Compress projection on ZKIR 3.2.1. The native test matches empty and binary reference values, rejects noncanonical trailing zero before effects and rejects a changed compressed proof transcript. Other containers and full host equivalence remain open.",
       "source": [
         "reference"
       ],
@@ -524,7 +524,14 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/OpaqueByteMap.lean",
+        "runtime/tests/opaque_byte_map.rs",
+        "tests/compact/OpaqueBytes.compact",
+        "tests/compact/opaque-bytes.mjs",
+        "docs/development/opaque-byte-map.md",
+        "docs/development/constructors.md"
+      ],
       "equivalence": "unverified"
     },
     {

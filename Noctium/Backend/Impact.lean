@@ -211,7 +211,7 @@ def Aligned.fields : Aligned → List Scalar
   | .bytes 0 value => [.native 1, .letE "_noctium_empty_bytes" value (.native 0)]
   | .bytes length value => [.native 1, .native length] ++
       (List.range (alignedByteChunkCount length)).map (.bytesField value)
-  | .compress value => [.native 1, .native (Field.modulus - 2), .opaqueBytesProjection value]
+  | .compress value => [.native 1, .native (Field.modulus - 1), .opaqueBytesProjection value]
   | .nativeFields values => nativeFieldSequence values
   | .counter value => [.native 1, .native 8, .cast .native value]
 
