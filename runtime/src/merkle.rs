@@ -1,10 +1,7 @@
 //! Read-only access to Merkle trees stored in a typed ledger snapshot.
 #[cfg(feature = "zkir-321")]
 use crate::foreign;
-use crate::{
-    Db, StateDecl, Value, aggregates::Schema, native_ffi, reject_jubjub_map_key,
-    reject_unqualified_foreign_storage, scalars::ScalarType,
-};
+use crate::{Db, StateDecl, Value, aggregates::Schema, ledger_key_type, native_ffi};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use base_crypto::{
     fab::{AlignedValue, Alignment, AlignmentAtom, AlignmentSegment, ValueAtom},
@@ -263,12 +260,7 @@ pub fn merkle_tree_at(
             .and_then(Json::as_array)
             .filter(|parts| parts.len() == 2)
             .ok_or_else(|| anyhow!("map path exceeds declared schema"))?;
-        let key_type_name = parts[0]
-            .as_str()
-            .ok_or_else(|| anyhow!("invalid map key schema"))?;
-        let key_type = ScalarType::parse(key_type_name)?;
-        reject_unqualified_foreign_storage(&key_type)?;
-        reject_jubjub_map_key(&key_type)?;
+        let key_type = ledger_key_type(&parts[0])?;
         key.validate()?;
         ensure!(
             key.scalar_type() == key_type,

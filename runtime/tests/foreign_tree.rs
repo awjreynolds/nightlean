@@ -410,5 +410,5 @@ fn foreign_tree_leaves_roundtrip_on_nested_native_maps() {
 
     let mut foreign_key = plan;
     foreign_key.state[scalar_slot].kind["tree"]["map"][0] = json!("Curve25519Scalar");
-    assert!(construct_state(&foreign_key, &BTreeMap::new()).is_err());
+    assert!(construct_state(&foreign_key, &BTreeMap::new()).is_ok());
 }

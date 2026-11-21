@@ -44,4 +44,4 @@ Private origins flow through arithmetic, points and conversions. Public writes a
 
 Rust reuses the pinned native cryptographic operations. Lean reference semantics uses pure field arithmetic and explicit checked oracle hooks where point computation or compressed decoding needs them. Those assumptions are separate from [whole-language preservation](https://github.com/awjreynolds/noctium/issues/21).
 
-No new keys, proofs or deployment qualify this slice. Foreign map keys and record storage remain work under the [full native goal](../compatibility/GOAL.md).
+This operation slice covers source and native checking. [Foreign ledger keys](foreign-trees.md) have separate evidence. Record storage, proofs and deployment remain work under the [full native goal](../compatibility/GOAL.md).

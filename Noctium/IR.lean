@@ -896,7 +896,6 @@ def PathKey.validate (caps : Capabilities) (env : TypeEnv) : PathKey → Except 
 private def validateLedgerMapKeyType (keyTy : Ty) : Except String Unit := do
   match keyTy with
   | .bytes length => unless length == 32 do throw "only Bytes32 is supported as a ledger map key"
-  | .foreign _ => throw "foreign values are not supported as ledger map keys"
   | _ => pure ()
 
 def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except String Unit

@@ -46,4 +46,4 @@ The native case passes three updates and all 14 old/new results in 0.05 seconds.
 
 The 66-job compiler build, source fixture, producer-cap guards, guide snippet and legacy 3.2.0 runtime library compilation pass. One focused control case checks projection order, ranges and empty reads. The retained public Bytes32 native compatibility case also passes in 0.06 seconds. No repeated witness Session campaign was run.
 
-No new key generation, proofs or deployment qualify this storage slice. Composite record leaves, foreign map keys and full compiler preservation remain separate work.
+This storage slice covers source and native checking. [Foreign ledger keys](foreign-trees.md) have separate evidence. Composite record leaves, proofs, deployment and full compiler preservation remain separate work.

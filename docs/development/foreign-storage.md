@@ -1,6 +1,6 @@
 # Secp cells and map values
 
-All six Secp256k1/Secp256r1 Base, Scalar and Point types support direct scalar cells and scalar map values. Map keys retain their existing Native or Bytes32 representation. [Nested scalar tree leaves](foreign-trees.md) share these encodings. Foreign map keys and record leaves need separate qualification.
+All six Secp256k1/Secp256r1 Base, Scalar and Point types support direct scalar cells and scalar map values. [Nested ledger state](foreign-trees.md) describes the same encodings for scalar leaves and typed keys. Record leaves need separate qualification.
 
 ```lean
 import Noctium.Frontend
@@ -30,6 +30,6 @@ Default fields are zero and default points are identity. Their encoded Field ato
 
 ## Focused evidence
 
-[ForeignStorage.lean](../../tests/ForeignStorage.lean) exercises both families and all roles in six cells and six maps. The [native checker case](../../runtime/tests/foreign_storage.rs) checks constructor defaults, old values, write/read results, overwrite behavior, missing guarded map reads and sibling preservation across two invocations. It also rejects altered public transcript data, malformed stored widths, out-of-range limbs, invalid point encoding and foreign map-key schemas.
+[ForeignStorage.lean](../../tests/ForeignStorage.lean) exercises both families and all roles in six cells and six maps. The [native checker case](../../runtime/tests/foreign_storage.rs) checks constructor defaults, old values, write/read results, overwrite behavior, missing guarded map reads and sibling preservation across two invocations. It also rejects altered public transcript data, malformed stored widths, out-of-range limbs and invalid point encoding.
 
 These checks execute the native ledger state machinery and upstream circuit checker. They add no proving keys, proofs or chain deployment. Formal preservation and the remaining storage shapes stay under the [full native goal](../compatibility/GOAL.md).
