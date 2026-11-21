@@ -41,6 +41,7 @@ def origins (env : Environment) : Expr ty → Except String Origins
   | .native _ | .bool _ | .uint _ _ => pure []
   | .bytesField value _ | .bytesAt value _ => origins env value
   | .opaqueBytesProjection value => origins env value
+  | .opaqueStringProjection value => origins env value
   | .bytesLiteral _ _ => pure []
   | .reverseBytes value | .sliceBytes value .. => origins env value
   | .concatBytes left right => do

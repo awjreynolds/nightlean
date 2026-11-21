@@ -3,11 +3,38 @@
 use crate::foreign::ForeignType;
 use crate::{MODULUS, Value, canonical_field};
 use anyhow::{Result, anyhow, bail, ensure};
+use base_crypto::fab::ValueAtom;
 use num_bigint::BigUint;
 
 pub const MAX_UINT_BITS: usize = 248;
 pub const MAX_BYTES_LENGTH: usize = 1024;
 pub(super) const MAX_OPAQUE_BYTES_LENGTH: usize = 1_048_576;
+pub(crate) const MAX_OPAQUE_STRING_LENGTH: usize = 1_048_576;
+
+pub(crate) fn opaque_string_atom(text: &str) -> Result<ValueAtom> {
+    ensure!(
+        text.len() <= MAX_OPAQUE_STRING_LENGTH,
+        "opaque string exceeds byte limit"
+    );
+    let atom = ValueAtom(text.as_bytes().to_vec());
+    ensure!(
+        atom.is_in_normal_form(),
+        "opaque string has trailing zero bytes"
+    );
+    Ok(atom)
+}
+
+pub(crate) fn validate_opaque_string_atom(atom: &ValueAtom) -> Result<()> {
+    ensure!(
+        atom.0.len() <= MAX_OPAQUE_STRING_LENGTH,
+        "opaque string exceeds byte limit"
+    );
+    ensure!(
+        atom.is_in_normal_form(),
+        "opaque string has trailing zero bytes"
+    );
+    Ok(())
+}
 pub fn max_uint() -> BigUint {
     (BigUint::from(1u8) << MAX_UINT_BITS) - 1u8
 }
@@ -44,6 +71,7 @@ pub enum ScalarType {
     Bytes32,
     Bytes(usize),
     OpaqueBytes,
+    OpaqueString,
     JubjubScalar,
     JubjubPoint,
     #[cfg(feature = "zkir-321")]
@@ -76,6 +104,7 @@ impl ScalarType {
             "Bool" => Ok(Self::Bool),
             "Bytes<32>" => Ok(Self::Bytes32),
             "OpaqueBytes" => Ok(Self::OpaqueBytes),
+            "OpaqueString" => Ok(Self::OpaqueString),
             "JubjubScalar" => Ok(Self::JubjubScalar),
             "JubjubPoint" => Ok(Self::JubjubPoint),
             _ => {
@@ -136,6 +165,7 @@ impl Value {
             Self::Bytes(bytes) if bytes.len() == 32 => ScalarType::Bytes32,
             Self::Bytes(bytes) => ScalarType::Bytes(bytes.len()),
             Self::OpaqueBytes(_) => ScalarType::OpaqueBytes,
+            Self::OpaqueString(_) => ScalarType::OpaqueString,
             Self::JubjubScalar(_) => ScalarType::JubjubScalar,
             Self::JubjubPoint(_) => ScalarType::JubjubPoint,
             #[cfg(feature = "zkir-321")]
@@ -157,6 +187,9 @@ impl Value {
                 "opaque byte value has trailing zero bytes"
             );
         }
+        if let Self::OpaqueString(text) = self {
+            let _ = opaque_string_atom(text)?;
+        }
         Ok(())
     }
     fn number(&self) -> Result<BigUint> {
@@ -164,7 +197,7 @@ impl Value {
             Self::Native(n) => BigUint::from_bytes_le(&n.as_le_bytes()),
             Self::Bool(b) => BigUint::from(u8::from(*b)),
             Self::UInt { number, .. } => number.clone(),
-            Self::Bytes(_) | Self::OpaqueBytes(_) => {
+            Self::Bytes(_) | Self::OpaqueBytes(_) | Self::OpaqueString(_) => {
                 bail!("bytes have no numeric scalar encoding")
             }
             Self::JubjubScalar(_) | Self::JubjubPoint(_) => {
@@ -178,9 +211,11 @@ impl Value {
         self.validate()?;
         target.validate()?;
         let opaque = match self {
-            Self::Bytes(_) | Self::OpaqueBytes(_) | Self::JubjubScalar(_) | Self::JubjubPoint(_) => {
-                true
-            }
+            Self::Bytes(_)
+            | Self::OpaqueBytes(_)
+            | Self::OpaqueString(_)
+            | Self::JubjubScalar(_)
+            | Self::JubjubPoint(_) => true,
             #[cfg(feature = "zkir-321")]
             Self::Foreign(_) => true,
             _ => false,
@@ -200,7 +235,10 @@ impl Value {
                 number,
                 maximum: maximum.clone(),
             },
-            ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes => {
+            ScalarType::Bytes32
+            | ScalarType::Bytes(_)
+            | ScalarType::OpaqueBytes
+            | ScalarType::OpaqueString => {
                 bail!("scalars cannot be cast to bytes")
             }
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
@@ -224,6 +262,9 @@ impl Value {
             Self::Bytes(bytes) => serde_json::json!({"kind":"bytes","values":bytes}),
             Self::OpaqueBytes(bytes) => {
                 serde_json::json!({"kind":"opaqueBytes","values":bytes})
+            }
+            Self::OpaqueString(text) => {
+                serde_json::json!({"kind":"opaqueString","value":text})
             }
             Self::JubjubScalar(value) => serde_json::json!({
                 "kind":"jubjubScalar",

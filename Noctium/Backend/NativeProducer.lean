@@ -794,6 +794,7 @@ def sourceMaximum : Ty → Nat
   | .uint maximum => maximum
   | .bytes _ => 0
   | .opaqueBytes => Field.modulus - 1
+  | .opaqueString => Field.modulus - 1
   | .jubjubScalar => Jubjub.scalarOrder - 1
   | .jubjubPoint | .foreign _ => 0
 

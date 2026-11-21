@@ -301,6 +301,7 @@ private partial def canonicalTypeSize (fuel : Nat) (value : Types.CompositeType)
     | .scalar (.uint maximum) => some (2 + natSize maximum)
     | .scalar (.bytes length) => some (2 + natSize length)
     | .scalar .opaqueBytes => none
+    | .scalar .opaqueString => none
     | .scalar .jubjubScalar => some 3
     | .scalar .jubjubPoint => some 3
     | .scalar (.foreign _) => none
@@ -335,6 +336,7 @@ private partial def consumeTypeNodes (span : SourceSpan) (remaining : Nat)
     pure remaining
   | .scalar (.bytes _) => fail span "module byte types require a composite bytes layout"
   | .scalar .opaqueBytes => fail span "OpaqueBytes are not supported by module type parameters"
+  | .scalar .opaqueString => fail span "OpaqueString is not supported by module type parameters"
   | .scalar .jubjubScalar | .scalar .jubjubPoint =>
     fail span "Jubjub types are not supported by module type parameters"
   | .scalar (.foreign _) => fail span "foreign types are not supported by module type parameters"
@@ -347,6 +349,7 @@ private def encodeType : Types.CompositeType → String
   | .scalar (.uint maximum) => "su" ++ encodeNat maximum
   | .scalar (.bytes length) => "sx" ++ encodeNat length
   | .scalar .opaqueBytes => "so;"
+  | .scalar .opaqueString => "ss;"
   | .scalar .jubjubScalar => "sj;"
   | .scalar .jubjubPoint => "sp;"
   | .scalar (.foreign kind) => "sf" ++ encodeText kind.sourceName
@@ -640,6 +643,7 @@ private def resolveStateScalar (limits : Limits) (span : SourceSpan)
         | .error message => fail span message
       | .bytes _ => fail span "module byte state parameters require a composite bytes type"
       | .opaqueBytes => fail span "OpaqueBytes state parameters are unsupported by module specialization"
+      | .opaqueString => fail span "OpaqueString state parameters are unsupported by module specialization"
       | .jubjubScalar | .jubjubPoint =>
         fail span "Jubjub state parameters are not supported by module specialization"
       | .foreign _ => fail span "foreign state parameters are not supported by module specialization"
@@ -1062,6 +1066,7 @@ private partial def genericTypeOfConcrete : Types.CompositeType → Except Strin
   | .scalar (.uint maximum) => pure (.uint (.literal maximum))
   | .scalar (.bytes _) => throw "scalar byte types cannot enter module specialization"
   | .scalar .opaqueBytes => throw "OpaqueBytes cannot enter module specialization"
+  | .scalar .opaqueString => throw "OpaqueString cannot enter module specialization"
   | .scalar .jubjubScalar | .scalar .jubjubPoint =>
     throw "Jubjub types are not supported by module specialization"
   | .scalar (.foreign kind) => pure (.foreign kind)
