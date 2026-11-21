@@ -5384,7 +5384,15 @@
       "source": "tests/NativeCounter.lean",
       "native": "runtime/tests/native_counter.rs",
       "implementationCommit": "acde7503d6ba31a8835484fb91698ff1a7e1e8ce",
-      "scope": "Standalone and two-key nested Counter cells use pinned ledger Bytes8-aligned u64 storage. Source reads, u32 immediate increments/decrements, reset and guarded updates lower to native Idx/Addi/Subi/Ins operations. Build and one selected-3.2.1 native sequence pass updates, read-after-write, reset, inactive missing paths, overflow/underflow rejection and rejection of Field-aligned Counter storage. No new ZKIR opcode names, keys, proofs, deployments or broad regression campaign. Counter comparisons, memo Lists and integrated token behavior remain open."
+      "scope": "Standalone and two-key nested Counter cells use pinned ledger Bytes8-aligned u64 storage. Source reads, u32 immediate increments/decrements, reset and guarded updates lower to native Idx/Addi/Subi/Ins operations. Build and one selected-3.2.1 native sequence pass updates, read-after-write, reset, inactive missing paths, overflow/underflow rejection and rejection of Field-aligned Counter storage. Counter comparisons and memo Lists have separate evidence below."
+    },
+    "counterComparison": {
+      "issue": 173,
+      "source": "../../tests/CounterCompare.lean",
+      "native": "../../runtime/tests/counter_compare.rs",
+      "guide": "../development/native-counter.md",
+      "scope": "Strict Counter less-than on the pinned Ledger 9 VM. The source binds the Bool checked by Lt with a Bytes8 UInt64 threshold, including nested paths and ordered reads after writes. Inactive comparisons skip path lookup and threshold evaluation and bind false.",
+      "focusedChecks": "Lean semantics and native checking agree after mutation. Native tests cover 0, equality, a comparison across a byte boundary, and a maximum UInt64 threshold. Undisclosed path and threshold inputs reject before emission. Active missing paths and malformed Counter alignment reject in native preparation."
     },
     "listEvidence": {
       "source": "tests/NativeList.lean",

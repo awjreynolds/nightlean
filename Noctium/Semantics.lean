@@ -990,6 +990,17 @@ private def counterValueAt (ctx : EvalContext) (root : LedgerValue)
   if !canonical ctx (.uint maximum) value then throw "noncanonical nested Counter value"
   pure value
 
+private def counterLessThanValue (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (name : String) (keys : List PathKey) (threshold : Expr (.uint (2 ^ 64 - 1))) :
+    Except String Value := do
+  let evaluated ← evaluatePath ctx env keys
+  let limit ← threshold.eval ctx env
+  unless canonical ctx (.uint (2 ^ 64 - 1)) limit do
+    throw "noncanonical Counter comparison threshold"
+  let some root := state.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
+  let value ← counterValueAt ctx root evaluated
+  pure (.bool (value < limit))
+
 private def adjustCounter (current amount : Nat) (subtract : Bool) : Except String Nat := do
   let maximum := 2 ^ 64 - 1
   if subtract then
@@ -1148,6 +1159,8 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
       let value ← counterValueAt ctx root evaluated
       env := (destination, .uint (2 ^ 64 - 1) value) :: env
+    | .counterLessThan name destination keys threshold =>
+      env := (destination, ← counterLessThanValue ctx env next name keys threshold) :: env
     | .counterAdjust name keys subtract amount => do
       let evaluated ← evaluatePath ctx env keys
       let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
@@ -1342,6 +1355,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .readTokenBalance .. |
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .setInsert .. | .counterRead .. |
+            .counterLessThan .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
             .listLength .. | .listHead .. | .listPushFront .. | .listPopFront .. | .listReset .. |
             .mapIsEmpty .. | .mapSize .. | .merkleTreeIsFull .. |
@@ -1457,6 +1471,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
           let value ← counterValueAt ctx root evaluated
           env := (destination, .uint (2 ^ 64 - 1) value) :: env
+        | .counterLessThan name destination keys threshold =>
+          env := (destination, ← counterLessThanValue ctx env next name keys threshold) :: env
         | .counterAdjust name keys subtract amount => do
           let evaluated ← evaluatePath ctx env keys
           let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
@@ -1648,6 +1664,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
         | .mapIsEmpty _ destination _ => env := (destination, .bool false) :: env
         | .mapSize _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
         | .counterRead _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
+        | .counterLessThan _ destination _ _ => env := (destination, .bool false) :: env
         | .merkleTreeIsFull _ destination | .merkleTreeCheckRoot _ _ destination |
             .merkleTreeIsFullAt _ _ destination | .merkleTreeCheckRootAt _ _ _ destination =>
           env := (destination, .bool false) :: env

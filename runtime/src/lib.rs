@@ -1262,6 +1262,13 @@ pub enum Instruction {
         before: bool,
         deadline: Expr,
     },
+    #[serde(rename = "counterLessThan")]
+    CounterLessThan {
+        slot: u32,
+        keys: Vec<PathPart>,
+        threshold: Expr,
+        destination: String,
+    },
 }
 
 fn event_payload_length(tag: u8) -> Result<usize> {
@@ -1289,6 +1296,15 @@ fn path_field_count(plan: &Plan, slot: u32, keys: &[PathPart]) -> Result<usize> 
         );
         fields += ledger_key_aligned_field_count(&ty);
     }
+    Ok(fields)
+}
+
+fn counter_path_field_count(plan: &Plan, slot: u32, keys: &[PathPart]) -> Result<usize> {
+    let fields = path_field_count(plan, slot, keys)?;
+    ensure!(
+        tree_schema_at_path(plan, slot, keys.len())?.get("counter") == Some(&Json::Bool(true)),
+        "counter comparison path schema mismatch"
+    );
     Ok(fields)
 }
 
@@ -1559,6 +1575,9 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
                 vec![5, 1, 4, 1, 4]
             }
         }
+        Instruction::CounterLessThan { slot, keys, .. } => {
+            vec![1, counter_path_field_count(plan, *slot, keys)?, 5, 1, 4]
+        }
         _ => vec![impact_field_count(instruction, plan)?],
     })
 }
@@ -1593,6 +1612,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
             impact_field_counts(instruction, plan)?.into_iter().sum()
         }
         Instruction::BlockTimeCompare { .. } => 15,
+        Instruction::CounterLessThan { .. } => {
+            impact_field_counts(instruction, plan)?.into_iter().sum()
+        }
         Instruction::EmitEvent { .. } => impact_field_counts(instruction, plan)?.into_iter().sum(),
         Instruction::Dup
         | Instruction::Checkpoint
@@ -3476,6 +3498,14 @@ fn probe_instruction(
         Instruction::BlockTimeCompare { deadline, .. } => {
             probe_expression(deadline, plan, env, deferred_outputs)
         }
+        Instruction::CounterLessThan {
+            keys, threshold, ..
+        } => probe_expressions(
+            keys.iter().map(|part| &part.expression).chain([threshold]),
+            plan,
+            env,
+            deferred_outputs,
+        ),
         // Read expressions bind values produced by the state read itself.
         Instruction::Popeq { .. }
         | Instruction::PopeqFields { .. }
@@ -3810,6 +3840,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::ReadTokenBalance { .. }
                 | Instruction::EmitEvent { .. }
                 | Instruction::BlockTimeCompare { .. }
+                | Instruction::CounterLessThan { .. }
         ),
         "guarded native operation has an unsupported shape"
     );
@@ -4170,7 +4201,9 @@ impl PreparationCursor {
                         )?);
                         read_index += 1;
                     }
-                    if let Instruction::BlockTimeCompare { destination, .. } = operation.as_ref() {
+                    if let Instruction::BlockTimeCompare { destination, .. }
+                    | Instruction::CounterLessThan { destination, .. } = operation.as_ref()
+                    {
                         event = Some(bind_context_scalar(
                             plan.reads.get(read_index),
                             Some(guard),
@@ -5537,6 +5570,78 @@ impl PreparationCursor {
                     seconds < current
                 };
                 program.push(Op::Lt);
+                event = Some(bind_context_scalar(
+                    plan.reads.get(read_index),
+                    instruction_guard,
+                    destination,
+                    true,
+                    Value::Bool(result),
+                    env,
+                )?);
+                read_index += 1;
+                Op::Popeq {
+                    cached: false,
+                    result: result.into(),
+                }
+            }
+            Instruction::CounterLessThan {
+                slot,
+                keys,
+                threshold,
+                destination,
+            } => {
+                counter_path_field_count(plan, *slot, keys)?;
+                let (index, values) = native_index(plan, *slot, keys, false, &env)?;
+                let Value::UInt {
+                    number: threshold_number,
+                    maximum: threshold_maximum,
+                } = evaluate(threshold, &env)?
+                else {
+                    bail!("counter comparison threshold must be UInt64")
+                };
+                ensure!(
+                    threshold_maximum == u64::MAX.into(),
+                    "counter comparison threshold must be UInt64"
+                );
+                let threshold_number = u64::try_from(threshold_number)
+                    .map_err(|_| anyhow!("counter comparison threshold exceeds u64"))?;
+
+                if has_written {
+                    advance_native_state_prefix(
+                        prefix_context,
+                        &program,
+                        &mut materialized_prefix,
+                        mutation_boundary,
+                        cost,
+                    )?;
+                }
+                let read_context = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                let Value::UInt {
+                    number: counter_number,
+                    ..
+                } = read_state_cell(
+                    read_context,
+                    *slot,
+                    &values,
+                    "UIntRange<18446744073709551616>",
+                    "u64",
+                )?
+                else {
+                    bail!("counter comparison requires a UInt64 Counter")
+                };
+                let counter_number = u64::try_from(counter_number)
+                    .map_err(|_| anyhow!("counter value exceeds u64"))?;
+                let result = counter_number < threshold_number;
+                program.extend([
+                    Op::Dup { n: 0 },
+                    index,
+                    push_native_state(StateValue::Cell(Sp::new(threshold_number.into())), false)?,
+                    Op::Lt,
+                ]);
                 event = Some(bind_context_scalar(
                     plan.reads.get(read_index),
                     instruction_guard,
