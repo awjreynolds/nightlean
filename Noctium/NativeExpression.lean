@@ -101,10 +101,10 @@ private def nativeExpressionJson : Expr ty → Json
         | .ok value => (Types.schemaJson value).toOption.getD Json.null
         | .error _ => Json.null
       let encodedValues := match compiled with
-        | .ok value => match value.checked.value with
-          | .structure _ fields => Json.arr
+        | .ok value => match fabHashLayoutFields value.checked.value with
+          | .ok fields => Json.arr
               (nativeExpressionFabValuesJson (fields.map Prod.snd) values)
-          | _ => Json.arr #[]
+          | .error _ => Json.arr #[]
         | .error _ => Json.arr #[]
       return Json.mkObj [
         ("tag", toJson ("persistentHashFab" : String)),
@@ -115,10 +115,10 @@ private def nativeExpressionJson : Expr ty → Json
         | .ok value => (Types.schemaJson value).toOption.getD Json.null
         | .error _ => Json.null
       let encodedValues := match compiled with
-        | .ok value => match value.checked.value with
-          | .structure _ fields => Json.arr
+        | .ok value => match fabHashLayoutFields value.checked.value with
+          | .ok fields => Json.arr
               (nativeExpressionFabValuesJson (fields.map Prod.snd) values)
-          | _ => Json.arr #[]
+          | .error _ => Json.arr #[]
         | .error _ => Json.arr #[]
       return Json.mkObj [
         ("tag", toJson ("persistentCommitFab" : String)),
@@ -130,10 +130,10 @@ private def nativeExpressionJson : Expr ty → Json
         | .ok value => (Types.schemaJson value).toOption.getD Json.null
         | .error _ => Json.null
       let encodedValues := match compiled with
-        | .ok value => match value.checked.value with
-          | .structure _ fields => Json.arr
+        | .ok value => match fabHashLayoutFields value.checked.value with
+          | .ok fields => Json.arr
               (nativeExpressionFabValuesJson (fields.map Prod.snd) values)
-          | _ => Json.arr #[]
+          | .error _ => Json.arr #[]
         | .error _ => Json.arr #[]
       return Json.mkObj [
         ("tag", toJson ("transientCommitFab" : String)),
